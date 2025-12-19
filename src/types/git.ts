@@ -99,6 +99,16 @@ export interface GitOperationResult {
   error_type?: string;
 }
 
+// Git operation state for UI display
+export interface GitOperationState {
+  isActive: boolean;
+  operationName: 'Fetch' | 'Pull' | 'Push';
+  operationTarget?: string;
+  statusMessage: string;
+  isComplete: boolean;
+  isError: boolean;
+}
+
 // Git operation options storage (persisted per repository)
 export interface GitOptionsStorage {
   fetch?: {
@@ -116,4 +126,16 @@ export interface GitOptionsStorage {
     pushTags: boolean;
     forceWithLease: boolean;
   };
+}
+
+// Git activity log entry
+export interface GitLogEntry {
+  id: string;
+  timestamp: Date;
+  operationType: 'Fetch' | 'Pull' | 'Push' | 'Checkout' | 'Commit' | 'Merge' | 'Stash' | 'Other';
+  operationName: string;
+  command: string;
+  output: string;
+  success: boolean;
+  isBackground?: boolean;
 }

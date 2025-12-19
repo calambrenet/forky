@@ -4,65 +4,45 @@
   justify-content: space-between;
   height: 100%;
   flex: 1;
-  padding: 0 8px;
+  padding: 0 12px;
+  gap: 16px;
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
-.repo-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.repo-selector:hover {
-  background: var(--bg-hover);
-}
-
-.repo-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent-blue);
-}
-
-.repo-name {
-  color: var(--text-highlight);
-  font-weight: 500;
-  font-size: 13px;
-}
-
-.branch-separator {
-  color: var(--text-secondary);
-}
-
-.branch-name {
-  color: var(--accent-green);
-  font-size: 13px;
-}
-
+/* Vertical button layout - icon on top, label below */
 .toolbar-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px;
+  justify-content: center;
+  gap: 2px;
+  min-width: 48px;
+  height: 52px;
+  padding: 6px 10px;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.2s;
   color: var(--text-primary);
@@ -72,26 +52,54 @@
   background: var(--bg-hover);
 }
 
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .toolbar-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
 .btn-label {
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.toolbar-btn:hover .btn-label {
+  color: var(--text-primary);
 }
 
 .toolbar-separator {
   width: 1px;
-  height: 20px;
+  height: 40px;
   background: var(--border-color);
-  margin: 0 4px;
+  margin: 0 8px;
 }
 
-.search-input {
-  width: 180px;
-  height: 26px;
-  font-size: 12px;
+.hamburger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: var(--text-primary);
+}
+
+.hamburger-btn:hover {
+  background: var(--bg-hover);
+}
+
+.hamburger-btn svg {
+  width: 20px;
+  height: 20px;
 }

@@ -1,0 +1,1 @@
+export { GitActivityLog } from './GitActivityLog';

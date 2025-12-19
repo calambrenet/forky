@@ -1,18 +1,25 @@
 import { FC } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
+import { RepositoryInfoBox, GitOperationState } from '../repository-info-box';
+import { BranchInfo } from '../../types/git';
 import './Toolbar.css';
 
 interface ToolbarProps {
   onOpenRepo: () => void;
   repoName?: string;
   currentBranch?: string;
+  branches?: BranchInfo[];
+  onBranchChange?: (branchName: string) => void;
   onThemeChange?: (theme: 'system' | 'light' | 'dark') => void;
   currentTheme?: 'system' | 'light' | 'dark';
   onFetch?: () => void;
   onPull?: () => void;
   onPush?: () => void;
   isLoading?: boolean;
+  gitOperation?: GitOperationState | null;
+  onDismissOperation?: () => void;
+  onOpenActivityLog?: () => void;
 }
 
 // Check icon for selected items
@@ -87,12 +94,17 @@ export const Toolbar: FC<ToolbarProps> = ({
   onOpenRepo,
   repoName,
   currentBranch,
+  branches = [],
+  onBranchChange,
   onThemeChange,
   currentTheme = 'system',
   onFetch,
   onPull,
   onPush,
   isLoading = false,
+  gitOperation,
+  onDismissOperation,
+  onOpenActivityLog,
 }) => {
   const appWindow = getCurrentWindow();
 
@@ -126,24 +138,8 @@ export const Toolbar: FC<ToolbarProps> = ({
 
   return (
     <div className="toolbar">
+      {/* Left section: Open, Fetch, Pull, Push, Stash */}
       <div className="toolbar-left">
-        {repoName && (
-          <div className="repo-selector">
-            <span className="repo-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/>
-              </svg>
-            </span>
-            <span className="repo-name">{repoName}</span>
-            {currentBranch && (
-              <>
-                <span className="branch-separator">/</span>
-                <span className="branch-name">{currentBranch}</span>
-              </>
-            )}
-          </div>
-        )}
-        <div className="toolbar-separator" />
         <button className="toolbar-btn" onClick={onOpenRepo} title="Open Repository">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 009.62 4H13.5A1.5 1.5 0 0115 5.5v7a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z"/>
@@ -156,7 +152,7 @@ export const Toolbar: FC<ToolbarProps> = ({
             <path d="M8 4a.5.5 0 01.5.5v5.793l2.146-2.147a.5.5 0 01.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 10.293V4.5A.5.5 0 018 4z"/>
             <path d="M3.5 1A1.5 1.5 0 002 2.5v11A1.5 1.5 0 003.5 15h9a1.5 1.5 0 001.5-1.5v-11A1.5 1.5 0 0012.5 1h-9z" fillOpacity="0.3"/>
           </svg>
-          <span className="btn-label">{isLoading ? 'Loading...' : 'Fetch'}</span>
+          <span className="btn-label">Fetch</span>
         </button>
         <button className="toolbar-btn" title="Pull" onClick={onPull} disabled={isLoading}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -170,7 +166,30 @@ export const Toolbar: FC<ToolbarProps> = ({
           </svg>
           <span className="btn-label">Push</span>
         </button>
-        <div className="toolbar-separator" />
+        <button className="toolbar-btn" title="Stash">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 4.5A2.5 2.5 0 014.5 2h7A2.5 2.5 0 0114 4.5v7a2.5 2.5 0 01-2.5 2.5h-7A2.5 2.5 0 012 11.5v-7zM4.5 3A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0011.5 3h-7z"/>
+            <path d="M5 6.5A.5.5 0 015.5 6h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 3a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5z"/>
+          </svg>
+          <span className="btn-label">Stash</span>
+        </button>
+      </div>
+
+      {/* Center section: Repository Info Box */}
+      <div className="toolbar-center">
+        <RepositoryInfoBox
+          repoName={repoName}
+          currentBranch={currentBranch}
+          branches={branches}
+          onBranchChange={onBranchChange || (() => {})}
+          gitOperation={gitOperation}
+          onDismissOperation={onDismissOperation}
+          onOpenActivityLog={onOpenActivityLog}
+        />
+      </div>
+
+      {/* Right section: Branch, Merge, Menu */}
+      <div className="toolbar-right">
         <button className="toolbar-btn" title="Branch">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
@@ -184,16 +203,6 @@ export const Toolbar: FC<ToolbarProps> = ({
           <span className="btn-label">Merge</span>
         </button>
         <div className="toolbar-separator" />
-        <button className="toolbar-btn" title="Stash">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M2 4.5A2.5 2.5 0 014.5 2h7A2.5 2.5 0 0114 4.5v7a2.5 2.5 0 01-2.5 2.5h-7A2.5 2.5 0 012 11.5v-7zM4.5 3A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0011.5 3h-7z"/>
-            <path d="M5 6.5A.5.5 0 015.5 6h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 3a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5z"/>
-          </svg>
-          <span className="btn-label">Stash</span>
-        </button>
-      </div>
-      <div className="toolbar-right">
-        <input type="text" placeholder="Search..." className="search-input" />
         <Menu
           trigger={
             <button className="hamburger-btn" title="Menu">

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/titlebar/TitleBar';
@@ -11,10 +11,11 @@ import { Resizer } from './components/resizer/Resizer';
 import { FetchModal, PullModal, PushModal, SshHostVerificationModal, GitCredentialModal } from './components/git-modals';
 import type { FetchOptions, PullOptions, PushOptions, SshHostInfo, CredentialRequest } from './components/git-modals';
 import { AlertContainer, AlertData } from './components/alert';
+import { GitActivityLog } from './components/git-activity-log';
 import { usePanelResize } from './hooks/usePanelResize';
 import { useRepositoryTabs } from './hooks/useRepositoryTabs';
 import { useTheme } from './hooks/useTheme';
-import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage } from './types/git';
+import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage, GitOperationState, GitLogEntry } from './types/git';
 import './styles/global.css';
 import './App.css';
 
@@ -61,6 +62,34 @@ function App() {
 
   // Alerts state
   const [alerts, setAlerts] = useState<AlertData[]>([]);
+
+  // Git operation state for info box
+  const [gitOperation, setGitOperation] = useState<GitOperationState | null>(null);
+
+  // Git activity log (persisted in localStorage)
+  const [gitLogEntries, setGitLogEntries] = useState<GitLogEntry[]>(() => {
+    const stored = localStorage.getItem('forky:git-activity-log');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Convert timestamp strings back to Date objects
+        return parsed.map((entry: GitLogEntry & { timestamp: string }) => ({
+          ...entry,
+          timestamp: new Date(entry.timestamp),
+        }));
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
+
+  // Persist git activity log to localStorage (limit to 500 entries)
+  useEffect(() => {
+    const entriesToSave = gitLogEntries.slice(0, 500);
+    localStorage.setItem('forky:git-activity-log', JSON.stringify(entriesToSave));
+  }, [gitLogEntries]);
 
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
@@ -139,28 +168,6 @@ function App() {
     setAlerts((prev) => prev.filter((alert) => alert.id !== id));
   }, []);
 
-  // Handle git operation result - show errors to user
-  const handleGitResult = useCallback((result: GitOperationResult, operationName: string) => {
-    if (result.success) {
-      // Show success message for non-trivial results
-      if (result.message && !result.message.includes('Already up to date') && !result.message.includes('Everything up-to-date')) {
-        addAlert('success', `${operationName} Completed`, result.message, 5000);
-      }
-      return true;
-    }
-
-    // Handle SSH verification requirement
-    if (result.requires_ssh_verification) {
-      // This is handled by handleSshVerificationRequired
-      return false;
-    }
-
-    // Show error to user
-    const errorTitle = getErrorTitle(result.error_type, operationName);
-    addAlert('error', errorTitle, result.message);
-    return false;
-  }, [addAlert]);
-
   // Get user-friendly error title based on error type
   const getErrorTitle = (errorType: string | undefined, operationName: string): string => {
     switch (errorType) {
@@ -195,6 +202,85 @@ function App() {
   // Handle credential modal cancel
   const handleCredentialCancel = useCallback(() => {
     setCredentialModal({ isOpen: false, request: null, pendingOperation: null });
+  }, []);
+
+  // Dismiss git operation from info box
+  const handleDismissOperation = useCallback(() => {
+    setGitOperation(null);
+  }, []);
+
+  // Add a git log entry
+  const addGitLogEntry = useCallback((
+    operationType: GitLogEntry['operationType'],
+    operationName: string,
+    command: string,
+    output: string,
+    success: boolean,
+    isBackground = false
+  ) => {
+    const entry: GitLogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date(),
+      operationType,
+      operationName,
+      command,
+      output,
+      success,
+      isBackground,
+    };
+    setGitLogEntries((prev) => [entry, ...prev]);
+  }, []);
+
+  // Open activity log
+  const handleOpenActivityLog = useCallback(() => {
+    setIsActivityLogOpen(true);
+  }, []);
+
+  // Close activity log
+  const handleCloseActivityLog = useCallback(() => {
+    setIsActivityLogOpen(false);
+  }, []);
+
+  // Start a git operation (update info box)
+  const startGitOperation = useCallback((operationName: 'Fetch' | 'Pull' | 'Push', target?: string) => {
+    setGitOperation({
+      isActive: true,
+      operationName,
+      operationTarget: target,
+      statusMessage: `${operationName.toLowerCase()}ing...`,
+      isComplete: false,
+      isError: false,
+    });
+  }, []);
+
+  // Complete a git operation (update info box)
+  const completeGitOperation = useCallback((result: GitOperationResult) => {
+    setGitOperation(prev => prev ? {
+      ...prev,
+      isActive: false,
+      statusMessage: result.message || (result.success ? 'Completed' : 'Failed'),
+      isComplete: true,
+      isError: !result.success,
+    } : null);
+
+    // Auto-dismiss after 5 seconds on success
+    if (result.success) {
+      setTimeout(() => {
+        setGitOperation(current => {
+          // Only dismiss if it's the same completed operation
+          if (current?.isComplete && !current.isError) {
+            return null;
+          }
+          return current;
+        });
+      }, 5000);
+    }
+  }, []);
+
+  // Handle branch change from toolbar
+  const handleBranchChange = useCallback((branchName: string) => {
+    console.log('Change to branch:', branchName);
+    // TODO: Implement git checkout
   }, []);
 
   const handleOpenRepo = async () => {
@@ -242,6 +328,10 @@ function App() {
     // Save options for next time
     saveOptions({ fetch: options });
 
+    const target = options.all ? 'all remotes' : options.remote;
+    const command = options.all ? 'git fetch --all --prune' : `git fetch --prune ${options.remote}`;
+    startGitOperation('Fetch', target);
+
     const doFetch = async () => {
       setIsGitLoading(true);
       try {
@@ -255,9 +345,20 @@ function App() {
           return;
         }
 
-        handleGitResult(result, 'Fetch');
+        completeGitOperation(result);
+
+        // Add to activity log
+        addGitLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
+
+        // Show error alert only on error
+        if (!result.success) {
+          const errorTitle = getErrorTitle(result.error_type, 'Fetch');
+          addAlert('error', errorTitle, result.message);
+        }
       } catch (error) {
         console.error('Error fetching:', error);
+        completeGitOperation({ success: false, message: String(error) });
+        addGitLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
         addAlert('error', 'Fetch Error', String(error));
       } finally {
         setIsGitLoading(false);
@@ -274,6 +375,12 @@ function App() {
     // Save options for next time
     saveOptions({ pull: options });
 
+    const target = `${options.remote}/${options.branch}`;
+    let command = `git pull ${options.remote} ${options.branch}`;
+    if (options.rebase) command += ' --rebase';
+    if (options.autostash) command += ' --autostash';
+    startGitOperation('Pull', target);
+
     const doPull = async () => {
       setIsGitLoading(true);
       try {
@@ -289,9 +396,20 @@ function App() {
           return;
         }
 
-        handleGitResult(result, 'Pull');
+        completeGitOperation(result);
+
+        // Add to activity log
+        addGitLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
+
+        // Show error alert only on error
+        if (!result.success) {
+          const errorTitle = getErrorTitle(result.error_type, 'Pull');
+          addAlert('error', errorTitle, result.message);
+        }
       } catch (error) {
         console.error('Error pulling:', error);
+        completeGitOperation({ success: false, message: String(error) });
+        addGitLogEntry('Pull', `Pull ${target}`, command, String(error), false);
         addAlert('error', 'Pull Error', String(error));
       } finally {
         setIsGitLoading(false);
@@ -307,6 +425,12 @@ function App() {
 
     // Save options for next time
     saveOptions({ push: { remote: options.remote, pushTags: options.pushTags, forceWithLease: options.forceWithLease } });
+
+    const target = `${options.remote}/${options.remoteBranch}`;
+    let command = `git push ${options.remote} ${options.branch}:${options.remoteBranch}`;
+    if (options.pushTags) command += ' --tags';
+    if (options.forceWithLease) command += ' --force-with-lease';
+    startGitOperation('Push', target);
 
     const doPush = async () => {
       setIsGitLoading(true);
@@ -324,9 +448,20 @@ function App() {
           return;
         }
 
-        handleGitResult(result, 'Push');
+        completeGitOperation(result);
+
+        // Add to activity log
+        addGitLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
+
+        // Show error alert only on error
+        if (!result.success) {
+          const errorTitle = getErrorTitle(result.error_type, 'Push');
+          addAlert('error', errorTitle, result.message);
+        }
       } catch (error) {
         console.error('Error pushing:', error);
+        completeGitOperation({ success: false, message: String(error) });
+        addGitLogEntry('Push', `Push to ${target}`, command, String(error), false);
         addAlert('error', 'Push Error', String(error));
       } finally {
         setIsGitLoading(false);
@@ -351,6 +486,11 @@ function App() {
             onPull={handleOpenPullModal}
             onPush={handleOpenPushModal}
             isLoading={isGitLoading}
+            branches={[]}
+            onBranchChange={handleBranchChange}
+            gitOperation={gitOperation}
+            onDismissOperation={handleDismissOperation}
+            onOpenActivityLog={handleOpenActivityLog}
           />
         </TitleBar>
         <div className="loading-overlay">
@@ -370,12 +510,17 @@ function App() {
           onOpenRepo={handleOpenRepo}
           repoName={activeTab?.name}
           currentBranch={activeTab?.currentBranch ?? undefined}
+          branches={activeTabState?.branches ?? []}
+          onBranchChange={handleBranchChange}
           onThemeChange={setTheme}
           currentTheme={theme}
           onFetch={handleOpenFetchModal}
           onPull={handleOpenPullModal}
           onPush={handleOpenPushModal}
           isLoading={isGitLoading}
+          gitOperation={gitOperation}
+          onDismissOperation={handleDismissOperation}
+          onOpenActivityLog={handleOpenActivityLog}
         />
       </TitleBar>
       {hasOpenRepos && (
@@ -485,6 +630,13 @@ function App() {
 
       {/* Alert Container */}
       <AlertContainer alerts={alerts} onDismiss={removeAlert} />
+
+      {/* Git Activity Log */}
+      <GitActivityLog
+        entries={gitLogEntries}
+        isOpen={isActivityLogOpen}
+        onClose={handleCloseActivityLog}
+      />
     </div>
   );
 }
