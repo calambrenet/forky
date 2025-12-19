@@ -1,0 +1,115 @@
+import { FC, useState, useEffect, useCallback } from 'react';
+import './CommitPanel.css';
+
+interface CommitPanelProps {
+  stagedCount: number;
+  onCommit: (subject: string, description: string, amend: boolean) => Promise<void>;
+  isLoading: boolean;
+  lastCommitMessage?: { subject: string; body: string } | null;
+  onAmendChange: (amend: boolean) => void;
+}
+
+export const CommitPanel: FC<CommitPanelProps> = ({
+  stagedCount,
+  onCommit,
+  isLoading,
+  lastCommitMessage,
+  onAmendChange,
+}) => {
+  const [subject, setSubject] = useState('');
+  const [description, setDescription] = useState('');
+  const [amend, setAmend] = useState(false);
+
+  // Load last commit message when amend is toggled on
+  useEffect(() => {
+    if (amend && lastCommitMessage) {
+      setSubject(lastCommitMessage.subject);
+      setDescription(lastCommitMessage.body);
+    } else if (!amend) {
+      // Clear fields when amend is toggled off
+      setSubject('');
+      setDescription('');
+    }
+  }, [amend, lastCommitMessage]);
+
+  const handleAmendChange = useCallback((checked: boolean) => {
+    setAmend(checked);
+    onAmendChange(checked);
+  }, [onAmendChange]);
+
+  const handleCommit = useCallback(async () => {
+    if (!subject.trim()) return;
+    if (stagedCount === 0 && !amend) return;
+
+    await onCommit(subject.trim(), description.trim(), amend);
+
+    // Clear form after successful commit
+    setSubject('');
+    setDescription('');
+    setAmend(false);
+  }, [subject, description, amend, stagedCount, onCommit]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Cmd/Ctrl + Enter to commit
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleCommit();
+    }
+  }, [handleCommit]);
+
+  const isCommitDisabled = !subject.trim() || (stagedCount === 0 && !amend) || isLoading;
+
+  const buttonText = amend
+    ? 'Amend Commit'
+    : `Commit ${stagedCount} ${stagedCount === 1 ? 'File' : 'Files'}`;
+
+  return (
+    <div className="commit-panel" onKeyDown={handleKeyDown}>
+      <div className="commit-subject-row">
+        <input
+          type="text"
+          className="commit-subject"
+          placeholder="Commit subject"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          disabled={isLoading}
+          maxLength={72}
+        />
+        <span className="commit-subject-count">{subject.length}/72</span>
+      </div>
+      <textarea
+        className="commit-description"
+        placeholder="Description (optional)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        disabled={isLoading}
+        rows={3}
+      />
+      <div className="commit-footer">
+        <label className="commit-amend-label">
+          <input
+            type="checkbox"
+            checked={amend}
+            onChange={(e) => handleAmendChange(e.target.checked)}
+            disabled={isLoading}
+          />
+          <span className="commit-amend-checkbox" data-checked={amend}>
+            {amend && (
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+              </svg>
+            )}
+          </span>
+          <span className="commit-amend-text">Amend</span>
+        </label>
+        <button
+          className="commit-button"
+          onClick={handleCommit}
+          disabled={isCommitDisabled}
+        >
+          {isLoading ? 'Committing...' : buttonText}
+        </button>
+      </div>
+    </div>
+  );
+};

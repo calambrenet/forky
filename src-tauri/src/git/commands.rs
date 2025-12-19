@@ -1,5 +1,5 @@
 use crate::git::repository::{
-    self, BranchHead, BranchInfo, CommitInfo, DiffInfo, FileStatus,
+    self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FileStatus,
     GitOperationResult, RepositoryInfo, TagInfo, FetchOptions, PullOptions, PushOptions,
 };
 use std::sync::Mutex;
@@ -226,4 +226,23 @@ pub fn git_push_with_options(
 #[tauri::command]
 pub fn add_ssh_known_host(host: String) -> Result<GitOperationResult, String> {
     repository::add_ssh_known_host(&host)
+}
+
+#[tauri::command]
+pub fn git_commit(
+    message: String,
+    amend: bool,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_commit(path, &message, amend)
+}
+
+#[tauri::command]
+pub fn get_last_commit_message(state: State<AppState>) -> Result<CommitMessage, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let repo = repository::open_repository(path)?;
+    repository::get_last_commit_message(&repo)
 }

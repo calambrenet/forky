@@ -1173,3 +1173,62 @@ pub fn get_file_status_separated(repo: &Repository) -> Result<(Vec<FileStatus>, 
 
     Ok((unstaged, staged))
 }
+
+/// Commit message with subject and body separated
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CommitMessage {
+    pub subject: String,
+    pub body: String,
+}
+
+/// Get the last commit message (subject and body)
+pub fn get_last_commit_message(repo: &Repository) -> Result<CommitMessage, String> {
+    let head = repo.head().map_err(|e| e.message().to_string())?;
+    let commit = head.peel_to_commit().map_err(|e| e.message().to_string())?;
+    let message = commit.message().unwrap_or("");
+
+    // Split into subject (first line) and body (rest)
+    let parts: Vec<&str> = message.splitn(2, '\n').collect();
+    let subject = parts[0].trim().to_string();
+    let body = parts.get(1)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    Ok(CommitMessage { subject, body })
+}
+
+/// Execute git commit with message and optional amend
+pub fn git_commit(repo_path: &str, message: &str, amend: bool) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(repo_path).arg("commit");
+    cmd.arg("-m").arg(message);
+
+    if amend {
+        cmd.arg("--amend");
+    }
+
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        // Parse commit info from output
+        let message = if stdout.contains("create mode") || stdout.contains("delete mode") {
+            // Get first line which usually contains the commit summary
+            stdout.lines().next().unwrap_or("Commit created").to_string()
+        } else if !stdout.trim().is_empty() {
+            stdout.trim().to_string()
+        } else {
+            "Commit created successfully".to_string()
+        };
+        Ok(create_success_result(message))
+    } else {
+        Ok(create_error_result(&stderr, &stdout))
+    }
+}

@@ -36,6 +36,8 @@ pub fn run() {
             git_commands::git_pull_with_options,
             git_commands::git_push_with_options,
             git_commands::add_ssh_known_host,
+            git_commands::git_commit,
+            git_commands::get_last_commit_message,
             system_commands::get_system_theme,
         ])
         .run(tauri::generate_context!())

@@ -102,7 +102,7 @@ export interface GitOperationResult {
 // Git operation state for UI display
 export interface GitOperationState {
   isActive: boolean;
-  operationName: 'Fetch' | 'Pull' | 'Push';
+  operationName: 'Fetch' | 'Pull' | 'Push' | 'Commit';
   operationTarget?: string;
   statusMessage: string;
   isComplete: boolean;
@@ -138,4 +138,10 @@ export interface GitLogEntry {
   output: string;
   success: boolean;
   isBackground?: boolean;
+}
+
+// Commit message with subject and body
+export interface CommitMessage {
+  subject: string;
+  body: string;
 }

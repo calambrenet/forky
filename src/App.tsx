@@ -242,12 +242,12 @@ function App() {
   }, []);
 
   // Start a git operation (update info box)
-  const startGitOperation = useCallback((operationName: 'Fetch' | 'Pull' | 'Push', target?: string) => {
+  const startGitOperation = useCallback((operationName: 'Fetch' | 'Pull' | 'Push' | 'Commit', target?: string) => {
     setGitOperation({
       isActive: true,
       operationName,
       operationTarget: target,
-      statusMessage: `${operationName.toLowerCase()}ing...`,
+      statusMessage: operationName === 'Commit' ? 'committing...' : `${operationName.toLowerCase()}ing...`,
       isComplete: false,
       isError: false,
     });
@@ -555,7 +555,12 @@ function App() {
             isResizing={isResizing === 'sidebar'}
           />
           {activeTabState.viewMode === 'local-changes' ? (
-            <LocalChangesView repoPath={activeTab?.path ?? ''} />
+            <LocalChangesView
+              repoPath={activeTab?.path ?? ''}
+              onStartGitOperation={startGitOperation}
+              onCompleteGitOperation={completeGitOperation}
+              onAddGitLogEntry={addGitLogEntry}
+            />
           ) : (
             <AllCommitsView
               repoPath={activeTab?.path ?? ''}

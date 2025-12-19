@@ -1,12 +1,23 @@
 import { FC, useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { FileStatus, FileStatusSeparated, DiffInfo } from '../../types/git';
+import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage, GitOperationResult, GitLogEntry } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
+import { CommitPanel } from '../commit-panel';
 import './LocalChangesView.css';
 
 interface LocalChangesViewProps {
   repoPath: string;
+  onStartGitOperation?: (operationName: 'Commit', target?: string) => void;
+  onCompleteGitOperation?: (result: GitOperationResult) => void;
+  onAddGitLogEntry?: (
+    operationType: GitLogEntry['operationType'],
+    operationName: string,
+    command: string,
+    output: string,
+    success: boolean
+  ) => void;
+  onRefreshRepository?: () => void;
 }
 
 interface ContextMenuState {
@@ -16,7 +27,13 @@ interface ContextMenuState {
   file: FileStatus | null;
 }
 
-export const LocalChangesView: FC<LocalChangesViewProps> = ({ repoPath }) => {
+export const LocalChangesView: FC<LocalChangesViewProps> = ({
+  repoPath,
+  onStartGitOperation,
+  onCompleteGitOperation,
+  onAddGitLogEntry,
+  onRefreshRepository,
+}) => {
   const [unstaged, setUnstaged] = useState<FileStatus[]>([]);
   const [staged, setStaged] = useState<FileStatus[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
@@ -31,6 +48,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = ({ repoPath }) => {
     file: null,
   });
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Commit panel state
+  const [lastCommitMessage, setLastCommitMessage] = useState<CommitMessage | null>(null);
+  const [isCommitLoading, setIsCommitLoading] = useState(false);
 
   const loadFileStatus = useCallback(async () => {
     try {
@@ -132,6 +153,55 @@ export const LocalChangesView: FC<LocalChangesViewProps> = ({ repoPath }) => {
     // TODO: Show in file manager
     console.log('Show in folder:', file.path);
   };
+
+  // Commit handlers
+  const handleAmendChange = useCallback(async (amend: boolean) => {
+    if (amend) {
+      try {
+        const message = await invoke<CommitMessage>('get_last_commit_message');
+        setLastCommitMessage(message);
+      } catch (error) {
+        console.error('Error loading last commit message:', error);
+        setLastCommitMessage(null);
+      }
+    } else {
+      setLastCommitMessage(null);
+    }
+  }, []);
+
+  const handleCommit = useCallback(async (subject: string, description: string, amend: boolean) => {
+    setIsCommitLoading(true);
+
+    // Build the full commit message
+    const fullMessage = description ? `${subject}\n\n${description}` : subject;
+    const command = amend ? `git commit --amend -m "${subject}"` : `git commit -m "${subject}"`;
+
+    onStartGitOperation?.('Commit', amend ? '(amend)' : undefined);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_commit', {
+        message: fullMessage,
+        amend,
+      });
+
+      onCompleteGitOperation?.(result);
+      onAddGitLogEntry?.('Commit', amend ? 'Amend Commit' : 'Commit', command, result.message, result.success);
+
+      if (result.success) {
+        // Refresh file status after successful commit
+        await loadFileStatus();
+        setSelectedFile(null);
+        setDiffInfo(null);
+        onRefreshRepository?.();
+      }
+    } catch (error) {
+      const errorMessage = String(error);
+      onCompleteGitOperation?.({ success: false, message: errorMessage });
+      onAddGitLogEntry?.('Commit', amend ? 'Amend Commit' : 'Commit', command, errorMessage, false);
+    } finally {
+      setIsCommitLoading(false);
+    }
+  }, [loadFileStatus, onStartGitOperation, onCompleteGitOperation, onAddGitLogEntry, onRefreshRepository]);
 
   // Context menu handlers
   const handleContextMenu = (e: React.MouseEvent, file: FileStatus) => {
@@ -476,6 +546,15 @@ export const LocalChangesView: FC<LocalChangesViewProps> = ({ repoPath }) => {
       />
       <div className="diff-panel">
         {renderDiffContent()}
+        {staged.length > 0 && (
+          <CommitPanel
+            stagedCount={staged.length}
+            onCommit={handleCommit}
+            isLoading={isCommitLoading}
+            lastCommitMessage={lastCommitMessage}
+            onAmendChange={handleAmendChange}
+          />
+        )}
       </div>
       {renderContextMenu()}
     </div>
