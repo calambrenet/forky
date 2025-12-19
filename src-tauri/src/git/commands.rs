@@ -246,3 +246,19 @@ pub fn get_last_commit_message(state: State<AppState>) -> Result<CommitMessage, 
     let repo = repository::open_repository(path)?;
     repository::get_last_commit_message(&repo)
 }
+
+#[tauri::command]
+pub fn git_add_remote(
+    name: String,
+    url: String,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_add_remote(path, &name, &url)
+}
+
+#[tauri::command]
+pub fn git_test_remote_connection(url: String) -> Result<GitOperationResult, String> {
+    repository::git_test_remote_connection(&url)
+}

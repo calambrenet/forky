@@ -145,3 +145,10 @@ export interface CommitMessage {
   subject: string;
   body: string;
 }
+
+// Remote branch sorting order
+export type RemoteSortOrder =
+  | 'alphabetically'
+  | 'alphabetically-master-top'
+  | 'alphabetically-backward'
+  | 'alphabetically-backward-master-top';

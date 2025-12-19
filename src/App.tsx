@@ -12,6 +12,7 @@ import { FetchModal, PullModal, PushModal, SshHostVerificationModal, GitCredenti
 import type { FetchOptions, PullOptions, PushOptions, SshHostInfo, CredentialRequest } from './components/git-modals';
 import { AlertContainer, AlertData } from './components/alert';
 import { GitActivityLog } from './components/git-activity-log';
+import { AddRemoteModal } from './components/add-remote-modal';
 import { usePanelResize } from './hooks/usePanelResize';
 import { useRepositoryTabs } from './hooks/useRepositoryTabs';
 import { useTheme } from './hooks/useTheme';
@@ -44,6 +45,7 @@ function App() {
 
   // Modal state
   const [openModal, setOpenModal] = useState<ModalType>(null);
+  const [isAddRemoteModalOpen, setIsAddRemoteModalOpen] = useState(false);
 
   // SSH verification state
   const [sshVerification, setSshVerification] = useState<{
@@ -321,6 +323,42 @@ function App() {
   const handleOpenPushModal = () => setOpenModal('push');
   const handleCloseModal = () => setOpenModal(null);
 
+  // Add Remote modal handlers
+  const handleOpenAddRemoteModal = useCallback(() => {
+    setIsAddRemoteModalOpen(true);
+  }, []);
+
+  const handleCloseAddRemoteModal = useCallback(() => {
+    setIsAddRemoteModalOpen(false);
+  }, []);
+
+  const handleAddRemote = useCallback(async (name: string, url: string) => {
+    const command = `git remote add ${name} ${url}`;
+
+    try {
+      const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
+
+      // Add to activity log
+      addGitLogEntry('Other', `Add remote '${name}'`, command, result.message, result.success);
+
+      if (result.success) {
+        // Refresh repository data to update remotes list
+        // This will be handled by the tab state refresh
+        if (activeTabId) {
+          // Force a refresh by re-fetching repo info
+          // The tab state update will trigger a re-render
+        }
+      } else {
+        addAlert('error', 'Add Remote Failed', result.message);
+      }
+    } catch (error) {
+      const errorMessage = String(error);
+      addGitLogEntry('Other', `Add remote '${name}'`, command, errorMessage, false);
+      addAlert('error', 'Add Remote Error', errorMessage);
+      throw error;
+    }
+  }, [addGitLogEntry, addAlert, activeTabId]);
+
   // Execute fetch with options (triggered from modal)
   const handleFetchWithOptions = async (options: FetchOptions) => {
     if (!activeTab?.path || isGitLoading) return;
@@ -547,6 +585,7 @@ function App() {
               onViewModeChange={handleViewModeChange}
               onBranchSelect={handleBranchSelect}
               onNavigateToCommit={handleNavigateToCommit}
+              onAddRemote={handleOpenAddRemoteModal}
             />
           </div>
           <Resizer
@@ -635,6 +674,14 @@ function App() {
 
       {/* Alert Container */}
       <AlertContainer alerts={alerts} onDismiss={removeAlert} />
+
+      {/* Add Remote Modal */}
+      <AddRemoteModal
+        isOpen={isAddRemoteModalOpen}
+        onClose={handleCloseAddRemoteModal}
+        onAdd={handleAddRemote}
+        existingRemotes={activeTabState?.remotes ?? []}
+      />
 
       {/* Git Activity Log */}
       <GitActivityLog

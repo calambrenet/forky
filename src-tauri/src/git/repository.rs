@@ -1232,3 +1232,65 @@ pub fn git_commit(repo_path: &str, message: &str, amend: bool) -> Result<GitOper
         Ok(create_error_result(&stderr, &stdout))
     }
 }
+
+/// Add a new remote to the repository
+pub fn git_add_remote(repo_path: &str, name: &str, url: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(repo_path)
+       .arg("remote")
+       .arg("add")
+       .arg(name)
+       .arg(url);
+
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute git remote add: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(create_success_result(format!("Remote '{}' added successfully", name)))
+    } else {
+        Ok(create_error_result(&stderr, &stdout))
+    }
+}
+
+/// Test connection to a remote URL using git ls-remote
+pub fn git_test_remote_connection(url: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let mut cmd = Command::new("git");
+    cmd.arg("ls-remote")
+       .arg("--exit-code")
+       .arg("--heads")
+       .arg(url);
+
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+
+    // Set a timeout-like behavior by limiting refs
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to test connection: {}", e))?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(create_success_result("Connection successful".to_string()))
+    } else {
+        // Check for common errors
+        if stderr.contains("Host key verification failed") {
+            Ok(create_error_result("SSH host key verification failed. Add the host to known_hosts first.", &stderr))
+        } else if stderr.contains("Permission denied") || stderr.contains("Authentication failed") {
+            Ok(create_error_result("Authentication failed. Check your credentials.", &stderr))
+        } else if stderr.contains("Could not resolve host") {
+            Ok(create_error_result("Could not resolve host. Check the URL.", &stderr))
+        } else if stderr.contains("Connection refused") {
+            Ok(create_error_result("Connection refused. Check if the server is accessible.", &stderr))
+        } else {
+            Ok(create_error_result("Could not connect to remote", &stderr))
+        }
+    }
+}

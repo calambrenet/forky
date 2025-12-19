@@ -38,6 +38,8 @@ pub fn run() {
             git_commands::add_ssh_known_host,
             git_commands::git_commit,
             git_commands::get_last_commit_message,
+            git_commands::git_add_remote,
+            git_commands::git_test_remote_connection,
             system_commands::get_system_theme,
         ])
         .run(tauri::generate_context!())

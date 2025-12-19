@@ -1,5 +1,6 @@
-import { FC, useState } from 'react';
-import { BranchInfo, BranchHead, TagInfo, ViewMode } from '../../types/git';
+import { FC, useState, useRef, useEffect, useCallback } from 'react';
+import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -14,6 +15,14 @@ interface SidebarProps {
   onViewModeChange: (mode: ViewMode) => void;
   onBranchSelect: (branch: BranchInfo) => void;
   onNavigateToCommit: (commitSha: string) => void;
+  onAddRemote?: () => void;
+}
+
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  showSortSubmenu: boolean;
 }
 
 interface CollapsibleSectionProps {
@@ -21,19 +30,25 @@ interface CollapsibleSectionProps {
   count?: number;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 const CollapsibleSection: FC<CollapsibleSectionProps> = ({
   title,
   count,
   children,
-  defaultOpen = true
+  defaultOpen = true,
+  onContextMenu,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
     <div className="sidebar-section">
-      <div className="section-header" onClick={() => setIsOpen(!isOpen)}>
+      <div
+        className="section-header"
+        onClick={() => setIsOpen(!isOpen)}
+        onContextMenu={onContextMenu}
+      >
         <span className={`expand-icon ${isOpen ? 'expanded' : ''}`}>▶</span>
         <span className="section-title">{title}</span>
         {count !== undefined && <span className="section-count">{count}</span>}
@@ -41,6 +56,40 @@ const CollapsibleSection: FC<CollapsibleSectionProps> = ({
       {isOpen && <div className="section-content">{children}</div>}
     </div>
   );
+};
+
+// Sorting function for remote branches
+const sortRemoteBranches = (branches: BranchInfo[], sortOrder: RemoteSortOrder): BranchInfo[] => {
+  const sorted = [...branches];
+
+  switch (sortOrder) {
+    case 'alphabetically':
+      return sorted.sort((a, b) => a.name.localeCompare(b.name));
+
+    case 'alphabetically-master-top':
+      return sorted.sort((a, b) => {
+        const aIsMain = a.name.includes('/main') || a.name.includes('/master');
+        const bIsMain = b.name.includes('/main') || b.name.includes('/master');
+        if (aIsMain && !bIsMain) return -1;
+        if (!aIsMain && bIsMain) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    case 'alphabetically-backward':
+      return sorted.sort((a, b) => b.name.localeCompare(a.name));
+
+    case 'alphabetically-backward-master-top':
+      return sorted.sort((a, b) => {
+        const aIsMain = a.name.includes('/main') || a.name.includes('/master');
+        const bIsMain = b.name.includes('/main') || b.name.includes('/master');
+        if (aIsMain && !bIsMain) return -1;
+        if (!aIsMain && bIsMain) return 1;
+        return b.name.localeCompare(a.name);
+      });
+
+    default:
+      return sorted;
+  }
 };
 
 export const Sidebar: FC<SidebarProps> = ({
@@ -55,9 +104,28 @@ export const Sidebar: FC<SidebarProps> = ({
   onViewModeChange,
   onBranchSelect,
   onNavigateToCommit,
+  onAddRemote,
 }) => {
   const localBranches = branches.filter(b => !b.is_remote);
-  const remoteBranches = branches.filter(b => b.is_remote);
+  const remoteBranchesUnsorted = branches.filter(b => b.is_remote);
+
+  // Remote sorting preference (persisted)
+  const [remoteSortOrder, setRemoteSortOrder] = useLocalStorage<RemoteSortOrder>(
+    'forky:remote-sort-order',
+    'alphabetically'
+  );
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    showSortSubmenu: false,
+  });
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sort remote branches based on preference
+  const remoteBranches = sortRemoteBranches(remoteBranchesUnsorted, remoteSortOrder);
 
   // Create a map of branch names to their commit SHAs
   const branchToCommit = new Map<string, string>();
@@ -79,6 +147,56 @@ export const Sidebar: FC<SidebarProps> = ({
     onViewModeChange('all-commits');
     onNavigateToCommit(tag.commit_sha);
   };
+
+  // Context menu handlers
+  const handleRemotesContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      showSortSubmenu: false,
+    });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ visible: false, x: 0, y: 0, showSortSubmenu: false });
+  }, []);
+
+  const handleAddRemoteClick = useCallback(() => {
+    closeContextMenu();
+    onAddRemote?.();
+  }, [closeContextMenu, onAddRemote]);
+
+  const handleSortOrderChange = useCallback((order: RemoteSortOrder) => {
+    setRemoteSortOrder(order);
+    closeContextMenu();
+  }, [setRemoteSortOrder, closeContextMenu]);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    };
+
+    if (contextMenu.visible) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [contextMenu.visible, closeContextMenu]);
+
+  // Close context menu on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeContextMenu();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [closeContextMenu]);
 
   // Extract parent folder name from path
   const getParentFolder = (path?: string) => {
@@ -149,7 +267,12 @@ export const Sidebar: FC<SidebarProps> = ({
           ))}
         </CollapsibleSection>
 
-        <CollapsibleSection title="Remotes" count={remotes.length} defaultOpen={false}>
+        <CollapsibleSection
+          title="Remotes"
+          count={remotes.length}
+          defaultOpen={false}
+          onContextMenu={handleRemotesContextMenu}
+        >
           {remotes.map((remote) => (
             <div key={remote} className="sidebar-item remote-item">
               <span className="item-icon">🌐</span>
@@ -189,6 +312,60 @@ export const Sidebar: FC<SidebarProps> = ({
           <div className="sidebar-empty">No submodules</div>
         </CollapsibleSection>
       </div>
+
+      {/* Remotes Context Menu */}
+      {contextMenu.visible && (
+        <div
+          ref={contextMenuRef}
+          className="sidebar-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <div className="context-menu-item" onClick={handleAddRemoteClick}>
+            <span className="context-menu-label">Add New Remote...</span>
+          </div>
+          <div className="context-menu-separator" />
+          <div
+            className="context-menu-item has-submenu"
+            onMouseEnter={() => setContextMenu(prev => ({ ...prev, showSortSubmenu: true }))}
+            onMouseLeave={() => setContextMenu(prev => ({ ...prev, showSortSubmenu: false }))}
+          >
+            <span className="context-menu-label">Sort Remotes</span>
+            <span className="context-menu-arrow">▶</span>
+            {contextMenu.showSortSubmenu && (
+              <div className="context-submenu">
+                <div
+                  className={`context-menu-item ${remoteSortOrder === 'alphabetically' ? 'checked' : ''}`}
+                  onClick={() => handleSortOrderChange('alphabetically')}
+                >
+                  {remoteSortOrder === 'alphabetically' && <span className="context-menu-check">✓</span>}
+                  <span className="context-menu-label">Alphabetically</span>
+                </div>
+                <div
+                  className={`context-menu-item ${remoteSortOrder === 'alphabetically-master-top' ? 'checked' : ''}`}
+                  onClick={() => handleSortOrderChange('alphabetically-master-top')}
+                >
+                  {remoteSortOrder === 'alphabetically-master-top' && <span className="context-menu-check">✓</span>}
+                  <span className="context-menu-label">Alphabetically, master on top</span>
+                </div>
+                <div
+                  className={`context-menu-item ${remoteSortOrder === 'alphabetically-backward' ? 'checked' : ''}`}
+                  onClick={() => handleSortOrderChange('alphabetically-backward')}
+                >
+                  {remoteSortOrder === 'alphabetically-backward' && <span className="context-menu-check">✓</span>}
+                  <span className="context-menu-label">Alphabetically backward</span>
+                </div>
+                <div
+                  className={`context-menu-item ${remoteSortOrder === 'alphabetically-backward-master-top' ? 'checked' : ''}`}
+                  onClick={() => handleSortOrderChange('alphabetically-backward-master-top')}
+                >
+                  {remoteSortOrder === 'alphabetically-backward-master-top' && <span className="context-menu-check">✓</span>}
+                  <span className="context-menu-label">Alphabetically backward, master on top</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
