@@ -1,0 +1,110 @@
+/* Git Modals Specific Styles */
+
+/* Override modal checkboxes position for git modals */
+.modal-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Warning style for force push checkbox */
+.checkbox-container:has(input:checked) .checkbox-label:contains("Force") {
+  color: var(--accent-orange);
+}
+
+/* SSH Host Verification Modal */
+.ssh-verification-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ssh-fingerprint-box {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.ssh-fingerprint-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.ssh-fingerprint-value {
+  display: block;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-all;
+  background: transparent;
+  padding: 0;
+}
+
+.ssh-verification-warning {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Git Error Modal */
+.git-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.git-error-message {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Git Credential Modal */
+.credential-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.credential-input-wrapper {
+  width: 100%;
+}
+
+.credential-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.credential-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.credential-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.credential-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}

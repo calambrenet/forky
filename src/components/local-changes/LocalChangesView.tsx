@@ -1,0 +1,483 @@
+import { FC, useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { FileStatus, FileStatusSeparated, DiffInfo } from '../../types/git';
+import { Resizer } from '../resizer/Resizer';
+import './LocalChangesView.css';
+
+interface LocalChangesViewProps {
+  repoPath: string;
+}
+
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  file: FileStatus | null;
+}
+
+export const LocalChangesView: FC<LocalChangesViewProps> = ({ repoPath }) => {
+  const [unstaged, setUnstaged] = useState<FileStatus[]>([]);
+  const [staged, setStaged] = useState<FileStatus[]>([]);
+  const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
+  const [diffInfo, setDiffInfo] = useState<DiffInfo | null>(null);
+  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [isResizing, setIsResizing] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    file: null,
+  });
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  const loadFileStatus = useCallback(async () => {
+    try {
+      const result = await invoke<FileStatusSeparated>('get_file_status_separated');
+      setUnstaged(result.unstaged);
+      setStaged(result.staged);
+    } catch (error) {
+      console.error('Error loading file status:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFileStatus();
+  }, [loadFileStatus, repoPath]);
+
+  const loadDiff = useCallback(async (file: FileStatus) => {
+    setIsLoadingDiff(true);
+    try {
+      const diff = await invoke<DiffInfo>('get_working_diff', {
+        filePath: file.path,
+        staged: file.staged,
+        fileStatus: file.status,
+      });
+      setDiffInfo(diff);
+    } catch (error) {
+      console.error('Error loading diff:', error);
+      setDiffInfo(null);
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  }, []);
+
+  const handleFileSelect = (file: FileStatus) => {
+    setSelectedFile(file);
+    loadDiff(file);
+  };
+
+  const handleStageFile = async (file: FileStatus) => {
+    try {
+      await invoke('stage_file', { filePath: file.path });
+      await loadFileStatus();
+      if (selectedFile?.path === file.path) {
+        const newFile = { ...file, staged: true };
+        setSelectedFile(newFile);
+        loadDiff(newFile);
+      }
+    } catch (error) {
+      console.error('Error staging file:', error);
+    }
+  };
+
+  const handleUnstageFile = async (file: FileStatus) => {
+    try {
+      await invoke('unstage_file', { filePath: file.path });
+      await loadFileStatus();
+      if (selectedFile?.path === file.path) {
+        const newFile = { ...file, staged: false };
+        setSelectedFile(newFile);
+        loadDiff(newFile);
+      }
+    } catch (error) {
+      console.error('Error unstaging file:', error);
+    }
+  };
+
+  const handleStageAll = async () => {
+    try {
+      for (const file of unstaged) {
+        await invoke('stage_file', { filePath: file.path });
+      }
+      await loadFileStatus();
+    } catch (error) {
+      console.error('Error staging all files:', error);
+    }
+  };
+
+  const handleUnstageAll = async () => {
+    try {
+      for (const file of staged) {
+        await invoke('unstage_file', { filePath: file.path });
+      }
+      await loadFileStatus();
+    } catch (error) {
+      console.error('Error unstaging all files:', error);
+    }
+  };
+
+  const handleDiscardChanges = async (file: FileStatus) => {
+    // TODO: Implement discard changes (git checkout -- file)
+    console.log('Discard changes:', file.path);
+  };
+
+  const handleOpenFile = async (file: FileStatus) => {
+    // TODO: Open file in default editor
+    console.log('Open file:', file.path);
+  };
+
+  const handleShowInFolder = async (file: FileStatus) => {
+    // TODO: Show in file manager
+    console.log('Show in folder:', file.path);
+  };
+
+  // Context menu handlers
+  const handleContextMenu = (e: React.MouseEvent, file: FileStatus) => {
+    e.preventDefault();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      file,
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0, file: null });
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    };
+
+    if (contextMenu.visible) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [contextMenu.visible]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeContextMenu();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'new':
+      case 'untracked':
+        return { icon: 'A', color: 'var(--accent-green)', label: 'Added' };
+      case 'modified':
+        return { icon: 'M', color: 'var(--accent-yellow)', label: 'Modified' };
+      case 'deleted':
+        return { icon: 'D', color: 'var(--accent-red)', label: 'Deleted' };
+      case 'renamed':
+        return { icon: 'R', color: 'var(--accent-blue)', label: 'Renamed' };
+      default:
+        return { icon: '?', color: 'var(--text-secondary)', label: 'Unknown' };
+    }
+  };
+
+  const getFileName = (path: string) => path.split('/').pop() || path;
+  const getFileDir = (path: string) => {
+    const parts = path.split('/');
+    parts.pop();
+    return parts.length > 0 ? parts.join('/') + '/' : '';
+  };
+
+  const formatFileSize = (bytes: number | null) => {
+    if (bytes === null) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleResizeStart = () => setIsResizing(true);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.max(200, Math.min(500, e.clientX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => setIsResizing(false);
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const renderFileList = (
+    files: FileStatus[],
+    title: string,
+    isStaged: boolean,
+    onAction: (file: FileStatus) => void,
+    onActionAll: () => void
+  ) => (
+    <div className="file-panel">
+      <div className="file-panel-header">
+        <span className="panel-title">{title}</span>
+        <span className="file-count">{files.length}</span>
+        {files.length > 0 && (
+          <button
+            className="action-btn-small"
+            onClick={onActionAll}
+            title={isStaged ? 'Unstage all' : 'Stage all'}
+          >
+            {isStaged ? '−' : '+'}
+          </button>
+        )}
+      </div>
+      <div className="file-list">
+        {files.length === 0 ? (
+          <div className="empty-message">
+            {isStaged ? 'No staged changes' : 'No unstaged changes'}
+          </div>
+        ) : (
+          files.map((file) => {
+            const { icon, color } = getStatusIcon(file.status);
+            const isSelected = selectedFile?.path === file.path && selectedFile?.staged === file.staged;
+            return (
+              <div
+                key={`${file.path}-${file.staged}`}
+                className={`file-item ${isSelected ? 'selected' : ''}`}
+                onClick={() => handleFileSelect(file)}
+                onContextMenu={(e) => handleContextMenu(e, file)}
+              >
+                <span className="file-status-icon" style={{ color }}>
+                  {icon}
+                </span>
+                <span className="file-info">
+                  <span className="file-name">{getFileName(file.path)}</span>
+                  <span className="file-dir">{getFileDir(file.path)}</span>
+                </span>
+                <button
+                  className="action-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAction(file);
+                  }}
+                  title={isStaged ? 'Unstage' : 'Stage'}
+                >
+                  {isStaged ? '−' : '+'}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  const renderBinaryViewer = () => {
+    if (!diffInfo || !selectedFile) return null;
+
+    const fullPath = `${repoPath}/${selectedFile.path}`;
+
+    if (diffInfo.binary_type === 'image') {
+      // For images, show a preview
+      const imageSrc = convertFileSrc(fullPath);
+      return (
+        <div className="binary-viewer image-viewer">
+          <div className="binary-header">
+            <span className="binary-icon">🖼️</span>
+            <span className="binary-info">
+              Image file • {formatFileSize(diffInfo.file_size)}
+            </span>
+          </div>
+          <div className="image-preview">
+            <img
+              src={imageSrc}
+              alt={selectedFile.path}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // For other binary files
+    return (
+      <div className="binary-viewer">
+        <div className="binary-placeholder">
+          <span className="binary-icon">📄</span>
+          <span className="binary-type">Binary file</span>
+          <span className="binary-size">{formatFileSize(diffInfo.file_size)}</span>
+          <span className="binary-note">Preview not available</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDiffContent = () => {
+    if (!selectedFile) {
+      return (
+        <div className="diff-empty">
+          <span>Select a file to view changes</span>
+        </div>
+      );
+    }
+
+    if (isLoadingDiff) {
+      return (
+        <div className="diff-loading">
+          <span>Loading diff...</span>
+        </div>
+      );
+    }
+
+    // Handle binary files
+    if (diffInfo?.is_binary) {
+      return (
+        <div className="diff-content">
+          <div className="diff-file-header">
+            <span className="diff-file-path">{selectedFile.path}</span>
+            <span className="diff-file-status">{getStatusIcon(selectedFile.status).label}</span>
+          </div>
+          {renderBinaryViewer()}
+        </div>
+      );
+    }
+
+    // No diff info or empty hunks
+    if (!diffInfo || diffInfo.hunks.length === 0) {
+      const { label } = getStatusIcon(selectedFile.status);
+      return (
+        <div className="diff-empty">
+          <span>No diff available - {label}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="diff-content">
+        <div className="diff-file-header">
+          <span className="diff-file-path">{selectedFile.path}</span>
+          <span className="diff-file-status">{getStatusIcon(selectedFile.status).label}</span>
+        </div>
+        <div className="diff-hunks">
+          {diffInfo.hunks.map((hunk, hunkIndex) => (
+            <div key={hunkIndex} className="diff-hunk">
+              <div className="diff-hunk-header">
+                @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+              </div>
+              <div className="diff-lines">
+                {hunk.lines.map((line, lineIndex) => (
+                  <div key={lineIndex} className={`diff-line ${line.line_type}`}>
+                    <span className="line-number old">
+                      {line.old_line_no ?? ''}
+                    </span>
+                    <span className="line-number new">
+                      {line.new_line_no ?? ''}
+                    </span>
+                    <span className="line-prefix">
+                      {line.line_type === 'add' ? '+' : line.line_type === 'delete' ? '-' : ' '}
+                    </span>
+                    <span className="line-content">{line.content}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderContextMenu = () => {
+    if (!contextMenu.visible || !contextMenu.file) return null;
+
+    const file = contextMenu.file;
+    const isStaged = file.staged;
+
+    return (
+      <div
+        ref={contextMenuRef}
+        className="context-menu"
+        style={{ top: contextMenu.y, left: contextMenu.x }}
+      >
+        <div className="context-menu-item" onClick={() => { handleOpenFile(file); closeContextMenu(); }}>
+          <span className="context-menu-label">Open</span>
+          <span className="context-menu-shortcut">Enter</span>
+        </div>
+        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
+          <span className="context-menu-label">Open with...</span>
+        </div>
+        <div className="context-menu-item" onClick={() => { handleShowInFolder(file); closeContextMenu(); }}>
+          <span className="context-menu-label">Show in Files</span>
+          <span className="context-menu-shortcut">⌘⇧R</span>
+        </div>
+        <div className="context-menu-separator" />
+        {isStaged ? (
+          <div className="context-menu-item" onClick={() => { handleUnstageFile(file); closeContextMenu(); }}>
+            <span className="context-menu-label">Unstage</span>
+            <span className="context-menu-shortcut">⌘U</span>
+          </div>
+        ) : (
+          <div className="context-menu-item" onClick={() => { handleStageFile(file); closeContextMenu(); }}>
+            <span className="context-menu-label">Stage</span>
+            <span className="context-menu-shortcut">⌘S</span>
+          </div>
+        )}
+        {!isStaged && file.status !== 'untracked' && (
+          <div className="context-menu-item danger" onClick={() => { handleDiscardChanges(file); closeContextMenu(); }}>
+            <span className="context-menu-label">Discard Changes</span>
+            <span className="context-menu-shortcut">⌘⌫</span>
+          </div>
+        )}
+        <div className="context-menu-separator" />
+        <div className="context-menu-item" onClick={() => { handleStageAll(); closeContextMenu(); }}>
+          <span className="context-menu-label">Stage All</span>
+          <span className="context-menu-shortcut">⌘⇧S</span>
+        </div>
+        <div className="context-menu-separator" />
+        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
+          <span className="context-menu-label">Ignore</span>
+        </div>
+        <div className="context-menu-separator" />
+        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
+          <span className="context-menu-label">Save as Patch</span>
+        </div>
+        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
+          <span className="context-menu-label">Copy Patch</span>
+          <span className="context-menu-shortcut">⌘C</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="local-changes-view">
+      <div className="changes-sidebar" style={{ width: sidebarWidth }}>
+        {renderFileList(unstaged, 'Unstaged', false, handleStageFile, handleStageAll)}
+        {renderFileList(staged, 'Staged', true, handleUnstageFile, handleUnstageAll)}
+      </div>
+      <Resizer
+        direction="horizontal"
+        onMouseDown={handleResizeStart}
+        isResizing={isResizing}
+      />
+      <div className="diff-panel">
+        {renderDiffContent()}
+      </div>
+      {renderContextMenu()}
+    </div>
+  );
+};
