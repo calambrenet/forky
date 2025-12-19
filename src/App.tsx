@@ -33,6 +33,7 @@ function App() {
     selectTab,
     closeTab,
     updateTabState,
+    refreshActiveTab,
   } = useRepositoryTabs();
 
   const { sizes, isResizing, startResize, containerRef } = usePanelResize();
@@ -599,6 +600,7 @@ function App() {
               onStartGitOperation={startGitOperation}
               onCompleteGitOperation={completeGitOperation}
               onAddGitLogEntry={addGitLogEntry}
+              onRefreshRepository={refreshActiveTab}
             />
           ) : (
             <AllCommitsView
