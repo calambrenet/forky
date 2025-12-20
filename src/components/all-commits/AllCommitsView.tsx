@@ -273,13 +273,13 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
           />
         ) : (
           <div className="graph-empty">
-            <span>No commits to display</span>
+            <span>{t('commits.noCommits')}</span>
           </div>
         )}
         {hasMore && (
           <div className="load-more-container">
             <button className="load-more-btn" onClick={loadMore}>
-              Load more commits
+              {t('commits.loadMore')}
             </button>
           </div>
         )}

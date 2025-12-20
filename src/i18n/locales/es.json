@@ -89,6 +89,8 @@
     "selectCommitToViewDetails": "Selecciona un commit para ver los detalles",
     "files": "Archivos",
     "noFilesChanged": "Sin archivos modificados",
+    "noCommits": "No hay commits para mostrar",
+    "loadMore": "Cargar más commits",
     "author": "Autor",
     "date": "Fecha",
     "hash": "Hash",
