@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import './GitModals.css';
@@ -38,6 +39,7 @@ export const FetchModal: FC<FetchModalProps> = memo(({
   remotes,
   savedOptions,
 }) => {
+  const { t } = useTranslation();
   const [selectedRemote, setSelectedRemote] = useState(savedOptions?.remote || remotes[0] || 'origin');
   const [fetchAll, setFetchAll] = useState(savedOptions?.all ?? true);
 
@@ -75,11 +77,11 @@ export const FetchModal: FC<FetchModalProps> = memo(({
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
         icon={<ForkIcon />}
-        title="Fetch"
-        description="Fetch latest changes from remote repository"
+        title={t('modals.fetch.title')}
+        description={t('modals.fetch.description')}
       />
       <ModalBody>
-        <ModalRow label="Remote">
+        <ModalRow label={t('modals.fetch.remote')}>
           <Select
             value={selectedRemote}
             options={remoteOptions}
@@ -92,12 +94,12 @@ export const FetchModal: FC<FetchModalProps> = memo(({
         <Checkbox
           checked={fetchAll}
           onChange={setFetchAll}
-          label="Fetch all remotes"
+          label={t('modals.fetch.fetchAllRemotes')}
         />
       </div>
       <ModalFooter>
-        <button className="btn-cancel" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handleFetch}>Fetch</button>
+        <button className="btn-cancel" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="btn-primary" onClick={handleFetch}>{t('toolbar.fetch')}</button>
       </ModalFooter>
     </Modal>
   );

@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal/Modal';
 import { GitOperationResult } from '../../types/git';
@@ -20,13 +21,6 @@ const ForkIcon = () => (
   </svg>
 );
 
-const LinkIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M4.715 6.542L3.343 7.914a3 3 0 104.243 4.243l1.828-1.829A3 3 0 008.586 5.5L8 6.086a1.001 1.001 0 00-.154.199 2 2 0 01.861 3.337L6.88 11.45a2 2 0 11-2.83-2.83l.793-.792a4.018 4.018 0 01-.128-1.287z"/>
-    <path d="M6.586 4.672A3 3 0 007.414 9.5l.775-.776a2 2 0 01-.896-3.346L9.12 3.55a2 2 0 012.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 10-4.243-4.243L6.586 4.672z"/>
-  </svg>
-);
-
 const CheckIcon = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
     <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
@@ -45,6 +39,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   onAdd,
   existingRemotes,
 }) => {
+  const { t } = useTranslation();
   const [remoteName, setRemoteName] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
@@ -126,25 +121,25 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
         icon={<ForkIcon />}
-        title="Remote"
-        description="Add new remote repository reference"
+        title={t('modals.addRemote.title')}
+        description={t('modals.addRemote.description')}
       />
       <ModalBody>
         <div className="add-remote-form" onKeyDown={handleKeyDown}>
-          <ModalRow label="Remote">
+          <ModalRow label={t('modals.addRemote.name')}>
             <input
               type="text"
               className="add-remote-input"
               value={remoteName}
               onChange={(e) => setRemoteName(e.target.value)}
-              placeholder="origin"
+              placeholder={t('modals.addRemote.namePlaceholder')}
               autoFocus
               disabled={isAdding}
             />
           </ModalRow>
           {nameError && <div className="add-remote-error">{nameError}</div>}
 
-          <ModalRow label="Repository URL">
+          <ModalRow label={t('modals.addRemote.url')}>
             <input
               type="text"
               className="add-remote-input"
@@ -154,14 +149,10 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
                 setTestStatus('idle');
                 setTestMessage('');
               }}
-              placeholder="git@github.com:user/repo.git"
+              placeholder={t('modals.addRemote.urlPlaceholder')}
               disabled={isAdding}
             />
           </ModalRow>
-          <div className="add-remote-url-hint">
-            <LinkIcon />
-            <span>Git Repository URL</span>
-          </div>
 
           <div className="add-remote-test-section">
             <button
@@ -169,12 +160,12 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
               onClick={handleTestConnection}
               disabled={!isValidUrl || testStatus === 'testing' || isAdding}
             >
-              {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+              {testStatus === 'testing' ? t('modals.addRemote.testing') : t('modals.addRemote.testConnection')}
             </button>
             {testStatus === 'success' && (
               <div className="add-remote-test-result success">
                 <CheckIcon />
-                <span>{testMessage}</span>
+                <span>{t('modals.addRemote.connectionSuccess')}</span>
               </div>
             )}
             {testStatus === 'error' && (
@@ -188,14 +179,14 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
       </ModalBody>
       <ModalFooter>
         <button className="btn-cancel" onClick={onClose} disabled={isAdding}>
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           className="btn-primary"
           onClick={handleAdd}
           disabled={!canAdd}
         >
-          {isAdding ? 'Adding...' : 'Add New Remote'}
+          {isAdding ? t('modals.addRemote.adding') : t('modals.addRemote.add')}
         </button>
       </ModalFooter>
     </Modal>

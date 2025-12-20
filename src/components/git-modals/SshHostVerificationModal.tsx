@@ -1,4 +1,5 @@
 import { FC, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import './GitModals.css';
 
@@ -32,6 +33,8 @@ export const SshHostVerificationModal: FC<SshHostVerificationModalProps> = memo(
   hostInfo,
   isLoading = false,
 }) => {
+  const { t } = useTranslation();
+
   if (!hostInfo) return null;
 
   const handleReject = () => {
@@ -43,26 +46,26 @@ export const SshHostVerificationModal: FC<SshHostVerificationModalProps> = memo(
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
         icon={<SecurityIcon />}
-        title="SSH Host Verification"
-        description={`The authenticity of host '${hostInfo.host}' can't be established.`}
+        title={t('modals.sshVerification.title')}
+        description={t('modals.sshVerification.cantEstablish', { host: hostInfo.host })}
       />
       <ModalBody>
         <div className="ssh-verification-content">
           <div className="ssh-fingerprint-box">
-            <div className="ssh-fingerprint-label">{hostInfo.keyType} key fingerprint:</div>
+            <div className="ssh-fingerprint-label">{t('modals.sshVerification.fingerprint', { keyType: hostInfo.keyType })}</div>
             <code className="ssh-fingerprint-value">{hostInfo.fingerprint}</code>
           </div>
           <p className="ssh-verification-warning">
-            Are you sure you want to continue connecting? This will add the host to your known hosts file.
+            {t('modals.sshVerification.confirmConnect')}
           </p>
         </div>
       </ModalBody>
       <ModalFooter>
         <button className="btn-cancel" onClick={handleReject} disabled={isLoading}>
-          No, Cancel
+          {t('modals.sshVerification.noCancel')}
         </button>
         <button className="btn-primary" onClick={onAccept} disabled={isLoading}>
-          {isLoading ? 'Adding...' : 'Yes, Trust This Host'}
+          {isLoading ? t('modals.sshVerification.adding') : t('modals.sshVerification.yesTrust')}
         </button>
       </ModalFooter>
     </Modal>

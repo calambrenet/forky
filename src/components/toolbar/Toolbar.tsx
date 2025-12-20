@@ -1,4 +1,5 @@
 import { FC, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
@@ -109,6 +110,7 @@ export const Toolbar: FC<ToolbarProps> = memo(({
   onDismissOperation,
   onOpenActivityLog,
 }) => {
+  const { t } = useTranslation();
   const appWindow = getCurrentWindow();
 
   const handleOpenInTerminal = async () => {
@@ -151,38 +153,38 @@ export const Toolbar: FC<ToolbarProps> = memo(({
     <div className="toolbar">
       {/* Left section: Open, Fetch, Pull, Push, Stash */}
       <div className="toolbar-left">
-        <button className="toolbar-btn" onClick={onOpenRepo} title="Open Repository">
+        <button className="toolbar-btn" onClick={onOpenRepo} title={t('toolbar.openRepository')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 009.62 4H13.5A1.5 1.5 0 0115 5.5v7a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z"/>
           </svg>
-          <span className="btn-label">Open</span>
+          <span className="btn-label">{t('toolbar.open')}</span>
         </button>
         <div className="toolbar-separator" />
-        <button className="toolbar-btn" title="Fetch" onClick={onFetch} disabled={isLoading}>
+        <button className="toolbar-btn" title={t('toolbar.fetch')} onClick={onFetch} disabled={isLoading}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M8 4a.5.5 0 01.5.5v5.793l2.146-2.147a.5.5 0 01.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 10.293V4.5A.5.5 0 018 4z"/>
             <path d="M3.5 1A1.5 1.5 0 002 2.5v11A1.5 1.5 0 003.5 15h9a1.5 1.5 0 001.5-1.5v-11A1.5 1.5 0 0012.5 1h-9z" fillOpacity="0.3"/>
           </svg>
-          <span className="btn-label">Fetch</span>
+          <span className="btn-label">{t('toolbar.fetch')}</span>
         </button>
-        <button className="toolbar-btn" title="Pull" onClick={onPull} disabled={isLoading}>
+        <button className="toolbar-btn" title={t('toolbar.pull')} onClick={onPull} disabled={isLoading}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M8 1a.5.5 0 01.5.5v11.793l3.146-3.147a.5.5 0 01.708.708l-4 4a.5.5 0 01-.708 0l-4-4a.5.5 0 01.708-.708L7.5 13.293V1.5A.5.5 0 018 1z"/>
           </svg>
-          <span className="btn-label">Pull</span>
+          <span className="btn-label">{t('toolbar.pull')}</span>
         </button>
-        <button className="toolbar-btn" title="Push" onClick={onPush} disabled={isLoading}>
+        <button className="toolbar-btn" title={t('toolbar.push')} onClick={onPush} disabled={isLoading}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M8 15a.5.5 0 01-.5-.5V2.707L4.354 5.854a.5.5 0 11-.708-.708l4-4a.5.5 0 01.708 0l4 4a.5.5 0 01-.708.708L8.5 2.707V14.5a.5.5 0 01-.5.5z"/>
           </svg>
-          <span className="btn-label">Push</span>
+          <span className="btn-label">{t('toolbar.push')}</span>
         </button>
-        <button className="toolbar-btn" title="Stash">
+        <button className="toolbar-btn" title={t('toolbar.stash')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M2 4.5A2.5 2.5 0 014.5 2h7A2.5 2.5 0 0114 4.5v7a2.5 2.5 0 01-2.5 2.5h-7A2.5 2.5 0 012 11.5v-7zM4.5 3A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0011.5 3h-7z"/>
             <path d="M5 6.5A.5.5 0 015.5 6h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 3a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5z"/>
           </svg>
-          <span className="btn-label">Stash</span>
+          <span className="btn-label">{t('toolbar.stash')}</span>
         </button>
       </div>
 
@@ -201,75 +203,75 @@ export const Toolbar: FC<ToolbarProps> = memo(({
 
       {/* Right section: Branch, Merge, Menu */}
       <div className="toolbar-right">
-        <button className="toolbar-btn" title="Branch">
+        <button className="toolbar-btn" title={t('toolbar.branch')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
           </svg>
-          <span className="btn-label">Branch</span>
+          <span className="btn-label">{t('toolbar.branch')}</span>
         </button>
-        <button className="toolbar-btn" title="Merge">
+        <button className="toolbar-btn" title={t('toolbar.merge')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.5 2.5 0 006 8.5h1.5v5.128a2.251 2.251 0 101.5 0V8.5H10a2.5 2.5 0 002.5-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a1 1 0 01-1 1H6a1 1 0 01-1-1v-.878zm6-2.122a.75.75 0 111.5 0 .75.75 0 01-1.5 0zm-3 10a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
           </svg>
-          <span className="btn-label">Merge</span>
+          <span className="btn-label">{t('toolbar.merge')}</span>
         </button>
         <div className="toolbar-separator" />
         <Menu
           trigger={
-            <button className="hamburger-btn" title="Menu">
+            <button className="hamburger-btn" title={t('menu.repository')}>
               <Icons.Hamburger />
             </button>
           }
           align="right"
         >
-          <MenuHeader>Repository</MenuHeader>
+          <MenuHeader>{t('menu.repository')}</MenuHeader>
           <MenuItem icon={<Icons.Folder />} shortcut="Ctrl+O" onClick={onOpenRepo}>
-            Open Repository...
+            {t('menu.openRepository')}
           </MenuItem>
           <MenuItem icon={<Icons.Clone />} shortcut="Ctrl+Shift+O">
-            Clone Repository...
+            {t('menu.cloneRepository')}
           </MenuItem>
           <MenuItem icon={<Icons.Terminal />} onClick={handleOpenInTerminal}>
-            Open in Terminal
+            {t('menu.openInTerminal')}
           </MenuItem>
           <MenuSeparator />
-          <SubMenu icon={<Icons.Theme />} label="Theme">
+          <SubMenu icon={<Icons.Theme />} label={t('menu.theme')}>
             <MenuItem
               icon={currentTheme === 'system' ? <CheckIcon /> : undefined}
               onClick={() => handleThemeChange('system')}
             >
-              System
+              {t('menu.themeSystem')}
             </MenuItem>
             <MenuItem
               icon={currentTheme === 'light' ? <CheckIcon /> : undefined}
               onClick={() => handleThemeChange('light')}
             >
-              Light
+              {t('menu.themeLight')}
             </MenuItem>
             <MenuItem
               icon={currentTheme === 'dark' ? <CheckIcon /> : undefined}
               onClick={() => handleThemeChange('dark')}
             >
-              Dark
+              {t('menu.themeDark')}
             </MenuItem>
           </SubMenu>
           <MenuSeparator />
           <MenuItem icon={<Icons.Settings />} shortcut="Ctrl+," onClick={handleSettings}>
-            Settings
+            {t('menu.settings')}
           </MenuItem>
           <MenuItem icon={<Icons.Keyboard />} shortcut="Ctrl+K" onClick={handleKeyboardShortcuts}>
-            Keyboard Shortcuts
+            {t('menu.keyboardShortcuts')}
           </MenuItem>
           <MenuSeparator />
           <MenuItem icon={<Icons.Help />} shortcut="F1" onClick={handleHelp}>
-            Help
+            {t('menu.help')}
           </MenuItem>
           <MenuItem icon={<Icons.Info />} onClick={handleAbout}>
-            About Forky
+            {t('menu.about')}
           </MenuItem>
           <MenuSeparator />
           <MenuItem icon={<Icons.Exit />} shortcut="Ctrl+Q" danger onClick={handleExit}>
-            Exit
+            {t('menu.exit')}
           </MenuItem>
         </Menu>
       </div>

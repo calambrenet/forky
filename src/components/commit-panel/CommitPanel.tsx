@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import './CommitPanel.css';
 
 interface CommitPanelProps {
@@ -16,6 +17,7 @@ export const CommitPanel: FC<CommitPanelProps> = ({
   lastCommitMessage,
   onAmendChange,
 }) => {
+  const { t } = useTranslation();
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [amend, setAmend] = useState(false);
@@ -60,8 +62,8 @@ export const CommitPanel: FC<CommitPanelProps> = ({
   const isCommitDisabled = !subject.trim() || (stagedCount === 0 && !amend) || isLoading;
 
   const buttonText = amend
-    ? 'Amend Commit'
-    : `Commit ${stagedCount} ${stagedCount === 1 ? 'File' : 'Files'}`;
+    ? t('localChanges.amendLastCommit')
+    : t('localChanges.commit');
 
   return (
     <div className="commit-panel" onKeyDown={handleKeyDown}>
@@ -69,7 +71,7 @@ export const CommitPanel: FC<CommitPanelProps> = ({
         <input
           type="text"
           className="commit-subject"
-          placeholder="Commit subject"
+          placeholder={t('localChanges.commitMessagePlaceholder')}
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           disabled={isLoading}
@@ -79,7 +81,7 @@ export const CommitPanel: FC<CommitPanelProps> = ({
       </div>
       <textarea
         className="commit-description"
-        placeholder="Description (optional)"
+        placeholder={t('localChanges.commitMessage')}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         disabled={isLoading}
@@ -100,14 +102,14 @@ export const CommitPanel: FC<CommitPanelProps> = ({
               </svg>
             )}
           </span>
-          <span className="commit-amend-text">Amend</span>
+          <span className="commit-amend-text">{t('localChanges.amendLastCommit')}</span>
         </label>
         <button
           className="commit-button"
           onClick={handleCommit}
           disabled={isCommitDisabled}
         >
-          {isLoading ? 'Committing...' : buttonText}
+          {isLoading ? t('localChanges.committing') : buttonText}
         </button>
       </div>
     </div>

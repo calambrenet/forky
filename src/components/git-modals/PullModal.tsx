@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import { BranchInfo } from '../../types/git';
@@ -52,6 +53,7 @@ export const PullModal: FC<PullModalProps> = memo(({
   currentBranch,
   savedOptions,
 }) => {
+  const { t } = useTranslation();
   const [selectedRemote, setSelectedRemote] = useState(savedOptions?.remote || remotes[0] || 'origin');
   const [selectedBranch, setSelectedBranch] = useState(savedOptions?.branch || currentBranch || 'main');
   const [rebase, setRebase] = useState(savedOptions?.rebase ?? false);
@@ -120,28 +122,28 @@ export const PullModal: FC<PullModalProps> = memo(({
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
         icon={<ForkIcon />}
-        title="Pull"
-        description="Pull remote changes and merges them into your local branch"
+        title={t('modals.pull.title')}
+        description={t('modals.pull.description')}
       />
       <ModalBody>
-        <ModalRow label="Remote">
+        <ModalRow label={t('modals.pull.remote')}>
           <Select
             value={selectedRemote}
             options={remoteOptions}
             onChange={setSelectedRemote}
           />
         </ModalRow>
-        <ModalRow label="Branch">
+        <ModalRow label={t('modals.pull.branch')}>
           <Select
             value={selectedBranch}
             options={remoteBranches.length > 0 ? remoteBranches : [{ value: selectedBranch, label: selectedBranch, icon: <BranchIcon /> }]}
             onChange={setSelectedBranch}
           />
         </ModalRow>
-        <ModalRow label="Into">
+        <ModalRow label={t('modals.pull.into')}>
           <div className="modal-row-info">
             <BranchIcon />
-            <span>{currentBranch || 'No branch'}</span>
+            <span>{currentBranch || t('modals.pull.noBranch')}</span>
           </div>
         </ModalRow>
       </ModalBody>
@@ -149,17 +151,17 @@ export const PullModal: FC<PullModalProps> = memo(({
         <Checkbox
           checked={rebase}
           onChange={setRebase}
-          label="Rebase instead of merge"
+          label={t('modals.pull.rebaseInsteadOfMerge')}
         />
         <Checkbox
           checked={autostash}
           onChange={setAutostash}
-          label="Stash and reapply local changes"
+          label={t('modals.pull.stashAndReapply')}
         />
       </div>
       <ModalFooter>
-        <button className="btn-cancel" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handlePull}>Pull</button>
+        <button className="btn-cancel" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="btn-primary" onClick={handlePull}>{t('toolbar.pull')}</button>
       </ModalFooter>
     </Modal>
   );

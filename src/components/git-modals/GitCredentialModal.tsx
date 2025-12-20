@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import { CredentialRequest } from '../../types/git';
 import './GitModals.css';
@@ -30,6 +31,7 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(({
   request,
   isLoading = false,
 }) => {
+  const { t } = useTranslation();
   const [value, setValue] = useState('');
 
   // Reset value when request changes
@@ -56,21 +58,21 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(({
   const getTitle = () => {
     switch (request.credential_type) {
       case 'username':
-        return 'Username Required';
+        return t('modals.credential.usernameRequired');
       case 'password':
-        return 'Password Required';
+        return t('modals.credential.passwordRequired');
       case 'passphrase':
-        return 'SSH Passphrase Required';
+        return t('modals.credential.passphraseRequired');
       default:
-        return 'Authentication Required';
+        return t('modals.credential.authRequired');
     }
   };
 
   const getDescription = () => {
     if (request.host) {
-      return `Authentication required for ${request.host}`;
+      return t('modals.credential.authRequiredFor', { host: request.host });
     }
-    return request.prompt || 'Please enter your credentials';
+    return request.prompt || t('modals.credential.enterCredentials');
   };
 
   const getInputType = () => {
@@ -80,13 +82,13 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(({
   const getPlaceholder = () => {
     switch (request.credential_type) {
       case 'username':
-        return 'Enter username';
+        return t('modals.credential.enterUsername');
       case 'password':
-        return 'Enter password or access token';
+        return t('modals.credential.enterPassword');
       case 'passphrase':
-        return 'Enter SSH key passphrase';
+        return t('modals.credential.enterPassphrase');
       default:
-        return 'Enter value';
+        return t('modals.credential.enterValue');
     }
   };
 
@@ -112,21 +114,21 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(({
           </div>
           {request.credential_type === 'password' && (
             <p className="credential-hint">
-              For GitHub/GitLab, use a Personal Access Token instead of your password.
+              {t('modals.credential.tokenHint')}
             </p>
           )}
         </form>
       </ModalBody>
       <ModalFooter>
         <button className="btn-cancel" onClick={handleCancel} disabled={isLoading}>
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           className="btn-primary"
           onClick={handleSubmit}
           disabled={isLoading || !value.trim()}
         >
-          {isLoading ? 'Authenticating...' : 'Submit'}
+          {isLoading ? t('modals.credential.authenticating') : t('common.submit')}
         </button>
       </ModalFooter>
     </Modal>

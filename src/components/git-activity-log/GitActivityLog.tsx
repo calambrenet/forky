@@ -1,4 +1,6 @@
 import { FC, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLocale } from '../../i18n/useLocale';
 import { GitLogEntry } from '../../types/git';
 import './GitActivityLog.css';
 
@@ -28,28 +30,13 @@ const ErrorIcon = () => (
   </svg>
 );
 
-const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const formatDateTime = (date: Date): string => {
-  return date.toLocaleString('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
 export const GitActivityLog: FC<GitActivityLogProps> = ({
   entries,
   isOpen,
   onClose,
 }) => {
+  const { t } = useTranslation();
+  const { formatTime, formatDate } = useLocale();
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(
     entries.length > 0 ? entries[0].id : null
   );
@@ -71,7 +58,7 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
       <div className="git-activity-log" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="git-activity-header">
-          <span className="git-activity-title">Activity Log</span>
+          <span className="git-activity-title">{t('activityLog.title')}</span>
           <button className="git-activity-close" onClick={onClose}>
             <CloseIcon />
           </button>
@@ -105,7 +92,7 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
             {/* Entry list */}
             <div className="git-activity-list">
               {filteredEntries.length === 0 ? (
-                <div className="git-activity-empty">No activity yet</div>
+                <div className="git-activity-empty">{t('activityLog.noActivity')}</div>
               ) : (
                 filteredEntries.map((entry) => (
                   <button
@@ -139,7 +126,7 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
                       {selectedEntry.output.split('\n')[0]}
                     </span>
                   </div>
-                  <span className="detail-timestamp">{formatDateTime(selectedEntry.timestamp)}</span>
+                  <span className="detail-timestamp">{formatDate(selectedEntry.timestamp)}</span>
                 </div>
                 <div className="detail-content">
                   <div className="detail-command">
@@ -150,7 +137,7 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
                 </div>
               </>
             ) : (
-              <div className="detail-empty">Select an entry to view details</div>
+              <div className="detail-empty">{t('commits.selectCommitToViewDetails')}</div>
             )}
           </div>
         </div>

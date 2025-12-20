@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/titlebar/TitleBar';
@@ -49,29 +50,30 @@ import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage } from './t
 import './styles/global.css';
 import './App.css';
 
-// Helper function for error titles
-const getErrorTitle = (errorType: string | undefined, operationName: string): string => {
-  switch (errorType) {
-    case 'ssh_host_verification_failed':
-      return 'SSH Host Verification Failed';
-    case 'authentication_failed':
-      return 'Authentication Failed';
-    case 'remote_access_failed':
-      return 'Remote Access Failed';
-    case 'connection_refused':
-      return 'Connection Refused';
-    case 'connection_timeout':
-      return 'Connection Timeout';
-    case 'host_not_found':
-      return 'Host Not Found';
-    case 'git_error':
-      return `${operationName} Failed`;
-    default:
-      return `${operationName} Failed`;
-  }
-};
-
 function App() {
+  const { t } = useTranslation();
+
+  // Helper function for error titles
+  const getErrorTitle = useCallback((errorType: string | undefined, _operationName: string): string => {
+    switch (errorType) {
+      case 'ssh_host_verification_failed':
+        return t('alerts.sshHostVerificationFailed');
+      case 'authentication_failed':
+        return t('alerts.authenticationFailed');
+      case 'remote_access_failed':
+        return t('alerts.remoteAccessFailed');
+      case 'connection_refused':
+        return t('alerts.connectionRefused');
+      case 'connection_timeout':
+        return t('alerts.connectionTimeout');
+      case 'host_not_found':
+        return t('alerts.hostNotFound');
+      case 'git_error':
+        return t('alerts.gitError');
+      default:
+        return t('alerts.gitError');
+    }
+  }, [t]);
   // Repository store
   const tabs = useTabs();
   const activeTab = useActiveTab();
@@ -429,7 +431,7 @@ function App() {
         <div className="loading-overlay">
           <div className="loading-content">
             <div className="loading-spinner" />
-            <p>Restoring repositories...</p>
+            <p>{t('app.restoringRepos')}</p>
           </div>
         </div>
       </div>
@@ -507,10 +509,10 @@ function App() {
       ) : (
         <div className="welcome-overlay">
           <div className="welcome-content">
-            <h1>Forky</h1>
-            <p>Free fast and friendly Git client</p>
+            <h1>{t('welcome.title')}</h1>
+            <p>{t('welcome.subtitle')}</p>
             <button className="open-repo-btn" onClick={handleOpenRepo}>
-              Open Repository
+              {t('welcome.openRepository')}
             </button>
           </div>
         </div>

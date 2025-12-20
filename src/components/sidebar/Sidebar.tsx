@@ -1,4 +1,5 @@
 import { FC, useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import './Sidebar.css';
@@ -106,6 +107,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
   onNavigateToCommit,
   onAddRemote,
 }) => {
+  const { t } = useTranslation();
   const localBranches = branches.filter(b => !b.is_remote);
   const remoteBranchesUnsorted = branches.filter(b => b.is_remote);
 
@@ -236,7 +238,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
                 <path d="M12.5 0H5.914a1.5 1.5 0 00-1.06.44L2.439 2.854A1.5 1.5 0 002 3.914V14.5A1.5 1.5 0 003.5 16h9a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0012.5 0zm-7 2.75a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5zm2 0a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"/>
               </svg>
             </span>
-            <span className="nav-label">Local Changes</span>
+            <span className="nav-label">{t('sidebar.localChanges')}</span>
             {localChangesCount > 0 && (
               <span className="nav-badge">{localChangesCount}</span>
             )}
@@ -250,11 +252,11 @@ export const Sidebar: FC<SidebarProps> = memo(({
                 <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.5 2.5 0 006 8.5h1.5v5.128a2.251 2.251 0 101.5 0V8.5H10a2.5 2.5 0 002.5-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a1 1 0 01-1 1H6a1 1 0 01-1-1v-.878zm6-2.122a.75.75 0 111.5 0 .75.75 0 01-1.5 0zm-3 10a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
               </svg>
             </span>
-            <span className="nav-label">All Commits</span>
+            <span className="nav-label">{t('sidebar.allCommits')}</span>
           </div>
         </div>
 
-        <CollapsibleSection title="Branches" count={localBranches.length}>
+        <CollapsibleSection title={t('sidebar.branches')} count={localBranches.length}>
           {localBranches.map((branch) => (
             <div
               key={branch.name}
@@ -268,7 +270,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
         </CollapsibleSection>
 
         <CollapsibleSection
-          title="Remotes"
+          title={t('sidebar.remotes')}
           count={remotes.length}
           defaultOpen={false}
           onContextMenu={handleRemotesContextMenu}
@@ -291,7 +293,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           ))}
         </CollapsibleSection>
 
-        <CollapsibleSection title="Tags" count={tags.length} defaultOpen={false}>
+        <CollapsibleSection title={t('sidebar.tags')} count={tags.length} defaultOpen={false}>
           {tags.map((tag) => (
             <div
               key={tag.name}
@@ -304,12 +306,12 @@ export const Sidebar: FC<SidebarProps> = memo(({
           ))}
         </CollapsibleSection>
 
-        <CollapsibleSection title="Stashes" count={0} defaultOpen={false}>
-          <div className="sidebar-empty">No stashes</div>
+        <CollapsibleSection title={t('sidebar.stashes')} count={0} defaultOpen={false}>
+          <div className="sidebar-empty">{t('sidebar.noStashes')}</div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Submodules" count={0} defaultOpen={false}>
-          <div className="sidebar-empty">No submodules</div>
+        <CollapsibleSection title={t('sidebar.submodules')} count={0} defaultOpen={false}>
+          <div className="sidebar-empty">{t('sidebar.noSubmodules')}</div>
         </CollapsibleSection>
       </div>
 
@@ -321,7 +323,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
           <div className="context-menu-item" onClick={handleAddRemoteClick}>
-            <span className="context-menu-label">Add New Remote...</span>
+            <span className="context-menu-label">{t('contextMenu.addNewRemote')}</span>
           </div>
           <div className="context-menu-separator" />
           <div
@@ -329,7 +331,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
             onMouseEnter={() => setContextMenu(prev => ({ ...prev, showSortSubmenu: true }))}
             onMouseLeave={() => setContextMenu(prev => ({ ...prev, showSortSubmenu: false }))}
           >
-            <span className="context-menu-label">Sort Remotes</span>
+            <span className="context-menu-label">{t('contextMenu.sortRemotes')}</span>
             <span className="context-menu-arrow">▶</span>
             {contextMenu.showSortSubmenu && (
               <div className="context-submenu">
@@ -338,28 +340,28 @@ export const Sidebar: FC<SidebarProps> = memo(({
                   onClick={() => handleSortOrderChange('alphabetically')}
                 >
                   {remoteSortOrder === 'alphabetically' && <span className="context-menu-check">✓</span>}
-                  <span className="context-menu-label">Alphabetically</span>
+                  <span className="context-menu-label">{t('contextMenu.alphabetically')}</span>
                 </div>
                 <div
                   className={`context-menu-item ${remoteSortOrder === 'alphabetically-master-top' ? 'checked' : ''}`}
                   onClick={() => handleSortOrderChange('alphabetically-master-top')}
                 >
                   {remoteSortOrder === 'alphabetically-master-top' && <span className="context-menu-check">✓</span>}
-                  <span className="context-menu-label">Alphabetically, master on top</span>
+                  <span className="context-menu-label">{t('contextMenu.alphabeticallyMasterTop')}</span>
                 </div>
                 <div
                   className={`context-menu-item ${remoteSortOrder === 'alphabetically-backward' ? 'checked' : ''}`}
                   onClick={() => handleSortOrderChange('alphabetically-backward')}
                 >
                   {remoteSortOrder === 'alphabetically-backward' && <span className="context-menu-check">✓</span>}
-                  <span className="context-menu-label">Alphabetically backward</span>
+                  <span className="context-menu-label">{t('contextMenu.alphabeticallyBackward')}</span>
                 </div>
                 <div
                   className={`context-menu-item ${remoteSortOrder === 'alphabetically-backward-master-top' ? 'checked' : ''}`}
                   onClick={() => handleSortOrderChange('alphabetically-backward-master-top')}
                 >
                   {remoteSortOrder === 'alphabetically-backward-master-top' && <span className="context-menu-check">✓</span>}
-                  <span className="context-menu-label">Alphabetically backward, master on top</span>
+                  <span className="context-menu-label">{t('contextMenu.alphabeticallyBackwardMasterTop')}</span>
                 </div>
               </div>
             )}

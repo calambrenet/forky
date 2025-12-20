@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../types/git';
@@ -23,6 +24,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   repoPath,
   onRefreshRepository,
 }) => {
+  const { t } = useTranslation();
   // Git operation store
   const { startOperation, completeOperation, addLogEntry } = useGitOperationStore();
   const [unstaged, setUnstaged] = useState<FileStatus[]>([]);
@@ -236,15 +238,15 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     switch (status) {
       case 'new':
       case 'untracked':
-        return { icon: 'A', color: 'var(--accent-green)', label: 'Added' };
+        return { icon: 'A', color: 'var(--accent-green)', label: t('fileStatus.added') };
       case 'modified':
-        return { icon: 'M', color: 'var(--accent-yellow)', label: 'Modified' };
+        return { icon: 'M', color: 'var(--accent-yellow)', label: t('fileStatus.modified') };
       case 'deleted':
-        return { icon: 'D', color: 'var(--accent-red)', label: 'Deleted' };
+        return { icon: 'D', color: 'var(--accent-red)', label: t('fileStatus.deleted') };
       case 'renamed':
-        return { icon: 'R', color: 'var(--accent-blue)', label: 'Renamed' };
+        return { icon: 'R', color: 'var(--accent-blue)', label: t('fileStatus.renamed') };
       default:
-        return { icon: '?', color: 'var(--text-secondary)', label: 'Unknown' };
+        return { icon: '?', color: 'var(--text-secondary)', label: t('fileStatus.unknown') };
     }
   };
 
@@ -298,7 +300,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
           <button
             className="action-btn-small"
             onClick={onActionAll}
-            title={isStaged ? 'Unstage all' : 'Stage all'}
+            title={isStaged ? t('localChanges.unstageAll') : t('localChanges.stageAll')}
           >
             {isStaged ? '−' : '+'}
           </button>
@@ -307,7 +309,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
       <div className="file-list">
         {files.length === 0 ? (
           <div className="empty-message">
-            {isStaged ? 'No staged changes' : 'No unstaged changes'}
+            {isStaged ? t('localChanges.noStagedChanges') : t('localChanges.noUnstagedChanges')}
           </div>
         ) : (
           files.map((file) => {
@@ -333,7 +335,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
                     e.stopPropagation();
                     onAction(file);
                   }}
-                  title={isStaged ? 'Unstage' : 'Stage'}
+                  title={isStaged ? t('localChanges.unstage') : t('localChanges.stage')}
                 >
                   {isStaged ? '−' : '+'}
                 </button>
@@ -358,7 +360,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
           <div className="binary-header">
             <span className="binary-icon">🖼️</span>
             <span className="binary-info">
-              Image file • {formatFileSize(diffInfo.file_size)}
+              {t('diff.imagePreview')} • {formatFileSize(diffInfo.file_size)}
             </span>
           </div>
           <div className="image-preview">
@@ -379,9 +381,9 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
       <div className="binary-viewer">
         <div className="binary-placeholder">
           <span className="binary-icon">📄</span>
-          <span className="binary-type">Binary file</span>
+          <span className="binary-type">{t('localChanges.binaryFile')}</span>
           <span className="binary-size">{formatFileSize(diffInfo.file_size)}</span>
-          <span className="binary-note">Preview not available</span>
+          <span className="binary-note">{t('localChanges.cannotDisplayBinary')}</span>
         </div>
       </div>
     );
@@ -391,7 +393,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     if (!selectedFile) {
       return (
         <div className="diff-empty">
-          <span>Select a file to view changes</span>
+          <span>{t('localChanges.selectFileToViewDiff')}</span>
         </div>
       );
     }
@@ -399,7 +401,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     if (isLoadingDiff) {
       return (
         <div className="diff-loading">
-          <span>Loading diff...</span>
+          <span>{t('common.loading')}</span>
         </div>
       );
     }
@@ -475,50 +477,35 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
         style={{ top: contextMenu.y, left: contextMenu.x }}
       >
         <div className="context-menu-item" onClick={() => { handleOpenFile(file); closeContextMenu(); }}>
-          <span className="context-menu-label">Open</span>
+          <span className="context-menu-label">{t('contextMenu.openFile')}</span>
           <span className="context-menu-shortcut">Enter</span>
         </div>
-        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
-          <span className="context-menu-label">Open with...</span>
-        </div>
         <div className="context-menu-item" onClick={() => { handleShowInFolder(file); closeContextMenu(); }}>
-          <span className="context-menu-label">Show in Files</span>
+          <span className="context-menu-label">{t('contextMenu.openInExplorer')}</span>
           <span className="context-menu-shortcut">⌘⇧R</span>
         </div>
         <div className="context-menu-separator" />
         {isStaged ? (
           <div className="context-menu-item" onClick={() => { handleUnstageFile(file); closeContextMenu(); }}>
-            <span className="context-menu-label">Unstage</span>
+            <span className="context-menu-label">{t('contextMenu.unstageFile')}</span>
             <span className="context-menu-shortcut">⌘U</span>
           </div>
         ) : (
           <div className="context-menu-item" onClick={() => { handleStageFile(file); closeContextMenu(); }}>
-            <span className="context-menu-label">Stage</span>
+            <span className="context-menu-label">{t('contextMenu.stageFile')}</span>
             <span className="context-menu-shortcut">⌘S</span>
           </div>
         )}
         {!isStaged && file.status !== 'untracked' && (
           <div className="context-menu-item danger" onClick={() => { handleDiscardChanges(file); closeContextMenu(); }}>
-            <span className="context-menu-label">Discard Changes</span>
+            <span className="context-menu-label">{t('contextMenu.discardChanges')}</span>
             <span className="context-menu-shortcut">⌘⌫</span>
           </div>
         )}
         <div className="context-menu-separator" />
         <div className="context-menu-item" onClick={() => { handleStageAll(); closeContextMenu(); }}>
-          <span className="context-menu-label">Stage All</span>
+          <span className="context-menu-label">{t('localChanges.stageAll')}</span>
           <span className="context-menu-shortcut">⌘⇧S</span>
-        </div>
-        <div className="context-menu-separator" />
-        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
-          <span className="context-menu-label">Ignore</span>
-        </div>
-        <div className="context-menu-separator" />
-        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
-          <span className="context-menu-label">Save as Patch</span>
-        </div>
-        <div className="context-menu-item" onClick={() => { closeContextMenu(); }}>
-          <span className="context-menu-label">Copy Patch</span>
-          <span className="context-menu-shortcut">⌘C</span>
         </div>
       </div>
     );
@@ -527,8 +514,8 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   return (
     <div className="local-changes-view">
       <div className="changes-sidebar" style={{ width: sidebarWidth }}>
-        {renderFileList(unstaged, 'Unstaged', false, handleStageFile, handleStageAll)}
-        {renderFileList(staged, 'Staged', true, handleUnstageFile, handleUnstageAll)}
+        {renderFileList(unstaged, t('localChanges.unstaged'), false, handleStageFile, handleStageAll)}
+        {renderFileList(staged, t('localChanges.staged'), true, handleUnstageFile, handleUnstageAll)}
       </div>
       <Resizer
         direction="horizontal"

@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import { BranchInfo } from '../../types/git';
@@ -45,6 +46,7 @@ export const PushModal: FC<PushModalProps> = memo(({
   currentBranch,
   savedOptions,
 }) => {
+  const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState(savedOptions?.branch || currentBranch || 'main');
   const [selectedRemote, setSelectedRemote] = useState(savedOptions?.remote || remotes[0] || 'origin');
   const [pushTags, setPushTags] = useState(savedOptions?.pushTags ?? false);
@@ -105,18 +107,18 @@ export const PushModal: FC<PushModalProps> = memo(({
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
         icon={<ForkIcon />}
-        title="Push"
-        description="Push your local changes to remote repository"
+        title={t('modals.push.title')}
+        description={t('modals.push.description')}
       />
       <ModalBody>
-        <ModalRow label="Branch">
+        <ModalRow label={t('modals.push.branch')}>
           <Select
             value={selectedBranch}
             options={localBranches.length > 0 ? localBranches : [{ value: selectedBranch, label: selectedBranch, icon: <BranchIcon /> }]}
             onChange={setSelectedBranch}
           />
         </ModalRow>
-        <ModalRow label="To">
+        <ModalRow label={t('modals.push.to')}>
           <Select
             value={selectedRemote}
             options={remoteDestinations}
@@ -128,17 +130,17 @@ export const PushModal: FC<PushModalProps> = memo(({
         <Checkbox
           checked={pushTags}
           onChange={setPushTags}
-          label="Push all tags"
+          label={t('modals.push.pushAllTags')}
         />
         <Checkbox
           checked={forceWithLease}
           onChange={setForceWithLease}
-          label="Force push"
+          label={t('modals.push.forcePush')}
         />
       </div>
       <ModalFooter>
-        <button className="btn-cancel" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" onClick={handlePush}>Push</button>
+        <button className="btn-cancel" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="btn-primary" onClick={handlePush}>{t('toolbar.push')}</button>
       </ModalFooter>
     </Modal>
   );
