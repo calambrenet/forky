@@ -1,4 +1,4 @@
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, memo } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import { CredentialRequest } from '../../types/git';
 import './GitModals.css';
@@ -22,7 +22,7 @@ interface GitCredentialModalProps {
   isLoading?: boolean;
 }
 
-export const GitCredentialModal: FC<GitCredentialModalProps> = ({
+export const GitCredentialModal: FC<GitCredentialModalProps> = memo(({
   isOpen,
   onClose,
   onSubmit,
@@ -131,4 +131,4 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = ({
       </ModalFooter>
     </Modal>
   );
-};
+});

@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useMemo } from 'react';
+import { FC, useState, useEffect, useMemo, memo } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import { BranchInfo } from '../../types/git';
@@ -43,7 +43,7 @@ export interface PullOptions {
   autostash: boolean;
 }
 
-export const PullModal: FC<PullModalProps> = ({
+export const PullModal: FC<PullModalProps> = memo(({
   isOpen,
   onClose,
   onPull,
@@ -163,4 +163,4 @@ export const PullModal: FC<PullModalProps> = ({
       </ModalFooter>
     </Modal>
   );
-};
+});

@@ -1,4 +1,4 @@
-import { FC, useState, useRef, useEffect, useCallback } from 'react';
+import { FC, useState, useRef, useEffect, useCallback, memo } from 'react';
 import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import './Sidebar.css';
@@ -92,7 +92,7 @@ const sortRemoteBranches = (branches: BranchInfo[], sortOrder: RemoteSortOrder):
   }
 };
 
-export const Sidebar: FC<SidebarProps> = ({
+export const Sidebar: FC<SidebarProps> = memo(({
   repoName,
   repoPath,
   branches,
@@ -368,4 +368,4 @@ export const Sidebar: FC<SidebarProps> = ({
       )}
     </div>
   );
-};
+});

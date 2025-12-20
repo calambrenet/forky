@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { FC, useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CommitGraph, CommitGraphHandle } from '../commit-graph';
 import { CommitInfo, BranchHead, FileStatus, DiffInfo } from '../../types/git';
@@ -11,7 +11,7 @@ interface AllCommitsViewProps {
   onCommitSelect?: (commitId: string) => void;
 }
 
-export const AllCommitsView: FC<AllCommitsViewProps> = ({
+export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
   repoPath,
   selectedCommitId,
   onCommitSelect,
@@ -354,4 +354,4 @@ export const AllCommitsView: FC<AllCommitsViewProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -1,4 +1,4 @@
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, memo } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import './GitModals.css';
@@ -31,7 +31,7 @@ export interface FetchOptions {
   all: boolean;
 }
 
-export const FetchModal: FC<FetchModalProps> = ({
+export const FetchModal: FC<FetchModalProps> = memo(({
   isOpen,
   onClose,
   onFetch,
@@ -101,4 +101,4 @@ export const FetchModal: FC<FetchModalProps> = ({
       </ModalFooter>
     </Modal>
   );
-};
+});

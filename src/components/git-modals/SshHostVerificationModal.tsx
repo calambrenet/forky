@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, memo } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import './GitModals.css';
 
@@ -24,7 +24,7 @@ interface SshHostVerificationModalProps {
   isLoading?: boolean;
 }
 
-export const SshHostVerificationModal: FC<SshHostVerificationModalProps> = ({
+export const SshHostVerificationModal: FC<SshHostVerificationModalProps> = memo(({
   isOpen,
   onClose,
   onAccept,
@@ -67,4 +67,4 @@ export const SshHostVerificationModal: FC<SshHostVerificationModalProps> = ({
       </ModalFooter>
     </Modal>
   );
-};
+});

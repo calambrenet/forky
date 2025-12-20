@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useMemo } from 'react';
+import { FC, useState, useEffect, useMemo, memo } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import { BranchInfo } from '../../types/git';
@@ -36,7 +36,7 @@ export interface PushOptions {
   forceWithLease: boolean;
 }
 
-export const PushModal: FC<PushModalProps> = ({
+export const PushModal: FC<PushModalProps> = memo(({
   isOpen,
   onClose,
   onPush,
@@ -142,4 +142,4 @@ export const PushModal: FC<PushModalProps> = ({
       </ModalFooter>
     </Modal>
   );
-};
+});

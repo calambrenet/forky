@@ -10,13 +10,11 @@ interface SystemTheme {
   source: string;
 }
 
-// Polling interval in milliseconds (check every 2 seconds)
-const THEME_POLL_INTERVAL = 2000;
-
 export function useTheme() {
   const [userTheme, setUserTheme] = useLocalStorage<Theme>('forky-theme', 'system');
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('light');
   const lastThemeRef = useRef<string>('light');
+  const initialCheckDone = useRef(false);
 
   // Detect system theme using Rust command (works reliably on Linux)
   const detectSystemTheme = useCallback(async (): Promise<ResolvedTheme> => {
@@ -32,9 +30,11 @@ export function useTheme() {
     }
   }, []);
 
-  // Initial theme detection and polling setup
+  // Initial theme detection (only once, no polling)
   useEffect(() => {
-    let pollInterval: number | undefined;
+    if (initialCheckDone.current) return;
+    initialCheckDone.current = true;
+
     let mounted = true;
 
     const checkTheme = async () => {
@@ -49,14 +49,18 @@ export function useTheme() {
       }
     };
 
-    // Initial check
+    // Initial check only
     checkTheme();
 
-    // Start polling for theme changes
-    pollInterval = window.setInterval(checkTheme, THEME_POLL_INTERVAL);
+    return () => {
+      mounted = false;
+    };
+  }, [detectSystemTheme]);
 
-    // Also listen for media query changes (backup for non-Linux systems)
+  // Listen for media query changes (efficient event-based approach)
+  useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
     const handleMediaChange = (e: MediaQueryListEvent) => {
       const newTheme = e.matches ? 'dark' : 'light';
       if (newTheme !== lastThemeRef.current) {
@@ -64,16 +68,13 @@ export function useTheme() {
         setSystemTheme(newTheme);
       }
     };
+
     mediaQuery.addEventListener('change', handleMediaChange);
 
     return () => {
-      mounted = false;
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-      }
       mediaQuery.removeEventListener('change', handleMediaChange);
     };
-  }, [detectSystemTheme]);
+  }, []);
 
   // Resolve the actual theme to use
   const resolvedTheme: ResolvedTheme = userTheme === 'system' ? systemTheme : userTheme;
