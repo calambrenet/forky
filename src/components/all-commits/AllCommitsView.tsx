@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { CommitGraph, CommitGraphHandle } from '../commit-graph';
 import { CommitInfo, BranchHead, FileStatus, DiffInfo } from '../../types/git';
@@ -16,6 +17,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
   selectedCommitId,
   onCommitSelect,
 }) => {
+  const { t } = useTranslation();
   const [commits, setCommits] = useState<CommitInfo[]>([]);
   const [branchHeads, setBranchHeads] = useState<BranchHead[]>([]);
   const [commitFiles, setCommitFiles] = useState<FileStatus[]>([]);

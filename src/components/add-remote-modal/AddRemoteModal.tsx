@@ -1,6 +1,7 @@
 import { FC, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { Globe, Check, AlertCircle } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal/Modal';
 import { GitOperationResult } from '../../types/git';
 import './AddRemoteModal.css';
@@ -13,25 +14,6 @@ interface AddRemoteModalProps {
 }
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
-
-const ForkIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-    <path d="M12 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 10c-1.1 0-2-.9-2-2v-2c0-1.1.9-2 2-2s2 .9 2 2v2c0 1.1-.9 2-2 2z"/>
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
-  </svg>
-);
-
-const ErrorIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M8 15A7 7 0 118 1a7 7 0 010 14zm0-1A6 6 0 108 2a6 6 0 000 12zM8 4a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 4zm0 8a1 1 0 110-2 1 1 0 010 2z"/>
-  </svg>
-);
 
 export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   isOpen,
@@ -120,7 +102,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
-        icon={<ForkIcon />}
+        icon={<Globe size={24} />}
         title={t('modals.addRemote.title')}
         description={t('modals.addRemote.description')}
       />
@@ -164,13 +146,13 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
             </button>
             {testStatus === 'success' && (
               <div className="add-remote-test-result success">
-                <CheckIcon />
+                <Check size={14} />
                 <span>{t('modals.addRemote.connectionSuccess')}</span>
               </div>
             )}
             {testStatus === 'error' && (
               <div className="add-remote-test-result error">
-                <ErrorIcon />
+                <AlertCircle size={14} />
                 <span>{testMessage}</span>
               </div>
             )}

@@ -1,5 +1,6 @@
 import { FC, useEffect, useState, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { X, Minus, Square, Copy } from 'lucide-react';
 import './TitleBar.css';
 
 interface TitleBarProps {
@@ -95,33 +96,21 @@ export const TitleBar: FC<TitleBarProps> = ({ children }) => {
           onClick={handleClose}
           title="Close"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10">
-            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <X size={10} strokeWidth={2} />
         </button>
         <button
           className="titlebar-btn minimize"
           onClick={handleMinimize}
           title="Minimize"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10">
-            <path d="M1 5H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <Minus size={10} strokeWidth={2} />
         </button>
         <button
           className="titlebar-btn maximize"
           onClick={handleMaximize}
           title={isMaximized ? "Restore" : "Maximize"}
         >
-          {isMaximized ? (
-            <svg width="10" height="10" viewBox="0 0 10 10">
-              <path d="M2 3V8H7M3 2H8V7" stroke="currentColor" strokeWidth="1.2" fill="none" />
-            </svg>
-          ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10">
-              <rect x="1" y="1" width="8" height="8" stroke="currentColor" strokeWidth="1.2" fill="none" />
-            </svg>
-          )}
+          {isMaximized ? <Copy size={10} strokeWidth={1.5} /> : <Square size={10} strokeWidth={1.5} />}
         </button>
       </div>
       <div className="titlebar-content">

@@ -1,4 +1,5 @@
 import { FC, useState, useRef, useEffect, useCallback } from 'react';
+import { ChevronDown, Check } from 'lucide-react';
 import './Form.css';
 
 interface SelectOption {
@@ -68,9 +69,7 @@ export const Select: FC<SelectProps> = ({
           <span className="select-label">{selectedOption?.label || placeholder}</span>
         </span>
         <span className="select-arrow">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-            <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <ChevronDown size={12} />
         </span>
       </button>
       {isOpen && (
@@ -85,9 +84,7 @@ export const Select: FC<SelectProps> = ({
               <span className="select-option-label">{option.label}</span>
               {option.value === value && (
                 <span className="select-check">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                    <path d="M11.854 4.146a.5.5 0 010 .708l-5.5 5.5a.5.5 0 01-.708 0l-2.5-2.5a.5.5 0 11.708-.708L6 9.293l5.146-5.147a.5.5 0 01.708 0z"/>
-                  </svg>
+                  <Check size={14} />
                 </span>
               )}
             </div>

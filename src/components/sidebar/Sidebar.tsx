@@ -1,8 +1,11 @@
 import { FC, useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BookOpen, FileEdit, GitMerge } from 'lucide-react';
 import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import './Sidebar.css';
+
+const ICON_SIZE = 16;
 
 interface SidebarProps {
   repoName?: string;
@@ -217,9 +220,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
       {repoName && (
         <div className="sidebar-repo-header">
           <div className="repo-icon-large">
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/>
-            </svg>
+            <BookOpen size={20} />
           </div>
           <div className="repo-info">
             <span className="repo-title">{repoName}</span>
@@ -234,9 +235,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
             onClick={() => onViewModeChange('local-changes')}
           >
             <span className="nav-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M12.5 0H5.914a1.5 1.5 0 00-1.06.44L2.439 2.854A1.5 1.5 0 002 3.914V14.5A1.5 1.5 0 003.5 16h9a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0012.5 0zm-7 2.75a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5zm2 0a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"/>
-              </svg>
+              <FileEdit size={ICON_SIZE} />
             </span>
             <span className="nav-label">{t('sidebar.localChanges')}</span>
             {localChangesCount > 0 && (
@@ -248,9 +247,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
             onClick={() => onViewModeChange('all-commits')}
           >
             <span className="nav-icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.5 2.5 0 006 8.5h1.5v5.128a2.251 2.251 0 101.5 0V8.5H10a2.5 2.5 0 002.5-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a1 1 0 01-1 1H6a1 1 0 01-1-1v-.878zm6-2.122a.75.75 0 111.5 0 .75.75 0 01-1.5 0zm-3 10a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
-              </svg>
+              <GitMerge size={ICON_SIZE} />
             </span>
             <span className="nav-label">{t('sidebar.allCommits')}</span>
           </div>

@@ -8,6 +8,7 @@ import {
   useEffect,
   useCallback,
 } from 'react';
+import { ChevronRight, Check } from 'lucide-react';
 import './Menu.css';
 
 // Context for menu state
@@ -193,9 +194,7 @@ export const SubMenu: FC<SubMenuProps> = ({ icon, label, children }) => {
           {icon !== undefined && <span className="menu-item-icon">{icon}</span>}
           <span className="menu-item-label">{label}</span>
           <span className="submenu-arrow">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-              <path d="M4.5 2L8.5 6L4.5 10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <ChevronRight size={12} />
           </span>
         </div>
         {isOpen && (
@@ -230,11 +229,7 @@ export const MenuCheckbox: FC<MenuCheckboxProps> = ({ checked, onChange, childre
   return (
     <div className="menu-item menu-checkbox" onClick={handleClick}>
       <span className="menu-item-icon">
-        {checked && (
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-            <path d="M11.5 3.5L5.5 10L2.5 7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        )}
+        {checked && <Check size={14} />}
       </span>
       <span className="menu-item-label">{children}</span>
     </div>

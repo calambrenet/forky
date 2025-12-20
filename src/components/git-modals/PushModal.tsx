@@ -1,23 +1,10 @@
 import { FC, useState, useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowUp, GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
 import { BranchInfo } from '../../types/git';
 import './GitModals.css';
-
-// Fork icon for modal header
-const ForkIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2C11.45 2 11 2.45 11 3V8.59L7.91 5.5L6.5 6.91L11 11.41V14.17C9.84 14.58 9 15.69 9 17C9 18.66 10.34 20 12 20C13.66 20 15 18.66 15 17C15 15.69 14.16 14.58 13 14.17V11.41L17.5 6.91L16.09 5.5L13 8.59V3C13 2.45 12.55 2 12 2ZM12 16C12.55 16 13 16.45 13 17C13 17.55 12.55 18 12 18C11.45 18 11 17.55 11 17C11 16.45 11.45 16 12 16Z"/>
-  </svg>
-);
-
-// Branch icon
-const BranchIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
-  </svg>
-);
 
 interface PushModalProps {
   isOpen: boolean;
@@ -59,7 +46,7 @@ export const PushModal: FC<PushModalProps> = memo(({
       .map(b => ({
         value: b.name,
         label: b.name,
-        icon: <BranchIcon />,
+        icon: <GitBranch size={14} />,
       }));
   }, [branches]);
 
@@ -68,7 +55,7 @@ export const PushModal: FC<PushModalProps> = memo(({
     return remotes.map(remote => ({
       value: remote,
       label: `default (${remote}/${selectedBranch})`,
-      icon: <BranchIcon />,
+      icon: <GitBranch size={14} />,
     }));
   }, [remotes, selectedBranch]);
 
@@ -106,7 +93,7 @@ export const PushModal: FC<PushModalProps> = memo(({
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
-        icon={<ForkIcon />}
+        icon={<ArrowUp size={24} />}
         title={t('modals.push.title')}
         description={t('modals.push.description')}
       />
@@ -114,7 +101,7 @@ export const PushModal: FC<PushModalProps> = memo(({
         <ModalRow label={t('modals.push.branch')}>
           <Select
             value={selectedBranch}
-            options={localBranches.length > 0 ? localBranches : [{ value: selectedBranch, label: selectedBranch, icon: <BranchIcon /> }]}
+            options={localBranches.length > 0 ? localBranches : [{ value: selectedBranch, label: selectedBranch, icon: <GitBranch size={14} /> }]}
             onChange={setSelectedBranch}
           />
         </ModalRow>

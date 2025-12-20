@@ -1,15 +1,9 @@
 import { FC, useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { KeyRound } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import { CredentialRequest } from '../../types/git';
 import './GitModals.css';
-
-// Key/lock icon for credentials
-const CredentialIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-  </svg>
-);
 
 // Re-export for backwards compatibility
 export type { CredentialRequest };
@@ -95,7 +89,7 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(({
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalHeader
-        icon={<CredentialIcon />}
+        icon={<KeyRound size={24} />}
         title={getTitle()}
         description={getDescription()}
       />

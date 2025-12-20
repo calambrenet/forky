@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { Check } from 'lucide-react';
 import './Form.css';
 
 interface CheckboxProps {
@@ -24,11 +25,7 @@ export const Checkbox: FC<CheckboxProps> = ({
         className="checkbox-input"
       />
       <span className={`checkbox-box ${checked ? 'checked' : ''}`}>
-        {checked && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-            <path d="M8.854 2.646a.5.5 0 010 .708l-4.5 4.5a.5.5 0 01-.708 0l-2-2a.5.5 0 11.708-.708L4 6.793l4.146-4.147a.5.5 0 01.708 0z"/>
-          </svg>
-        )}
+        {checked && <Check size={10} />}
       </span>
       <span className="checkbox-label">{label}</span>
     </label>

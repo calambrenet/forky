@@ -1,5 +1,6 @@
 import { FC, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { X, Check } from 'lucide-react';
 import { useLocale } from '../../i18n/useLocale';
 import { GitLogEntry } from '../../types/git';
 import './GitActivityLog.css';
@@ -11,24 +12,6 @@ interface GitActivityLogProps {
 }
 
 type FilterType = 'all' | 'user' | 'background';
-
-const CloseIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z"/>
-  </svg>
-);
-
-const SuccessIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M13.854 3.646a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.293l6.646-6.647a.5.5 0 01.708 0z"/>
-  </svg>
-);
-
-const ErrorIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z"/>
-  </svg>
-);
 
 export const GitActivityLog: FC<GitActivityLogProps> = ({
   entries,
@@ -60,7 +43,7 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
         <div className="git-activity-header">
           <span className="git-activity-title">{t('activityLog.title')}</span>
           <button className="git-activity-close" onClick={onClose}>
-            <CloseIcon />
+            <X size={14} />
           </button>
         </div>
 
@@ -122,7 +105,7 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
                   <div className="detail-title-row">
                     <span className="detail-title">{selectedEntry.operationName}</span>
                     <span className={`detail-status ${selectedEntry.success ? 'success' : 'error'}`}>
-                      {selectedEntry.success ? <SuccessIcon /> : <ErrorIcon />}
+                      {selectedEntry.success ? <Check size={12} /> : <X size={12} />}
                       {selectedEntry.output.split('\n')[0]}
                     </span>
                   </div>
