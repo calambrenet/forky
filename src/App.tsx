@@ -442,6 +442,7 @@ function App() {
         <Toolbar
           onOpenRepo={handleOpenRepo}
           repoName={activeTab?.name}
+          repoPath={activeTab?.path}
           currentBranch={activeTab?.currentBranch ?? undefined}
           branches={activeTabState?.branches ?? []}
           onBranchChange={handleBranchChange}

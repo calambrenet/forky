@@ -1,5 +1,6 @@
 import { FC, memo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
 import { RepositoryInfoBox, GitOperationState } from '../repository-info-box';
 import { BranchInfo } from '../../types/git';
@@ -8,6 +9,7 @@ import './Toolbar.css';
 interface ToolbarProps {
   onOpenRepo: () => void;
   repoName?: string;
+  repoPath?: string;
   currentBranch?: string;
   branches?: BranchInfo[];
   onBranchChange?: (branchName: string) => void;
@@ -93,6 +95,7 @@ const Icons = {
 export const Toolbar: FC<ToolbarProps> = memo(({
   onOpenRepo,
   repoName,
+  repoPath,
   currentBranch,
   branches = [],
   onBranchChange,
@@ -108,8 +111,16 @@ export const Toolbar: FC<ToolbarProps> = memo(({
 }) => {
   const appWindow = getCurrentWindow();
 
-  const handleOpenInTerminal = () => {
-    console.log('Open in terminal');
+  const handleOpenInTerminal = async () => {
+    if (!repoPath) {
+      console.warn('No repository path available');
+      return;
+    }
+    try {
+      await invoke('open_in_terminal', { path: repoPath });
+    } catch (error) {
+      console.error('Failed to open terminal:', error);
+    }
   };
 
   const handleSettings = () => {
