@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/titlebar/TitleBar';
@@ -8,91 +8,116 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { LocalChangesView } from './components/local-changes';
 import { AllCommitsView } from './components/all-commits/AllCommitsView';
 import { Resizer } from './components/resizer/Resizer';
-import { FetchModal, PullModal, PushModal, SshHostVerificationModal, GitCredentialModal } from './components/git-modals';
-import type { FetchOptions, PullOptions, PushOptions, SshHostInfo, CredentialRequest } from './components/git-modals';
-import { AlertContainer, AlertData } from './components/alert';
-import { GitActivityLog } from './components/git-activity-log';
-import { AddRemoteModal } from './components/add-remote-modal';
-import { usePanelResize } from './hooks/usePanelResize';
-import { useRepositoryTabs } from './hooks/useRepositoryTabs';
+import { AlertContainer } from './components/alert';
+import type { FetchOptions, PullOptions, PushOptions } from './components/git-modals';
+
+// Lazy load modals for code splitting
+const FetchModal = lazy(() => import('./components/git-modals/FetchModal').then(m => ({ default: m.FetchModal })));
+const PullModal = lazy(() => import('./components/git-modals/PullModal').then(m => ({ default: m.PullModal })));
+const PushModal = lazy(() => import('./components/git-modals/PushModal').then(m => ({ default: m.PushModal })));
+const SshHostVerificationModal = lazy(() => import('./components/git-modals/SshHostVerificationModal').then(m => ({ default: m.SshHostVerificationModal })));
+const GitCredentialModal = lazy(() => import('./components/git-modals/GitCredentialModal').then(m => ({ default: m.GitCredentialModal })));
+const GitActivityLog = lazy(() => import('./components/git-activity-log').then(m => ({ default: m.GitActivityLog })));
+const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m => ({ default: m.AddRemoteModal })));
+
+// Zustand stores
+import {
+  useRepositoryStore,
+  useTabs,
+  useActiveTab,
+  useActiveTabState,
+  useIsRestoring,
+  useLocalChangesCount,
+  useGitOperationStore,
+  useIsGitLoading,
+  useCurrentOperation,
+  useActivityLog,
+  useModalStore,
+  useActiveModal,
+  useIsAddRemoteModalOpen,
+  useIsActivityLogOpen,
+  useSshVerification,
+  useCredentialModal,
+  useUIStore,
+  useAlerts,
+  usePanelSizes,
+  useIsResizing,
+} from './stores';
+
 import { useTheme } from './hooks/useTheme';
-import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage, GitOperationState, GitLogEntry } from './types/git';
+import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage } from './types/git';
 import './styles/global.css';
 import './App.css';
 
-type ModalType = 'fetch' | 'pull' | 'push' | null;
+// Helper function for error titles
+const getErrorTitle = (errorType: string | undefined, operationName: string): string => {
+  switch (errorType) {
+    case 'ssh_host_verification_failed':
+      return 'SSH Host Verification Failed';
+    case 'authentication_failed':
+      return 'Authentication Failed';
+    case 'remote_access_failed':
+      return 'Remote Access Failed';
+    case 'connection_refused':
+      return 'Connection Refused';
+    case 'connection_timeout':
+      return 'Connection Timeout';
+    case 'host_not_found':
+      return 'Host Not Found';
+    case 'git_error':
+      return `${operationName} Failed`;
+    default:
+      return `${operationName} Failed`;
+  }
+};
 
 function App() {
+  // Repository store
+  const tabs = useTabs();
+  const activeTab = useActiveTab();
+  const activeTabState = useActiveTabState();
+  const isRestoring = useIsRestoring();
+  const localChangesCount = useLocalChangesCount();
+  const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab } = useRepositoryStore();
+
+  // Git operation store
+  const isGitLoading = useIsGitLoading();
+  const currentOperation = useCurrentOperation();
+  const activityLog = useActivityLog();
+  const { startOperation, completeOperation, clearOperation, addLogEntry } = useGitOperationStore();
+
+  // Modal store
+  const activeModal = useActiveModal();
+  const isAddRemoteModalOpen = useIsAddRemoteModalOpen();
+  const isActivityLogOpen = useIsActivityLogOpen();
+  const sshVerification = useSshVerification();
+  const credentialModal = useCredentialModal();
   const {
-    tabs,
-    activeTab,
-    activeTabId,
-    activeTabState,
-    isRestoring,
-    openRepository,
-    selectTab,
-    closeTab,
-    updateTabState,
-    refreshActiveTab,
-  } = useRepositoryTabs();
+    openFetchModal,
+    openPullModal,
+    openPushModal,
+    closeModal,
+    openAddRemoteModal,
+    closeAddRemoteModal,
+    openActivityLog,
+    closeActivityLog,
+    showSshVerification,
+    closeSshVerification,
+    closeCredentialModal,
+  } = useModalStore();
 
-  const { sizes, isResizing, startResize, containerRef } = usePanelResize();
+  // UI store
+  const alerts = useAlerts();
+  const panelSizes = usePanelSizes();
+  const isResizing = useIsResizing();
+  const { addAlert, removeAlert, setPanelSize, setIsResizing } = useUIStore();
 
-  // Theme management
+  // Theme hook (for system theme detection)
   const { theme, setTheme } = useTheme();
 
-  // Git operation loading state
-  const [isGitLoading, setIsGitLoading] = useState(false);
-
-  // Modal state
-  const [openModal, setOpenModal] = useState<ModalType>(null);
-  const [isAddRemoteModalOpen, setIsAddRemoteModalOpen] = useState(false);
-
-  // SSH verification state
-  const [sshVerification, setSshVerification] = useState<{
-    isOpen: boolean;
-    hostInfo: SshHostInfo | null;
-    pendingOperation: (() => Promise<void>) | null;
-  }>({ isOpen: false, hostInfo: null, pendingOperation: null });
+  // Panel resize logic
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [isSshLoading, setIsSshLoading] = useState(false);
-
-  // Credential modal state
-  const [credentialModal, setCredentialModal] = useState<{
-    isOpen: boolean;
-    request: CredentialRequest | null;
-    pendingOperation: ((credential: string) => Promise<void>) | null;
-  }>({ isOpen: false, request: null, pendingOperation: null });
-
-  // Alerts state
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
-
-  // Git operation state for info box
-  const [gitOperation, setGitOperation] = useState<GitOperationState | null>(null);
-
-  // Git activity log (persisted in localStorage)
-  const [gitLogEntries, setGitLogEntries] = useState<GitLogEntry[]>(() => {
-    const stored = localStorage.getItem('forky:git-activity-log');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        // Convert timestamp strings back to Date objects
-        return parsed.map((entry: GitLogEntry & { timestamp: string }) => ({
-          ...entry,
-          timestamp: new Date(entry.timestamp),
-        }));
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
-
-  // Persist git activity log to localStorage (limit to 500 entries)
-  useEffect(() => {
-    const entriesToSave = gitLogEntries.slice(0, 500);
-    localStorage.setItem('forky:git-activity-log', JSON.stringify(entriesToSave));
-  }, [gitLogEntries]);
 
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
@@ -117,15 +142,11 @@ function App() {
   ): boolean => {
     if (result.requires_ssh_verification) {
       const { host, key_type, fingerprint } = result.requires_ssh_verification;
-      setSshVerification({
-        isOpen: true,
-        hostInfo: { host, keyType: key_type, fingerprint },
-        pendingOperation: retryOperation,
-      });
+      showSshVerification({ host, keyType: key_type, fingerprint }, retryOperation);
       return true;
     }
     return false;
-  }, []);
+  }, [showSshVerification]);
 
   // Accept SSH host and add to known_hosts
   const handleAcceptSshHost = useCallback(async () => {
@@ -139,9 +160,8 @@ function App() {
 
       if (result.success) {
         console.log('SSH host added:', result.message);
-        // Close modal and retry the operation
         const pendingOp = sshVerification.pendingOperation;
-        setSshVerification({ isOpen: false, hostInfo: null, pendingOperation: null });
+        closeSshVerification();
         if (pendingOp) {
           await pendingOp();
         }
@@ -153,132 +173,16 @@ function App() {
     } finally {
       setIsSshLoading(false);
     }
-  }, [sshVerification]);
-
-  // Reject SSH host
-  const handleRejectSshHost = useCallback(() => {
-    setSshVerification({ isOpen: false, hostInfo: null, pendingOperation: null });
-  }, []);
-
-  // Add alert
-  const addAlert = useCallback((type: AlertData['type'], title: string, message: string, duration = 8000) => {
-    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    setAlerts((prev) => [...prev, { id, type, title, message, duration }]);
-  }, []);
-
-  // Remove alert
-  const removeAlert = useCallback((id: string) => {
-    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
-  }, []);
-
-  // Get user-friendly error title based on error type
-  const getErrorTitle = (errorType: string | undefined, operationName: string): string => {
-    switch (errorType) {
-      case 'ssh_host_verification_failed':
-        return 'SSH Host Verification Failed';
-      case 'authentication_failed':
-        return 'Authentication Failed';
-      case 'remote_access_failed':
-        return 'Remote Access Failed';
-      case 'connection_refused':
-        return 'Connection Refused';
-      case 'connection_timeout':
-        return 'Connection Timeout';
-      case 'host_not_found':
-        return 'Host Not Found';
-      case 'git_error':
-        return `${operationName} Failed`;
-      default:
-        return `${operationName} Failed`;
-    }
-  };
+  }, [sshVerification, closeSshVerification]);
 
   // Handle credential modal submit
   const handleCredentialSubmit = useCallback(async (value: string) => {
     const pendingOp = credentialModal.pendingOperation;
-    setCredentialModal({ isOpen: false, request: null, pendingOperation: null });
+    closeCredentialModal();
     if (pendingOp) {
       await pendingOp(value);
     }
-  }, [credentialModal]);
-
-  // Handle credential modal cancel
-  const handleCredentialCancel = useCallback(() => {
-    setCredentialModal({ isOpen: false, request: null, pendingOperation: null });
-  }, []);
-
-  // Dismiss git operation from info box
-  const handleDismissOperation = useCallback(() => {
-    setGitOperation(null);
-  }, []);
-
-  // Add a git log entry
-  const addGitLogEntry = useCallback((
-    operationType: GitLogEntry['operationType'],
-    operationName: string,
-    command: string,
-    output: string,
-    success: boolean,
-    isBackground = false
-  ) => {
-    const entry: GitLogEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date(),
-      operationType,
-      operationName,
-      command,
-      output,
-      success,
-      isBackground,
-    };
-    setGitLogEntries((prev) => [entry, ...prev]);
-  }, []);
-
-  // Open activity log
-  const handleOpenActivityLog = useCallback(() => {
-    setIsActivityLogOpen(true);
-  }, []);
-
-  // Close activity log
-  const handleCloseActivityLog = useCallback(() => {
-    setIsActivityLogOpen(false);
-  }, []);
-
-  // Start a git operation (update info box)
-  const startGitOperation = useCallback((operationName: 'Fetch' | 'Pull' | 'Push' | 'Commit', target?: string) => {
-    setGitOperation({
-      isActive: true,
-      operationName,
-      operationTarget: target,
-      statusMessage: operationName === 'Commit' ? 'committing...' : `${operationName.toLowerCase()}ing...`,
-      isComplete: false,
-      isError: false,
-    });
-  }, []);
-
-  // Complete a git operation (update info box)
-  const completeGitOperation = useCallback((result: GitOperationResult) => {
-    setGitOperation(prev => prev ? {
-      ...prev,
-      isActive: false,
-      statusMessage: result.message || (result.success ? 'Completed' : 'Failed'),
-      isComplete: true,
-      isError: !result.success,
-    } : null);
-
-    // Auto-dismiss after 5 seconds on success
-    if (result.success) {
-      setTimeout(() => {
-        setGitOperation(current => {
-          // Only dismiss if it's the same completed operation
-          if (current?.isComplete && !current.isError) {
-            return null;
-          }
-          return current;
-        });
-      }, 5000);
-    }
-  }, []);
+  }, [credentialModal, closeCredentialModal]);
 
   // Handle branch change from toolbar
   const handleBranchChange = useCallback((branchName: string) => {
@@ -286,7 +190,8 @@ function App() {
     // TODO: Implement git checkout
   }, []);
 
-  const handleOpenRepo = async () => {
+  // Open repository dialog
+  const handleOpenRepo = useCallback(async () => {
     try {
       const selected = await open({
         directory: true,
@@ -300,128 +205,97 @@ function App() {
     } catch (error) {
       console.error('Error opening repository:', error);
     }
-  };
+  }, [openRepository]);
 
-  const handleBranchSelect = (branch: BranchInfo) => {
+  const handleBranchSelect = useCallback((branch: BranchInfo) => {
     console.log('Selected branch:', branch);
-  };
+  }, []);
 
-  const handleViewModeChange = (mode: ViewMode) => {
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    const activeTabId = useRepositoryStore.getState().activeTabId;
     if (activeTabId) {
       updateTabState(activeTabId, { viewMode: mode });
     }
-  };
+  }, [updateTabState]);
 
-  const handleNavigateToCommit = (commitSha: string) => {
+  const handleNavigateToCommit = useCallback((commitSha: string) => {
+    const activeTabId = useRepositoryStore.getState().activeTabId;
     if (activeTabId) {
       updateTabState(activeTabId, { selectedCommitId: commitSha });
     }
-  };
+  }, [updateTabState]);
 
-  // Open modals (triggered from toolbar)
-  const handleOpenFetchModal = () => setOpenModal('fetch');
-  const handleOpenPullModal = () => setOpenModal('pull');
-  const handleOpenPushModal = () => setOpenModal('push');
-  const handleCloseModal = () => setOpenModal(null);
-
-  // Add Remote modal handlers
-  const handleOpenAddRemoteModal = useCallback(() => {
-    setIsAddRemoteModalOpen(true);
-  }, []);
-
-  const handleCloseAddRemoteModal = useCallback(() => {
-    setIsAddRemoteModalOpen(false);
-  }, []);
-
+  // Add Remote handler
   const handleAddRemote = useCallback(async (name: string, url: string) => {
     const command = `git remote add ${name} ${url}`;
 
     try {
       const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
+      addLogEntry('Other', `Add remote '${name}'`, command, result.message, result.success);
 
-      // Add to activity log
-      addGitLogEntry('Other', `Add remote '${name}'`, command, result.message, result.success);
-
-      if (result.success) {
-        // Refresh repository data to update remotes list
-        // This will be handled by the tab state refresh
-        if (activeTabId) {
-          // Force a refresh by re-fetching repo info
-          // The tab state update will trigger a re-render
-        }
-      } else {
+      if (!result.success) {
         addAlert('error', 'Add Remote Failed', result.message);
       }
     } catch (error) {
       const errorMessage = String(error);
-      addGitLogEntry('Other', `Add remote '${name}'`, command, errorMessage, false);
+      addLogEntry('Other', `Add remote '${name}'`, command, errorMessage, false);
       addAlert('error', 'Add Remote Error', errorMessage);
       throw error;
     }
-  }, [addGitLogEntry, addAlert, activeTabId]);
+  }, [addLogEntry, addAlert]);
 
-  // Execute fetch with options (triggered from modal)
-  const handleFetchWithOptions = async (options: FetchOptions) => {
+  // Execute fetch with options
+  const handleFetchWithOptions = useCallback(async (options: FetchOptions) => {
     if (!activeTab?.path || isGitLoading) return;
 
-    // Save options for next time
     saveOptions({ fetch: options });
 
     const target = options.all ? 'all remotes' : options.remote;
     const command = options.all ? 'git fetch --all --prune' : `git fetch --prune ${options.remote}`;
-    startGitOperation('Fetch', target);
+    startOperation('Fetch', target);
 
     const doFetch = async () => {
-      setIsGitLoading(true);
       try {
         const result = await invoke<GitOperationResult>('git_fetch_with_options', {
           remote: options.all ? null : options.remote,
           all: options.all,
         });
 
-        // Check for SSH verification requirement
         if (handleSshVerificationRequired(result, () => doFetch())) {
           return;
         }
 
-        completeGitOperation(result);
+        completeOperation(result);
+        addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
 
-        // Add to activity log
-        addGitLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
-
-        // Show error alert only on error
         if (!result.success) {
           const errorTitle = getErrorTitle(result.error_type, 'Fetch');
           addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
         console.error('Error fetching:', error);
-        completeGitOperation({ success: false, message: String(error) });
-        addGitLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
         addAlert('error', 'Fetch Error', String(error));
-      } finally {
-        setIsGitLoading(false);
       }
     };
 
     await doFetch();
-  };
+  }, [activeTab?.path, isGitLoading, saveOptions, startOperation, completeOperation, addLogEntry, addAlert, handleSshVerificationRequired]);
 
-  // Execute pull with options (triggered from modal)
-  const handlePullWithOptions = async (options: PullOptions) => {
+  // Execute pull with options
+  const handlePullWithOptions = useCallback(async (options: PullOptions) => {
     if (!activeTab?.path || isGitLoading) return;
 
-    // Save options for next time
     saveOptions({ pull: options });
 
     const target = `${options.remote}/${options.branch}`;
     let command = `git pull ${options.remote} ${options.branch}`;
     if (options.rebase) command += ' --rebase';
     if (options.autostash) command += ' --autostash';
-    startGitOperation('Pull', target);
+    startOperation('Pull', target);
 
     const doPull = async () => {
-      setIsGitLoading(true);
       try {
         const result = await invoke<GitOperationResult>('git_pull_with_options', {
           remote: options.remote,
@@ -430,49 +304,41 @@ function App() {
           autostash: options.autostash,
         });
 
-        // Check for SSH verification requirement
         if (handleSshVerificationRequired(result, () => doPull())) {
           return;
         }
 
-        completeGitOperation(result);
+        completeOperation(result);
+        addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
 
-        // Add to activity log
-        addGitLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
-
-        // Show error alert only on error
         if (!result.success) {
           const errorTitle = getErrorTitle(result.error_type, 'Pull');
           addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
         console.error('Error pulling:', error);
-        completeGitOperation({ success: false, message: String(error) });
-        addGitLogEntry('Pull', `Pull ${target}`, command, String(error), false);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Pull', `Pull ${target}`, command, String(error), false);
         addAlert('error', 'Pull Error', String(error));
-      } finally {
-        setIsGitLoading(false);
       }
     };
 
     await doPull();
-  };
+  }, [activeTab?.path, isGitLoading, saveOptions, startOperation, completeOperation, addLogEntry, addAlert, handleSshVerificationRequired]);
 
-  // Execute push with options (triggered from modal)
-  const handlePushWithOptions = async (options: PushOptions) => {
+  // Execute push with options
+  const handlePushWithOptions = useCallback(async (options: PushOptions) => {
     if (!activeTab?.path || isGitLoading) return;
 
-    // Save options for next time
     saveOptions({ push: { remote: options.remote, pushTags: options.pushTags, forceWithLease: options.forceWithLease } });
 
     const target = `${options.remote}/${options.remoteBranch}`;
     let command = `git push ${options.remote} ${options.branch}:${options.remoteBranch}`;
     if (options.pushTags) command += ' --tags';
     if (options.forceWithLease) command += ' --force-with-lease';
-    startGitOperation('Push', target);
+    startOperation('Push', target);
 
     const doPush = async () => {
-      setIsGitLoading(true);
       try {
         const result = await invoke<GitOperationResult>('git_push_with_options', {
           branch: options.branch,
@@ -482,37 +348,65 @@ function App() {
           forceWithLease: options.forceWithLease,
         });
 
-        // Check for SSH verification requirement
         if (handleSshVerificationRequired(result, () => doPush())) {
           return;
         }
 
-        completeGitOperation(result);
+        completeOperation(result);
+        addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
 
-        // Add to activity log
-        addGitLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
-
-        // Show error alert only on error
         if (!result.success) {
           const errorTitle = getErrorTitle(result.error_type, 'Push');
           addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
         console.error('Error pushing:', error);
-        completeGitOperation({ success: false, message: String(error) });
-        addGitLogEntry('Push', `Push to ${target}`, command, String(error), false);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Push', `Push to ${target}`, command, String(error), false);
         addAlert('error', 'Push Error', String(error));
-      } finally {
-        setIsGitLoading(false);
       }
     };
 
     await doPush();
-  };
+  }, [activeTab?.path, isGitLoading, saveOptions, startOperation, completeOperation, addLogEntry, addAlert, handleSshVerificationRequired]);
+
+  // Panel resize handlers
+  const startResize = useCallback((panel: string) => {
+    setIsResizing(panel);
+  }, [setIsResizing]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+
+    if (isResizing === 'sidebar') {
+      setPanelSize('sidebarWidth', e.clientX);
+    }
+  }, [isResizing, setPanelSize]);
+
+  const stopResize = useCallback(() => {
+    setIsResizing(null);
+  }, [setIsResizing]);
+
+  // Add/remove resize event listeners
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', stopResize);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', stopResize);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isResizing, handleMouseMove, stopResize]);
 
   const hasOpenRepos = tabs.length > 0;
-  const localChangesCount = activeTabState?.fileStatuses.length ?? 0;
 
+  // Loading state
   if (isRestoring) {
     return (
       <div className="app">
@@ -521,15 +415,15 @@ function App() {
             onOpenRepo={handleOpenRepo}
             onThemeChange={setTheme}
             currentTheme={theme}
-            onFetch={handleOpenFetchModal}
-            onPull={handleOpenPullModal}
-            onPush={handleOpenPushModal}
+            onFetch={openFetchModal}
+            onPull={openPullModal}
+            onPush={openPushModal}
             isLoading={isGitLoading}
             branches={[]}
             onBranchChange={handleBranchChange}
-            gitOperation={gitOperation}
-            onDismissOperation={handleDismissOperation}
-            onOpenActivityLog={handleOpenActivityLog}
+            gitOperation={currentOperation}
+            onDismissOperation={clearOperation}
+            onOpenActivityLog={openActivityLog}
           />
         </TitleBar>
         <div className="loading-overlay">
@@ -553,27 +447,29 @@ function App() {
           onBranchChange={handleBranchChange}
           onThemeChange={setTheme}
           currentTheme={theme}
-          onFetch={handleOpenFetchModal}
-          onPull={handleOpenPullModal}
-          onPush={handleOpenPushModal}
+          onFetch={openFetchModal}
+          onPull={openPullModal}
+          onPush={openPushModal}
           isLoading={isGitLoading}
-          gitOperation={gitOperation}
-          onDismissOperation={handleDismissOperation}
-          onOpenActivityLog={handleOpenActivityLog}
+          gitOperation={currentOperation}
+          onDismissOperation={clearOperation}
+          onOpenActivityLog={openActivityLog}
         />
       </TitleBar>
+
       {hasOpenRepos && (
         <TabBar
           tabs={tabs}
-          activeTabId={activeTabId}
+          activeTabId={useRepositoryStore.getState().activeTabId}
           onTabSelect={selectTab}
           onTabClose={closeTab}
           onAddTab={handleOpenRepo}
         />
       )}
+
       {hasOpenRepos && activeTabState ? (
         <div className="app-content" ref={containerRef}>
-          <div className="sidebar-container" style={{ width: sizes.sidebarWidth }}>
+          <div className="sidebar-container" style={{ width: panelSizes.sidebarWidth }}>
             <Sidebar
               repoName={activeTab?.name}
               repoPath={activeTab?.path}
@@ -586,7 +482,7 @@ function App() {
               onViewModeChange={handleViewModeChange}
               onBranchSelect={handleBranchSelect}
               onNavigateToCommit={handleNavigateToCommit}
-              onAddRemote={handleOpenAddRemoteModal}
+              onAddRemote={openAddRemoteModal}
             />
           </div>
           <Resizer
@@ -597,9 +493,6 @@ function App() {
           {activeTabState.viewMode === 'local-changes' ? (
             <LocalChangesView
               repoPath={activeTab?.path ?? ''}
-              onStartGitOperation={startGitOperation}
-              onCompleteGitOperation={completeGitOperation}
-              onAddGitLogEntry={addGitLogEntry}
               onRefreshRepository={refreshActiveTab}
             />
           ) : (
@@ -622,75 +515,91 @@ function App() {
         </div>
       )}
 
-      {/* Git Operation Modals */}
-      <FetchModal
-        isOpen={openModal === 'fetch'}
-        onClose={handleCloseModal}
-        onFetch={handleFetchWithOptions}
-        remotes={activeTabState?.remotes ?? []}
-        savedOptions={getStoredOptions().fetch}
-      />
-      <PullModal
-        isOpen={openModal === 'pull'}
-        onClose={handleCloseModal}
-        onPull={handlePullWithOptions}
-        remotes={activeTabState?.remotes ?? []}
-        branches={activeTabState?.branches ?? []}
-        currentBranch={activeTab?.currentBranch ?? null}
-        savedOptions={getStoredOptions().pull}
-      />
-      <PushModal
-        isOpen={openModal === 'push'}
-        onClose={handleCloseModal}
-        onPush={handlePushWithOptions}
-        remotes={activeTabState?.remotes ?? []}
-        branches={activeTabState?.branches ?? []}
-        currentBranch={activeTab?.currentBranch ?? null}
-        savedOptions={getStoredOptions().push ? {
-          branch: activeTab?.currentBranch ?? 'main',
-          remote: getStoredOptions().push!.remote,
-          remoteBranch: activeTab?.currentBranch ?? 'main',
-          pushTags: getStoredOptions().push!.pushTags,
-          forceWithLease: getStoredOptions().push!.forceWithLease,
-        } : undefined}
-      />
+      {/* Git Operation Modals - Lazy loaded */}
+      <Suspense fallback={null}>
+        {activeModal === 'fetch' && (
+          <FetchModal
+            isOpen={true}
+            onClose={closeModal}
+            onFetch={handleFetchWithOptions}
+            remotes={activeTabState?.remotes ?? []}
+            savedOptions={getStoredOptions().fetch}
+          />
+        )}
+        {activeModal === 'pull' && (
+          <PullModal
+            isOpen={true}
+            onClose={closeModal}
+            onPull={handlePullWithOptions}
+            remotes={activeTabState?.remotes ?? []}
+            branches={activeTabState?.branches ?? []}
+            currentBranch={activeTab?.currentBranch ?? null}
+            savedOptions={getStoredOptions().pull}
+          />
+        )}
+        {activeModal === 'push' && (
+          <PushModal
+            isOpen={true}
+            onClose={closeModal}
+            onPush={handlePushWithOptions}
+            remotes={activeTabState?.remotes ?? []}
+            branches={activeTabState?.branches ?? []}
+            currentBranch={activeTab?.currentBranch ?? null}
+            savedOptions={getStoredOptions().push ? {
+              branch: activeTab?.currentBranch ?? 'main',
+              remote: getStoredOptions().push!.remote,
+              remoteBranch: activeTab?.currentBranch ?? 'main',
+              pushTags: getStoredOptions().push!.pushTags,
+              forceWithLease: getStoredOptions().push!.forceWithLease,
+            } : undefined}
+          />
+        )}
 
-      {/* SSH Host Verification Modal */}
-      <SshHostVerificationModal
-        isOpen={sshVerification.isOpen}
-        onClose={() => setSshVerification({ isOpen: false, hostInfo: null, pendingOperation: null })}
-        onAccept={handleAcceptSshHost}
-        onReject={handleRejectSshHost}
-        hostInfo={sshVerification.hostInfo}
-        isLoading={isSshLoading}
-      />
+        {/* SSH Host Verification Modal */}
+        {sshVerification.isOpen && (
+          <SshHostVerificationModal
+            isOpen={true}
+            onClose={closeSshVerification}
+            onAccept={handleAcceptSshHost}
+            onReject={closeSshVerification}
+            hostInfo={sshVerification.hostInfo}
+            isLoading={isSshLoading}
+          />
+        )}
 
-      {/* Git Credential Modal */}
-      <GitCredentialModal
-        isOpen={credentialModal.isOpen}
-        onClose={() => setCredentialModal({ isOpen: false, request: null, pendingOperation: null })}
-        onSubmit={handleCredentialSubmit}
-        onCancel={handleCredentialCancel}
-        request={credentialModal.request}
-      />
+        {/* Git Credential Modal */}
+        {credentialModal.isOpen && (
+          <GitCredentialModal
+            isOpen={true}
+            onClose={closeCredentialModal}
+            onSubmit={handleCredentialSubmit}
+            onCancel={closeCredentialModal}
+            request={credentialModal.request}
+          />
+        )}
 
-      {/* Alert Container */}
+        {/* Add Remote Modal */}
+        {isAddRemoteModalOpen && (
+          <AddRemoteModal
+            isOpen={true}
+            onClose={closeAddRemoteModal}
+            onAdd={handleAddRemote}
+            existingRemotes={activeTabState?.remotes ?? []}
+          />
+        )}
+
+        {/* Git Activity Log */}
+        {isActivityLogOpen && (
+          <GitActivityLog
+            entries={activityLog}
+            isOpen={true}
+            onClose={closeActivityLog}
+          />
+        )}
+      </Suspense>
+
+      {/* Alert Container - Not lazy loaded as it needs to be always ready */}
       <AlertContainer alerts={alerts} onDismiss={removeAlert} />
-
-      {/* Add Remote Modal */}
-      <AddRemoteModal
-        isOpen={isAddRemoteModalOpen}
-        onClose={handleCloseAddRemoteModal}
-        onAdd={handleAddRemote}
-        existingRemotes={activeTabState?.remotes ?? []}
-      />
-
-      {/* Git Activity Log */}
-      <GitActivityLog
-        entries={gitLogEntries}
-        isOpen={isActivityLogOpen}
-        onClose={handleCloseActivityLog}
-      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { FC, useState, useEffect } from 'react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
+import { CredentialRequest } from '../../types/git';
 import './GitModals.css';
 
 // Key/lock icon for credentials
@@ -9,11 +10,8 @@ const CredentialIcon = () => (
   </svg>
 );
 
-export interface CredentialRequest {
-  type: 'username' | 'password' | 'passphrase';
-  prompt: string;
-  host?: string;
-}
+// Re-export for backwards compatibility
+export type { CredentialRequest };
 
 interface GitCredentialModalProps {
   isOpen: boolean;
@@ -56,7 +54,7 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = ({
   };
 
   const getTitle = () => {
-    switch (request.type) {
+    switch (request.credential_type) {
       case 'username':
         return 'Username Required';
       case 'password':
@@ -76,11 +74,11 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = ({
   };
 
   const getInputType = () => {
-    return request.type === 'username' ? 'text' : 'password';
+    return request.credential_type === 'username' ? 'text' : 'password';
   };
 
   const getPlaceholder = () => {
-    switch (request.type) {
+    switch (request.credential_type) {
       case 'username':
         return 'Enter username';
       case 'password':
@@ -112,7 +110,7 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = ({
               className="credential-input"
             />
           </div>
-          {request.type === 'password' && (
+          {request.credential_type === 'password' && (
             <p className="credential-hint">
               For GitHub/GitLab, use a Personal Access Token instead of your password.
             </p>

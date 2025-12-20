@@ -1,22 +1,14 @@
-import { FC, useState, useEffect, useCallback, useRef } from 'react';
+import { FC, useState, useEffect, useCallback, useRef, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage, GitOperationResult, GitLogEntry } from '../../types/git';
+import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
+import { useGitOperationStore } from '../../stores';
 import './LocalChangesView.css';
 
 interface LocalChangesViewProps {
   repoPath: string;
-  onStartGitOperation?: (operationName: 'Commit', target?: string) => void;
-  onCompleteGitOperation?: (result: GitOperationResult) => void;
-  onAddGitLogEntry?: (
-    operationType: GitLogEntry['operationType'],
-    operationName: string,
-    command: string,
-    output: string,
-    success: boolean
-  ) => void;
   onRefreshRepository?: () => void;
 }
 
@@ -27,13 +19,12 @@ interface ContextMenuState {
   file: FileStatus | null;
 }
 
-export const LocalChangesView: FC<LocalChangesViewProps> = ({
+export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   repoPath,
-  onStartGitOperation,
-  onCompleteGitOperation,
-  onAddGitLogEntry,
   onRefreshRepository,
 }) => {
+  // Git operation store
+  const { startOperation, completeOperation, addLogEntry } = useGitOperationStore();
   const [unstaged, setUnstaged] = useState<FileStatus[]>([]);
   const [staged, setStaged] = useState<FileStatus[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
@@ -176,16 +167,16 @@ export const LocalChangesView: FC<LocalChangesViewProps> = ({
     const fullMessage = description ? `${subject}\n\n${description}` : subject;
     const command = amend ? `git commit --amend -m "${subject}"` : `git commit -m "${subject}"`;
 
-    onStartGitOperation?.('Commit', amend ? '(amend)' : undefined);
+    startOperation('Commit', amend ? '(amend)' : undefined);
 
     try {
-      const result = await invoke<GitOperationResult>('git_commit', {
+      const result = await invoke<{ success: boolean; message: string }>('git_commit', {
         message: fullMessage,
         amend,
       });
 
-      onCompleteGitOperation?.(result);
-      onAddGitLogEntry?.('Commit', amend ? 'Amend Commit' : 'Commit', command, result.message, result.success);
+      completeOperation(result);
+      addLogEntry('Commit', amend ? 'Amend Commit' : 'Commit', command, result.message, result.success);
 
       if (result.success) {
         // Refresh file status after successful commit
@@ -196,12 +187,12 @@ export const LocalChangesView: FC<LocalChangesViewProps> = ({
       }
     } catch (error) {
       const errorMessage = String(error);
-      onCompleteGitOperation?.({ success: false, message: errorMessage });
-      onAddGitLogEntry?.('Commit', amend ? 'Amend Commit' : 'Commit', command, errorMessage, false);
+      completeOperation({ success: false, message: errorMessage });
+      addLogEntry('Commit', amend ? 'Amend Commit' : 'Commit', command, errorMessage, false);
     } finally {
       setIsCommitLoading(false);
     }
-  }, [loadFileStatus, onStartGitOperation, onCompleteGitOperation, onAddGitLogEntry, onRefreshRepository]);
+  }, [loadFileStatus, startOperation, completeOperation, addLogEntry, onRefreshRepository]);
 
   // Context menu handlers
   const handleContextMenu = (e: React.MouseEvent, file: FileStatus) => {
@@ -559,4 +550,4 @@ export const LocalChangesView: FC<LocalChangesViewProps> = ({
       {renderContextMenu()}
     </div>
   );
-};
+});

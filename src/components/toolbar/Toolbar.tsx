@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, memo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
 import { RepositoryInfoBox, GitOperationState } from '../repository-info-box';
@@ -90,7 +90,7 @@ const Icons = {
   ),
 };
 
-export const Toolbar: FC<ToolbarProps> = ({
+export const Toolbar: FC<ToolbarProps> = memo(({
   onOpenRepo,
   repoName,
   currentBranch,
@@ -264,4 +264,4 @@ export const Toolbar: FC<ToolbarProps> = ({
       </div>
     </div>
   );
-};
+});

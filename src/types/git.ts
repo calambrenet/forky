@@ -152,3 +152,44 @@ export type RemoteSortOrder =
   | 'alphabetically-master-top'
   | 'alphabetically-backward'
   | 'alphabetically-backward-master-top';
+
+// Panel sizes for UI layout
+export interface PanelSizes {
+  sidebarWidth: number;
+  commitPanelHeight: number;
+  diffSidebarWidth: number;
+}
+
+// Modal types
+export type ModalType = 'fetch' | 'pull' | 'push' | null;
+
+// SSH verification state for modal
+export interface SshVerificationState {
+  isOpen: boolean;
+  hostInfo: {
+    host: string;
+    keyType: string;
+    fingerprint: string;
+  } | null;
+  pendingOperation: (() => Promise<void>) | null;
+}
+
+// Credential modal state
+export interface CredentialModalState {
+  isOpen: boolean;
+  request: CredentialRequest | null;
+  pendingOperation: ((credential: string) => Promise<void>) | null;
+}
+
+// Tab state for repository views
+export interface TabState {
+  branches: BranchInfo[];
+  branchHeads: BranchHead[];
+  tags: TagInfo[];
+  remotes: string[];
+  commits: CommitInfo[];
+  fileStatuses: FileStatus[];
+  selectedCommitId: string | null;
+  selectedFile: FileStatus | null;
+  viewMode: ViewMode;
+}
