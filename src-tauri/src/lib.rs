@@ -1,8 +1,11 @@
 mod git;
 mod system;
+mod watcher;
 
 use git::commands::{self as git_commands, AppState};
 use system::commands as system_commands;
+use watcher::commands as watcher_commands;
+use watcher::WatcherState;
 use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,6 +17,7 @@ pub fn run() {
         .manage(AppState {
             current_repo_path: Mutex::new(None),
         })
+        .manage(WatcherState::default())
         .invoke_handler(tauri::generate_handler![
             git_commands::open_repository,
             git_commands::get_branches,
@@ -42,6 +46,9 @@ pub fn run() {
             git_commands::git_test_remote_connection,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
+            watcher_commands::start_file_watcher,
+            watcher_commands::stop_file_watcher,
+            watcher_commands::get_watched_repo_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

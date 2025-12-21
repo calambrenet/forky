@@ -6,6 +6,7 @@ import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
 import { useGitOperationStore } from '../../stores';
+import { useFileWatcher } from '../../hooks/useFileWatcher';
 import './LocalChangesView.css';
 
 interface LocalChangesViewProps {
@@ -59,6 +60,9 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   useEffect(() => {
     loadFileStatus();
   }, [loadFileStatus, repoPath]);
+
+  // Auto-refresh when files change in the repository
+  useFileWatcher(repoPath, loadFileStatus);
 
   const loadDiff = useCallback(async (file: FileStatus) => {
     setIsLoadingDiff(true);
