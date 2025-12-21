@@ -42,6 +42,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     file: null,
   });
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Commit panel state
   const [lastCommitMessage, setLastCommitMessage] = useState<CommitMessage | null>(null);
@@ -274,7 +275,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     if (!isResizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.max(200, Math.min(500, e.clientX));
+      if (!containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const relativeX = e.clientX - containerRect.left;
+      const newWidth = Math.max(200, Math.min(500, relativeX));
       setSidebarWidth(newWidth);
     };
 
@@ -282,10 +286,14 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isResizing]);
 
@@ -516,7 +524,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   };
 
   return (
-    <div className="local-changes-view">
+    <div className="local-changes-view" ref={containerRef}>
       <div className="changes-sidebar" style={{ width: sidebarWidth }}>
         {renderFileList(unstaged, t('localChanges.unstaged'), false, handleStageFile, handleStageAll)}
         {renderFileList(staged, t('localChanges.staged'), true, handleUnstageFile, handleUnstageAll)}

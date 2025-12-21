@@ -31,6 +31,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
   const [isResizingVertical, setIsResizingVertical] = useState(false);
   const [isResizingHorizontal, setIsResizingHorizontal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const detailContentRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<CommitGraphHandle>(null);
 
   // Derive selectedCommit from selectedCommitId
@@ -173,10 +174,14 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isResizingVertical]);
 
@@ -184,18 +189,24 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
     if (!isResizingHorizontal) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = e.clientX;
-      setFilePanelWidth(Math.max(200, Math.min(400, newWidth)));
+      if (!detailContentRef.current) return;
+      const containerRect = detailContentRef.current.getBoundingClientRect();
+      const relativeX = e.clientX - containerRect.left;
+      setFilePanelWidth(Math.max(200, Math.min(400, relativeX)));
     };
 
     const handleMouseUp = () => setIsResizingHorizontal(false);
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isResizingHorizontal]);
 
@@ -302,7 +313,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
                 <span className="commit-sha">{selectedCommit.short_id}</span>
               </div>
             </div>
-            <div className="detail-content">
+            <div className="detail-content" ref={detailContentRef}>
               <div className="files-panel" style={{ width: filePanelWidth }}>
                 <div className="files-header">
                   <span className="files-title">Changed Files</span>
