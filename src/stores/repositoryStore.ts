@@ -36,6 +36,7 @@ interface RepositoryStore {
   updateTabState: (tabId: string, updates: Partial<TabState>) => void;
   refreshActiveTab: () => Promise<void>;
   setIsRestoring: (isRestoring: boolean) => void;
+  setTabHasPendingChanges: (tabId: string, hasPendingChanges: boolean) => void;
 
   // Internal actions
   _loadRepositoryData: (tabId: string, persistedData?: PersistedTabData) => Promise<void>;
@@ -94,6 +95,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
               path: info.path,
               name: info.name,
               currentBranch: info.current_branch,
+              hasPendingChanges: false,
             };
 
             set((state) => ({
@@ -177,6 +179,14 @@ export const useRepositoryStore = create<RepositoryStore>()(
 
         setIsRestoring: (isRestoring: boolean) => set({ isRestoring }),
 
+        setTabHasPendingChanges: (tabId: string, hasPendingChanges: boolean) => {
+          set((state) => ({
+            tabs: state.tabs.map((tab) =>
+              tab.id === tabId ? { ...tab, hasPendingChanges } : tab
+            ),
+          }));
+        },
+
         // Internal actions
         _loadRepositoryData: async (tabId: string, persistedData?: PersistedTabData) => {
           try {
@@ -210,6 +220,11 @@ export const useRepositoryStore = create<RepositoryStore>()(
                 },
               };
             });
+
+            // Mark tab as having pending changes if there are file changes
+            if (statusData.length > 0) {
+              get().setTabHasPendingChanges(tabId, true);
+            }
           } catch (error) {
             console.error('Error loading repository data:', error);
           }
@@ -231,6 +246,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
               validTabs.push({
                 ...tab,
                 currentBranch: info.current_branch,
+                hasPendingChanges: false,
               });
 
               // Get persisted tab data if available

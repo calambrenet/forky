@@ -18,6 +18,7 @@ interface UseFileWatcherOptions {
 /**
  * Hook to watch for file changes in a repository.
  * Automatically starts/stops the watcher and handles window focus.
+ * Does NOT trigger initial load - that should be handled by the parent component.
  */
 export function useFileWatcher(
   repoPath: string | undefined,
@@ -28,6 +29,8 @@ export function useFileWatcher(
   const { isVisible } = useWindowFocus();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCallRef = useRef<number>(0);
+  const wasVisibleRef = useRef(isVisible);
+  const pendingChangesRef = useRef(false);
 
   // Debounced callback
   const debouncedCallback = useCallback(() => {
@@ -53,21 +56,16 @@ export function useFileWatcher(
     }
   }, [onFilesChanged, debounceMs]);
 
-  // Start/stop watcher when repoPath changes
+  // Start/stop watcher when repoPath changes (non-blocking)
   useEffect(() => {
     if (!repoPath) {
       return;
     }
 
-    const startWatcher = async () => {
-      try {
-        await invoke('start_file_watcher', { path: repoPath });
-      } catch (error) {
-        console.error('Failed to start file watcher:', error);
-      }
-    };
-
-    startWatcher();
+    // Start watcher in background - don't await
+    invoke('start_file_watcher', { path: repoPath }).catch((error) => {
+      console.error('Failed to start file watcher:', error);
+    });
 
     return () => {
       invoke('stop_file_watcher').catch((error) => {
@@ -91,8 +89,9 @@ export function useFileWatcher(
           return;
         }
 
-        // Skip if window is not visible and option is enabled
+        // If window is not visible, mark as pending
         if (onlyWhenVisible && !isVisible) {
+          pendingChangesRef.current = true;
           return;
         }
 
@@ -113,14 +112,15 @@ export function useFileWatcher(
     };
   }, [repoPath, isVisible, onlyWhenVisible, debouncedCallback]);
 
-  // Refresh when window becomes visible (if there were changes while hidden)
+  // Refresh when window becomes visible (only if there were pending changes)
   useEffect(() => {
-    if (isVisible && repoPath && onlyWhenVisible) {
-      // Small delay to avoid race conditions
-      const timeout = setTimeout(() => {
-        onFilesChanged();
-      }, 100);
-      return () => clearTimeout(timeout);
+    const wasHidden = !wasVisibleRef.current;
+    wasVisibleRef.current = isVisible;
+
+    // Only refresh if window just became visible AND there were pending changes
+    if (isVisible && wasHidden && pendingChangesRef.current && repoPath) {
+      pendingChangesRef.current = false;
+      onFilesChanged();
     }
-  }, [isVisible, repoPath, onlyWhenVisible, onFilesChanged]);
+  }, [isVisible, repoPath, onFilesChanged]);
 }

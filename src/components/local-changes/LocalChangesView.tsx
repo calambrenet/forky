@@ -5,8 +5,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
-import { useGitOperationStore } from '../../stores';
-import { useFileWatcher } from '../../hooks/useFileWatcher';
+import { useGitOperationStore, useRepositoryStore } from '../../stores';
 import './LocalChangesView.css';
 
 interface LocalChangesViewProps {
@@ -48,22 +47,29 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   const [lastCommitMessage, setLastCommitMessage] = useState<CommitMessage | null>(null);
   const [isCommitLoading, setIsCommitLoading] = useState(false);
 
+  // Get store actions for updating pending changes indicator
+  const { setTabHasPendingChanges } = useRepositoryStore.getState();
+
   const loadFileStatus = useCallback(async () => {
     try {
       const result = await invoke<FileStatusSeparated>('get_file_status_separated');
       setUnstaged(result.unstaged);
       setStaged(result.staged);
+
+      // Update the pending changes indicator based on actual file status
+      const { activeTabId } = useRepositoryStore.getState();
+      if (activeTabId) {
+        const hasChanges = result.unstaged.length > 0 || result.staged.length > 0;
+        setTabHasPendingChanges(activeTabId, hasChanges);
+      }
     } catch (error) {
       console.error('Error loading file status:', error);
     }
-  }, []);
+  }, [setTabHasPendingChanges]);
 
   useEffect(() => {
     loadFileStatus();
   }, [loadFileStatus, repoPath]);
-
-  // Auto-refresh when files change in the repository
-  useFileWatcher(repoPath, loadFileStatus);
 
   const loadDiff = useCallback(async (file: FileStatus) => {
     setIsLoadingDiff(true);

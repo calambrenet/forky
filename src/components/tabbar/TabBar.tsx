@@ -35,6 +35,9 @@ export const TabBar: FC<TabBarProps> = ({
             <span className="tab-icon">
               <BookOpen size={14} />
             </span>
+            {tab.hasPendingChanges && (
+              <span className="tab-pending-indicator" title="Pending changes" />
+            )}
             <span className="tab-name">{tab.name}</span>
             {tab.currentBranch && (
               <span className="tab-branch">{tab.currentBranch}</span>

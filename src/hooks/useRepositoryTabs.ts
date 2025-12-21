@@ -172,6 +172,7 @@ export function useRepositoryTabs() {
         path: info.path,
         name: info.name,
         currentBranch: info.current_branch,
+        hasPendingChanges: false,
       };
 
       setTabs(prev => [...prev, newTab]);

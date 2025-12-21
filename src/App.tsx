@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { TitleBar } from './components/titlebar/TitleBar';
 import { TabBar } from './components/tabbar/TabBar';
 import { Toolbar } from './components/toolbar/Toolbar';
@@ -80,7 +81,7 @@ function App() {
   const activeTabState = useActiveTabState();
   const isRestoring = useIsRestoring();
   const localChangesCount = useLocalChangesCount();
-  const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab } = useRepositoryStore();
+  const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab, setTabHasPendingChanges } = useRepositoryStore();
 
   // Git operation store
   const isGitLoading = useIsGitLoading();
@@ -405,6 +406,49 @@ function App() {
       };
     }
   }, [isResizing, handleMouseMove, stopResize]);
+
+  // File watcher: start when active tab changes
+  useEffect(() => {
+    if (!activeTab?.path) return;
+
+    // Start watcher for active tab's repository
+    invoke('start_file_watcher', { path: activeTab.path }).catch((error) => {
+      console.error('Failed to start file watcher:', error);
+    });
+
+    return () => {
+      invoke('stop_file_watcher').catch((error) => {
+        console.error('Failed to stop file watcher:', error);
+      });
+    };
+  }, [activeTab?.path]);
+
+  // File watcher: listen for file change events
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen<{ repo_path: string; timestamp: number }>(
+        'repo-files-changed',
+        (event) => {
+          // Find the tab matching this repo path and mark it as having pending changes
+          const state = useRepositoryStore.getState();
+          const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
+          if (matchingTab && !matchingTab.hasPendingChanges) {
+            setTabHasPendingChanges(matchingTab.id, true);
+          }
+        }
+      );
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [setTabHasPendingChanges]);
 
   const hasOpenRepos = tabs.length > 0;
 

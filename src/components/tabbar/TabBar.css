@@ -51,6 +51,14 @@
   flex-shrink: 0;
 }
 
+.tab-pending-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-blue);
+  flex-shrink: 0;
+}
+
 .tab-name {
   font-size: 12px;
   color: var(--text-primary);

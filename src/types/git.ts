@@ -70,6 +70,7 @@ export interface RepositoryTab {
   path: string;
   name: string;
   currentBranch: string | null;
+  hasPendingChanges: boolean;
 }
 
 export interface FileStatusSeparated {
