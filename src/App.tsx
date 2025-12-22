@@ -19,6 +19,7 @@ const PullModal = lazy(() => import('./components/git-modals/PullModal').then(m 
 const PushModal = lazy(() => import('./components/git-modals/PushModal').then(m => ({ default: m.PushModal })));
 const SshHostVerificationModal = lazy(() => import('./components/git-modals/SshHostVerificationModal').then(m => ({ default: m.SshHostVerificationModal })));
 const GitCredentialModal = lazy(() => import('./components/git-modals/GitCredentialModal').then(m => ({ default: m.GitCredentialModal })));
+const TrackRemoteBranchModal = lazy(() => import('./components/git-modals/TrackRemoteBranchModal').then(m => ({ default: m.TrackRemoteBranchModal })));
 const GitActivityLog = lazy(() => import('./components/git-activity-log').then(m => ({ default: m.GitActivityLog })));
 const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m => ({ default: m.AddRemoteModal })));
 
@@ -122,6 +123,10 @@ function App() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isSshLoading, setIsSshLoading] = useState(false);
 
+  // Track Remote Branch modal state
+  const [trackBranchModalOpen, setTrackBranchModalOpen] = useState(false);
+  const [selectedRemoteBranch, setSelectedRemoteBranch] = useState('');
+
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
     if (!activeTab?.path) return {};
@@ -222,6 +227,54 @@ function App() {
       addAlert('error', 'Checkout Error', String(error));
     }
   }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
+
+  // Handle opening track remote branch modal
+  const handleOpenTrackBranchModal = useCallback((remoteBranchName: string) => {
+    setSelectedRemoteBranch(remoteBranchName);
+    setTrackBranchModalOpen(true);
+  }, []);
+
+  // Handle closing track remote branch modal
+  const handleCloseTrackBranchModal = useCallback(() => {
+    setTrackBranchModalOpen(false);
+    setSelectedRemoteBranch('');
+  }, []);
+
+  // Handle tracking a remote branch (create local branch and checkout)
+  const handleTrackRemoteBranch = useCallback(async (localBranchName: string, remoteBranchName: string) => {
+    if (!activeTab?.path || isGitLoading) return;
+
+    const command = `git checkout -b ${localBranchName} --track ${remoteBranchName}`;
+    startOperation('Checkout', localBranchName);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_checkout_track', {
+        localBranch: localBranchName,
+        remoteBranch: remoteBranchName,
+      });
+
+      completeOperation(result);
+      addLogEntry('Checkout', `Track '${remoteBranchName}' as '${localBranchName}'`, command, result.message, result.success);
+
+      if (result.success) {
+        // Update the current branch in the tab
+        const activeTabId = useRepositoryStore.getState().activeTabId;
+        if (activeTabId) {
+          setTabCurrentBranch(activeTabId, localBranchName);
+        }
+        // Refresh repository data
+        await refreshActiveTab();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error tracking remote branch:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Checkout', `Track '${remoteBranchName}' as '${localBranchName}'`, command, String(error), false);
+      addAlert('error', 'Checkout Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
 
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {
@@ -558,6 +611,8 @@ function App() {
               viewMode={activeTabState.viewMode}
               onViewModeChange={handleViewModeChange}
               onBranchSelect={handleBranchSelect}
+              onBranchCheckout={handleBranchChange}
+              onTrackRemoteBranch={handleOpenTrackBranchModal}
               onNavigateToCommit={handleNavigateToCommit}
               onAddRemote={openAddRemoteModal}
             />
@@ -662,6 +717,17 @@ function App() {
             onClose={closeAddRemoteModal}
             onAdd={handleAddRemote}
             existingRemotes={activeTabState?.remotes ?? []}
+          />
+        )}
+
+        {/* Track Remote Branch Modal */}
+        {trackBranchModalOpen && (
+          <TrackRemoteBranchModal
+            isOpen={true}
+            onClose={handleCloseTrackBranchModal}
+            onTrack={handleTrackRemoteBranch}
+            remoteBranch={selectedRemoteBranch}
+            localBranches={activeTabState?.branches.filter(b => !b.is_remote) ?? []}
           />
         )}
 

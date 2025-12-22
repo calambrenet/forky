@@ -1228,6 +1228,46 @@ pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationRe
     }
 }
 
+/// Create a local branch that tracks a remote branch and switch to it
+pub fn git_checkout_track(
+    repo_path: &str,
+    local_branch: &str,
+    remote_branch: &str,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    // git checkout -b <local_branch> --track <remote_branch>
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("checkout")
+        .arg("-b")
+        .arg(local_branch)
+        .arg("--track")
+        .arg(remote_branch)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        let message = if stderr.contains("Switched to") || stderr.contains("Cambiado a") {
+            stderr.trim().to_string()
+        } else if !stdout.is_empty() {
+            stdout.trim().to_string()
+        } else {
+            format!(
+                "Branch '{}' set up to track remote branch '{}'",
+                local_branch, remote_branch
+            )
+        };
+        Ok(create_success_result(message))
+    } else {
+        Ok(create_error_result(&stderr, &stdout))
+    }
+}
+
 /// Execute git commit with message and optional amend
 pub fn git_commit(repo_path: &str, message: &str, amend: bool) -> Result<GitOperationResult, String> {
     use std::process::Command;

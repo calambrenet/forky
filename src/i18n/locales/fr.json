@@ -168,6 +168,14 @@
       "connectionSuccess": "Connexion réussie !",
       "add": "Ajouter le Distant",
       "adding": "Ajout..."
+    },
+    "trackBranch": {
+      "title": "Suivre une Branche Distante",
+      "description": "Crée une nouvelle branche locale qui suit la branche distante",
+      "remoteBranch": "Branche distante :",
+      "localBranch": "Branche locale :",
+      "branchExists": "La branche locale {{branch}} existe déjà",
+      "track": "Suivre"
     }
   },
   "activityLog": {

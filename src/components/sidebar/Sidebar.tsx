@@ -18,6 +18,8 @@ interface SidebarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onBranchSelect: (branch: BranchInfo) => void;
+  onBranchCheckout: (branchName: string) => void;
+  onTrackRemoteBranch: (remoteBranchName: string) => void;
   onNavigateToCommit: (commitSha: string) => void;
   onAddRemote?: () => void;
 }
@@ -107,6 +109,8 @@ export const Sidebar: FC<SidebarProps> = memo(({
   viewMode,
   onViewModeChange,
   onBranchSelect,
+  onBranchCheckout,
+  onTrackRemoteBranch,
   onNavigateToCommit,
   onAddRemote,
 }) => {
@@ -146,6 +150,16 @@ export const Sidebar: FC<SidebarProps> = memo(({
     if (commitSha) {
       onNavigateToCommit(commitSha);
     }
+  };
+
+  const handleLocalBranchDoubleClick = (branch: BranchInfo) => {
+    // Don't checkout if already on this branch
+    if (branch.is_head) return;
+    onBranchCheckout(branch.name);
+  };
+
+  const handleRemoteBranchDoubleClick = (branch: BranchInfo) => {
+    onTrackRemoteBranch(branch.name);
   };
 
   const handleTagClick = (tag: TagInfo) => {
@@ -259,6 +273,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
               key={branch.name}
               className={`sidebar-item ${branch.is_head ? 'active' : ''}`}
               onClick={() => handleBranchClick(branch)}
+              onDoubleClick={() => handleLocalBranchDoubleClick(branch)}
             >
               <span className="item-icon">{branch.is_head ? '●' : '○'}</span>
               <span className="branch-label">{branch.name}</span>
@@ -283,6 +298,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
               key={branch.name}
               className="sidebar-item remote-branch"
               onClick={() => handleBranchClick(branch)}
+              onDoubleClick={() => handleRemoteBranchDoubleClick(branch)}
             >
               <span className="item-icon">↳</span>
               <span className="branch-label">{branch.name}</span>

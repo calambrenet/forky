@@ -168,6 +168,14 @@
       "connectionSuccess": "¡Conexión exitosa!",
       "add": "Añadir Remoto",
       "adding": "Añadiendo..."
+    },
+    "trackBranch": {
+      "title": "Rastrear Rama Remota",
+      "description": "Crea una nueva rama local que rastrea la rama remota",
+      "remoteBranch": "Rama remota:",
+      "localBranch": "Rama local:",
+      "branchExists": "La rama local {{branch}} ya existe",
+      "track": "Rastrear"
     }
   },
   "activityLog": {

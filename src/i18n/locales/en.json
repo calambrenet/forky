@@ -168,6 +168,14 @@
       "connectionSuccess": "Connection successful!",
       "add": "Add Remote",
       "adding": "Adding..."
+    },
+    "trackBranch": {
+      "title": "Track Remote Branch",
+      "description": "Creates new local branch which tracks remote branch",
+      "remoteBranch": "Remote branch:",
+      "localBranch": "Local branch:",
+      "branchExists": "Local branch {{branch}} already exists",
+      "track": "Track"
     }
   },
   "activityLog": {

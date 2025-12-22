@@ -108,3 +108,69 @@
   margin: 0;
   line-height: 1.4;
 }
+
+/* Track Remote Branch Modal */
+.track-branch-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.track-branch-value .branch-name-display {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-branch-input-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+
+.track-branch-input-container:focus-within {
+  border-color: var(--accent-blue);
+}
+
+.track-branch-input-container .input-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.track-branch-input {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.modal-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin: 0 16px 16px;
+  background-color: rgba(255, 179, 0, 0.1);
+  border: 1px solid var(--accent-orange);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--accent-orange);
+}
+
+.modal-warning svg {
+  flex-shrink: 0;
+}

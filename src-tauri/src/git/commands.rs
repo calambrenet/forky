@@ -269,3 +269,14 @@ pub fn git_checkout(branch_name: String, state: State<AppState>) -> Result<GitOp
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_checkout(path, &branch_name)
 }
+
+#[tauri::command]
+pub fn git_checkout_track(
+    local_branch: String,
+    remote_branch: String,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_checkout_track(path, &local_branch, &remote_branch)
+}
