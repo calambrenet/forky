@@ -44,6 +44,7 @@ pub fn run() {
             git_commands::get_last_commit_message,
             git_commands::git_add_remote,
             git_commands::git_test_remote_connection,
+            git_commands::git_checkout,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
             watcher_commands::start_file_watcher,

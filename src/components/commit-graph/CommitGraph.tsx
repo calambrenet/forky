@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CommitInfo, BranchHead } from '../../types/git';
-import { calculateGraphLayout, getLaneColor, formatDate } from './graphUtils';
+import { calculateGraphLayout, getLaneColor } from './graphUtils';
 import './CommitGraph.css';
 
 interface CommitGraphProps {
@@ -19,8 +20,9 @@ const ROW_HEIGHT = 26;
 const LANE_WIDTH = 12;
 const NODE_RADIUS = 4;
 const GRAPH_PADDING = 8;
-const MIN_GRAPH_WIDTH = 60;
+const MIN_GRAPH_WIDTH = 40;
 const VISIBLE_BUFFER = 15;
+const LANE_PADDING = 16; // Extra padding after the node
 
 export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
   commits,
@@ -29,9 +31,36 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
   onCommitClick,
   onCommitDoubleClick,
 }, ref) => {
+  const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
+
+  // Localized date formatting
+  const formatDate = useCallback((dateStr: string): string => {
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 0) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else if (diffDays === 1) {
+        return t('commits.yesterday');
+      } else if (diffDays < 7) {
+        return t('commits.daysAgo', { count: diffDays });
+      } else {
+        return date.toLocaleDateString([], {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      }
+    } catch {
+      return dateStr;
+    }
+  }, [t]);
 
   // Calculate graph layout
   const graphData = useMemo(() => {
@@ -39,8 +68,13 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
   }, [commits, branchHeads]);
 
   // Calculate dimensions
-  const graphWidth = Math.max(MIN_GRAPH_WIDTH, (graphData.maxLane + 1) * LANE_WIDTH + GRAPH_PADDING * 2);
+  const maxGraphWidth = Math.max(MIN_GRAPH_WIDTH, (graphData.maxLane + 1) * LANE_WIDTH + GRAPH_PADDING * 2);
   const totalHeight = commits.length * ROW_HEIGHT;
+
+  // Calculate the graph width for a specific row based on its lane
+  const getRowGraphWidth = useCallback((lane: number) => {
+    return Math.max(MIN_GRAPH_WIDTH, GRAPH_PADDING + (lane + 1) * LANE_WIDTH + LANE_PADDING);
+  }, []);
 
   // Handle scroll
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -166,7 +200,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
   if (commits.length === 0) {
     return (
       <div className="commit-graph-empty">
-        <span>No commits to display</span>
+        <span>{t('commits.noCommits')}</span>
       </div>
     );
   }
@@ -175,11 +209,11 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
     <div className="commit-graph-container">
       {/* Header */}
       <div className="commit-graph-header">
-        <div className="header-graph" style={{ width: graphWidth }}></div>
-        <div className="header-description">Description</div>
-        <div className="header-author">Author</div>
-        <div className="header-date">Date</div>
-        <div className="header-sha">Commit</div>
+        <div className="header-graph" style={{ width: MIN_GRAPH_WIDTH }}></div>
+        <div className="header-description">{t('commits.description')}</div>
+        <div className="header-author">{t('commits.author')}</div>
+        <div className="header-date">{t('commits.date')}</div>
+        <div className="header-sha">{t('commits.sha')}</div>
       </div>
 
       {/* Scrollable content */}
@@ -188,7 +222,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
           {/* SVG Graph layer */}
           <svg
             className="commit-graph-svg"
-            width={graphWidth}
+            width={maxGraphWidth}
             style={{ height: totalHeight }}
           >
             <g className="graph-lines">{renderGraphLines()}</g>
@@ -198,6 +232,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
           {/* Commit rows */}
           {visibleNodes.map((node) => {
             const isSelected = selectedCommitId === node.commit.id;
+            const rowGraphWidth = getRowGraphWidth(node.maxActiveLane);
 
             return (
               <div
@@ -210,8 +245,8 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(({
                 onClick={() => onCommitClick?.(node.commit)}
                 onDoubleClick={() => onCommitDoubleClick?.(node.commit)}
               >
-                {/* Graph space */}
-                <div className="row-graph" style={{ width: graphWidth }} />
+                {/* Graph space - width based on this commit's lane */}
+                <div className="row-graph" style={{ width: rowGraphWidth }} />
 
                 {/* Branch labels */}
                 <div className="row-labels">

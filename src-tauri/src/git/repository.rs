@@ -1197,6 +1197,37 @@ pub fn get_last_commit_message(repo: &Repository) -> Result<CommitMessage, Strin
     Ok(CommitMessage { subject, body })
 }
 
+/// Execute git checkout to switch branches
+pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("checkout")
+        .arg(branch_name)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        // Git checkout success messages often go to stderr
+        let message = if stderr.contains("Switched to branch") || stderr.contains("Cambiado a rama") {
+            stderr.trim().to_string()
+        } else if !stdout.is_empty() {
+            stdout.trim().to_string()
+        } else {
+            format!("Switched to branch '{}'", branch_name)
+        };
+        Ok(create_success_result(message))
+    } else {
+        // Common errors: uncommitted changes, branch doesn't exist
+        Ok(create_error_result(&stderr, &stdout))
+    }
+}
+
 /// Execute git commit with message and optional amend
 pub fn git_commit(repo_path: &str, message: &str, amend: bool) -> Result<GitOperationResult, String> {
     use std::process::Command;

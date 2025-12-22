@@ -262,3 +262,10 @@ pub fn git_add_remote(
 pub fn git_test_remote_connection(url: String) -> Result<GitOperationResult, String> {
     repository::git_test_remote_connection(&url)
 }
+
+#[tauri::command]
+pub fn git_checkout(branch_name: String, state: State<AppState>) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_checkout(path, &branch_name)
+}

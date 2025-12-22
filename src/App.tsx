@@ -81,7 +81,7 @@ function App() {
   const activeTabState = useActiveTabState();
   const isRestoring = useIsRestoring();
   const localChangesCount = useLocalChangesCount();
-  const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab, setTabHasPendingChanges } = useRepositoryStore();
+  const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab, setTabHasPendingChanges, setTabCurrentBranch } = useRepositoryStore();
 
   // Git operation store
   const isGitLoading = useIsGitLoading();
@@ -187,11 +187,41 @@ function App() {
     }
   }, [credentialModal, closeCredentialModal]);
 
-  // Handle branch change from toolbar
-  const handleBranchChange = useCallback((branchName: string) => {
-    console.log('Change to branch:', branchName);
-    // TODO: Implement git checkout
-  }, []);
+  // Handle branch change from toolbar (git checkout)
+  const handleBranchChange = useCallback(async (branchName: string) => {
+    if (!activeTab?.path || isGitLoading) return;
+
+    // Don't checkout if already on this branch
+    if (activeTab.currentBranch === branchName) return;
+
+    const command = `git checkout ${branchName}`;
+    startOperation('Checkout', branchName);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_checkout', { branchName });
+
+      completeOperation(result);
+      addLogEntry('Checkout', `Checkout '${branchName}'`, command, result.message, result.success);
+
+      if (result.success) {
+        // Update the current branch in the tab
+        const activeTabId = useRepositoryStore.getState().activeTabId;
+        if (activeTabId) {
+          setTabCurrentBranch(activeTabId, branchName);
+        }
+        // Refresh repository data to update commits, branches, etc.
+        await refreshActiveTab();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error checking out branch:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Checkout', `Checkout '${branchName}'`, command, String(error), false);
+      addAlert('error', 'Checkout Error', String(error));
+    }
+  }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
 
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {

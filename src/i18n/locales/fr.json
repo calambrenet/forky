@@ -88,14 +88,25 @@
   "commits": {
     "selectCommitToViewDetails": "Sélectionnez un commit pour voir les détails",
     "files": "Fichiers",
+    "changedFiles": "Fichiers Modifiés",
     "noFilesChanged": "Aucun fichier modifié",
     "noCommits": "Aucun commit à afficher",
     "loadMore": "Charger plus de commits",
+    "loadingFiles": "Chargement des fichiers...",
+    "loadingDiff": "Chargement des différences...",
+    "selectFileToViewChanges": "Sélectionnez un fichier pour voir les modifications",
+    "noDiffAvailable": "Aucune différence disponible",
     "author": "Auteur",
     "date": "Date",
     "hash": "Hash",
     "parents": "Parents",
-    "message": "Message"
+    "message": "Message",
+    "graph": "Graphe",
+    "description": "Description",
+    "sha": "SHA",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "daysAgo": "Il y a {{count}} jours"
   },
   "modals": {
     "fetch": {

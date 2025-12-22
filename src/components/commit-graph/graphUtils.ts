@@ -4,6 +4,7 @@ export interface GraphNode {
   commit: CommitInfo;
   lane: number;
   row: number;
+  maxActiveLane: number; // Maximum lane active at this row (for proper spacing)
   parentConnections: ParentConnection[];
   branchLabels: BranchLabel[];
 }
@@ -129,10 +130,20 @@ export function calculateGraphLayout(
       color: branchColors.get(b.name) || BRANCH_COLORS[0],
     }));
 
+    // Calculate the maximum active lane at this row
+    let maxActiveLane = lane;
+    for (let i = activeLanes.length - 1; i >= 0; i--) {
+      if (activeLanes[i] !== null) {
+        maxActiveLane = Math.max(maxActiveLane, i);
+        break;
+      }
+    }
+
     const node: GraphNode = {
       commit,
       lane,
       row,
+      maxActiveLane,
       parentConnections: [],
       branchLabels,
     };

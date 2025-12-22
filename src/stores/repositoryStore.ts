@@ -37,6 +37,7 @@ interface RepositoryStore {
   refreshActiveTab: () => Promise<void>;
   setIsRestoring: (isRestoring: boolean) => void;
   setTabHasPendingChanges: (tabId: string, hasPendingChanges: boolean) => void;
+  setTabCurrentBranch: (tabId: string, branchName: string) => void;
 
   // Internal actions
   _loadRepositoryData: (tabId: string, persistedData?: PersistedTabData) => Promise<void>;
@@ -183,6 +184,14 @@ export const useRepositoryStore = create<RepositoryStore>()(
           set((state) => ({
             tabs: state.tabs.map((tab) =>
               tab.id === tabId ? { ...tab, hasPendingChanges } : tab
+            ),
+          }));
+        },
+
+        setTabCurrentBranch: (tabId: string, branchName: string) => {
+          set((state) => ({
+            tabs: state.tabs.map((tab) =>
+              tab.id === tabId ? { ...tab, currentBranch: branchName } : tab
             ),
           }));
         },

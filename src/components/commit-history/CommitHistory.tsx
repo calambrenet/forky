@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CommitInfo } from '../../types/git';
 import './CommitHistory.css';
 
@@ -13,6 +14,8 @@ export const CommitHistory: FC<CommitHistoryProps> = ({
   selectedCommit,
   onSelectCommit
 }) => {
+  const { t } = useTranslation();
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -20,11 +23,11 @@ export const CommitHistory: FC<CommitHistoryProps> = ({
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
     if (days === 0) {
-      return 'Today';
+      return t('commits.today');
     } else if (days === 1) {
-      return 'Yesterday';
+      return t('commits.yesterday');
     } else if (days < 7) {
-      return `${days} days ago`;
+      return t('commits.daysAgo', { count: days });
     } else {
       return date.toLocaleDateString();
     }
@@ -33,11 +36,11 @@ export const CommitHistory: FC<CommitHistoryProps> = ({
   return (
     <div className="commit-history">
       <div className="commit-header">
-        <div className="commit-col graph-col">Graph</div>
-        <div className="commit-col message-col">Description</div>
-        <div className="commit-col author-col">Author</div>
-        <div className="commit-col date-col">Date</div>
-        <div className="commit-col sha-col">SHA</div>
+        <div className="commit-col graph-col">{t('commits.graph')}</div>
+        <div className="commit-col message-col">{t('commits.description')}</div>
+        <div className="commit-col author-col">{t('commits.author')}</div>
+        <div className="commit-col date-col">{t('commits.date')}</div>
+        <div className="commit-col sha-col">{t('commits.sha')}</div>
       </div>
       <div className="commit-list">
         {commits.map((commit, index) => (

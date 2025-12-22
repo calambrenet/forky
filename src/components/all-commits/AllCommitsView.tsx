@@ -214,7 +214,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
     if (!selectedFile) {
       return (
         <div className="diff-empty">
-          <span>Select a file to view changes</span>
+          <span>{t('commits.selectFileToViewChanges')}</span>
         </div>
       );
     }
@@ -222,7 +222,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
     if (isLoadingDiff) {
       return (
         <div className="diff-loading">
-          <span>Loading diff...</span>
+          <span>{t('commits.loadingDiff')}</span>
         </div>
       );
     }
@@ -231,7 +231,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
       const { label } = getStatusIcon(selectedFile.status);
       return (
         <div className="diff-empty">
-          <span>No diff available - {label}</span>
+          <span>{t('commits.noDiffAvailable')} - {label}</span>
         </div>
       );
     }
@@ -316,14 +316,14 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
             <div className="detail-content" ref={detailContentRef}>
               <div className="files-panel" style={{ width: filePanelWidth }}>
                 <div className="files-header">
-                  <span className="files-title">Changed Files</span>
+                  <span className="files-title">{t('commits.changedFiles')}</span>
                   <span className="files-count">{commitFiles.length}</span>
                 </div>
                 <div className="files-list">
                   {isLoadingFiles ? (
-                    <div className="files-loading">Loading files...</div>
+                    <div className="files-loading">{t('commits.loadingFiles')}</div>
                   ) : commitFiles.length === 0 ? (
-                    <div className="files-empty">No files changed</div>
+                    <div className="files-empty">{t('commits.noFilesChanged')}</div>
                   ) : (
                     commitFiles.map((file) => {
                       const { icon, color } = getStatusIcon(file.status);
@@ -361,7 +361,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(({
           </>
         ) : (
           <div className="no-commit-selected">
-            <span>Select a commit to view details</span>
+            <span>{t('commits.selectCommitToViewDetails')}</span>
           </div>
         )}
       </div>

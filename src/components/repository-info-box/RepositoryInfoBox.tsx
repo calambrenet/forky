@@ -6,7 +6,7 @@ import './RepositoryInfoBox.css';
 
 export interface GitOperationState {
   isActive: boolean;
-  operationName: 'Fetch' | 'Pull' | 'Push' | 'Commit';
+  operationName: 'Fetch' | 'Pull' | 'Push' | 'Commit' | 'Checkout';
   operationTarget?: string;
   statusMessage: string;
   isComplete: boolean;
