@@ -347,5 +347,12 @@
     "rename": "Renombrar '{{branch}}'...",
     "delete": "Eliminar '{{branch}}'...",
     "copyBranchName": "Copiar Nombre de Rama"
+  },
+  "tabContextMenu": {
+    "close": "Cerrar",
+    "closeOthers": "Cerrar otros",
+    "closeAll": "Cerrar todos",
+    "closeToRight": "Cerrar pestañas a la derecha",
+    "closeToLeft": "Cerrar pestañas a la izquierda"
   }
 }

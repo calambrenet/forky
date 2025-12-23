@@ -34,6 +34,10 @@ interface RepositoryStore {
   openRepository: (path: string) => Promise<boolean>;
   selectTab: (tabId: string) => Promise<void>;
   closeTab: (tabId: string) => void;
+  closeOtherTabs: (tabId: string) => void;
+  closeAllTabs: () => void;
+  closeTabsToRight: (tabIndex: number) => void;
+  closeTabsToLeft: (tabIndex: number) => void;
   updateTabState: (tabId: string, updates: Partial<TabState>) => void;
   refreshActiveTab: () => Promise<void>;
   setIsRestoring: (isRestoring: boolean) => void;
@@ -158,6 +162,93 @@ export const useRepositoryStore = create<RepositoryStore>()(
               activeTabId: newActiveId,
               tabStates: newTabStates,
             };
+          });
+        },
+
+        closeOtherTabs: (tabId: string) => {
+          const state = get();
+          const tabToKeep = state.tabs.find((t) => t.id === tabId);
+          if (!tabToKeep) return;
+
+          // Remove tabStates for closed tabs
+          const newTabStates: Record<string, TabState> = {};
+          newTabStates[tabId] = state.tabStates[tabId] || createEmptyTabState();
+
+          // Switch to the kept tab if it's not already active
+          if (state.activeTabId !== tabId) {
+            invoke('open_repository', { path: tabToKeep.path }).catch(console.error);
+          }
+
+          set({
+            tabs: [tabToKeep],
+            activeTabId: tabId,
+            tabStates: newTabStates,
+          });
+        },
+
+        closeAllTabs: () => {
+          set({
+            tabs: [],
+            activeTabId: null,
+            tabStates: {},
+          });
+        },
+
+        closeTabsToRight: (tabIndex: number) => {
+          const state = get();
+          if (tabIndex < 0 || tabIndex >= state.tabs.length - 1) return;
+
+          const tabsToKeep = state.tabs.slice(0, tabIndex + 1);
+          const tabsToClose = state.tabs.slice(tabIndex + 1);
+
+          // Remove tabStates for closed tabs
+          const newTabStates = { ...state.tabStates };
+          tabsToClose.forEach((tab) => {
+            delete newTabStates[tab.id];
+          });
+
+          // If active tab is being closed, switch to the rightmost remaining tab
+          let newActiveId = state.activeTabId;
+          const activeTabIndex = state.tabs.findIndex((t) => t.id === state.activeTabId);
+          if (activeTabIndex > tabIndex) {
+            newActiveId = tabsToKeep[tabsToKeep.length - 1].id;
+            invoke('open_repository', { path: tabsToKeep[tabsToKeep.length - 1].path }).catch(
+              console.error
+            );
+          }
+
+          set({
+            tabs: tabsToKeep,
+            activeTabId: newActiveId,
+            tabStates: newTabStates,
+          });
+        },
+
+        closeTabsToLeft: (tabIndex: number) => {
+          const state = get();
+          if (tabIndex <= 0 || tabIndex >= state.tabs.length) return;
+
+          const tabsToClose = state.tabs.slice(0, tabIndex);
+          const tabsToKeep = state.tabs.slice(tabIndex);
+
+          // Remove tabStates for closed tabs
+          const newTabStates = { ...state.tabStates };
+          tabsToClose.forEach((tab) => {
+            delete newTabStates[tab.id];
+          });
+
+          // If active tab is being closed, switch to the leftmost remaining tab
+          let newActiveId = state.activeTabId;
+          const activeTabIndex = state.tabs.findIndex((t) => t.id === state.activeTabId);
+          if (activeTabIndex < tabIndex) {
+            newActiveId = tabsToKeep[0].id;
+            invoke('open_repository', { path: tabsToKeep[0].path }).catch(console.error);
+          }
+
+          set({
+            tabs: tabsToKeep,
+            activeTabId: newActiveId,
+            tabStates: newTabStates,
           });
         },
 

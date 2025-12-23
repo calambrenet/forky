@@ -87,7 +87,7 @@ function App() {
   const stashes = useActiveTabStashes();
   const isRestoring = useIsRestoring();
   const localChangesCount = useLocalChangesCount();
-  const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab, setTabHasPendingChanges, setTabCurrentBranch } = useRepositoryStore();
+  const { openRepository, selectTab, closeTab, closeOtherTabs, closeAllTabs, closeTabsToRight, closeTabsToLeft, updateTabState, refreshActiveTab, setTabHasPendingChanges, setTabCurrentBranch } = useRepositoryStore();
 
   // Git operation store
   const isGitLoading = useIsGitLoading();
@@ -944,6 +944,10 @@ function App() {
           activeTabId={useRepositoryStore.getState().activeTabId}
           onTabSelect={selectTab}
           onTabClose={closeTab}
+          onCloseOthers={closeOtherTabs}
+          onCloseAll={closeAllTabs}
+          onCloseToRight={closeTabsToRight}
+          onCloseToLeft={closeTabsToLeft}
           onAddTab={handleOpenRepo}
         />
       )}

@@ -347,5 +347,12 @@
     "rename": "Rinomina '{{branch}}'...",
     "delete": "Elimina '{{branch}}'...",
     "copyBranchName": "Copia Nome Branch"
+  },
+  "tabContextMenu": {
+    "close": "Chiudi",
+    "closeOthers": "Chiudi altri",
+    "closeAll": "Chiudi tutti",
+    "closeToRight": "Chiudi schede a destra",
+    "closeToLeft": "Chiudi schede a sinistra"
   }
 }

@@ -69,10 +69,12 @@ Built with:
 - [ ] Delete tag
 
 ### Stash Operations
-- [ ] View stash list
-- [ ] Create stash
-- [ ] Apply/pop stash
-- [ ] Drop stash
+- [x] View stash list (sidebar and dropdown)
+- [x] Create stash (with optional message and stage new files option)
+- [x] Save snapshot (stash but keep changes in working directory)
+- [x] Apply stash (apply changes, keep stash)
+- [x] Pop stash (apply changes, remove stash)
+- [x] Drop stash (remove without applying)
 
 ### Git Flow
 - [ ] Initialize Git Flow

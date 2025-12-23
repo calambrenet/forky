@@ -347,5 +347,12 @@
     "rename": "Renommer '{{branch}}'...",
     "delete": "Supprimer '{{branch}}'...",
     "copyBranchName": "Copier le Nom de la Branche"
+  },
+  "tabContextMenu": {
+    "close": "Fermer",
+    "closeOthers": "Fermer les autres",
+    "closeAll": "Fermer tout",
+    "closeToRight": "Fermer les onglets à droite",
+    "closeToLeft": "Fermer les onglets à gauche"
   }
 }
