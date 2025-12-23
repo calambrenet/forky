@@ -80,6 +80,7 @@
   margin: 0 8px;
 }
 
+.toolbar-icon-btn,
 .hamburger-btn {
   display: flex;
   align-items: center;
@@ -95,10 +96,12 @@
   color: var(--text-primary);
 }
 
+.toolbar-icon-btn:hover,
 .hamburger-btn:hover {
   background: var(--bg-hover);
 }
 
+.toolbar-icon-btn svg,
 .hamburger-btn svg {
   width: 20px;
   height: 20px;

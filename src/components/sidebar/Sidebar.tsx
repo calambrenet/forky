@@ -1,8 +1,16 @@
-import { FC, useState, useRef, useEffect, useCallback, memo } from 'react';
+import { FC, useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, FileEdit, GitMerge } from 'lucide-react';
+import { BookOpen, FileEdit, GitMerge, Search, X } from 'lucide-react';
 import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { BranchTree } from './BranchTree';
+import {
+  buildBranchTree,
+  buildRemoteTree,
+  buildTagTree,
+  filterTree,
+  TreeNode,
+} from './branchTree';
 import './Sidebar.css';
 
 const ICON_SIZE = 16;
@@ -36,6 +44,7 @@ interface CollapsibleSectionProps {
   count?: number;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  storageKey?: string;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
@@ -44,22 +53,31 @@ const CollapsibleSection: FC<CollapsibleSectionProps> = ({
   count,
   children,
   defaultOpen = true,
+  storageKey,
   onContextMenu,
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isOpen, setIsOpen] = useLocalStorage<boolean>(
+    storageKey ? `forky:section-${storageKey}` : '',
+    defaultOpen
+  );
+
+  // If no storageKey, use local state
+  const [localIsOpen, setLocalIsOpen] = useState(defaultOpen);
+  const actualIsOpen = storageKey ? isOpen : localIsOpen;
+  const actualSetIsOpen = storageKey ? setIsOpen : setLocalIsOpen;
 
   return (
     <div className="sidebar-section">
       <div
         className="section-header"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => actualSetIsOpen(!actualIsOpen)}
         onContextMenu={onContextMenu}
       >
-        <span className={`expand-icon ${isOpen ? 'expanded' : ''}`}>▶</span>
+        <span className={`expand-icon ${actualIsOpen ? 'expanded' : ''}`}>▶</span>
         <span className="section-title">{title}</span>
         {count !== undefined && <span className="section-count">{count}</span>}
       </div>
-      {isOpen && <div className="section-content">{children}</div>}
+      {actualIsOpen && <div className="section-content">{children}</div>}
     </div>
   );
 };
@@ -118,11 +136,23 @@ export const Sidebar: FC<SidebarProps> = memo(({
   const localBranches = branches.filter(b => !b.is_remote);
   const remoteBranchesUnsorted = branches.filter(b => b.is_remote);
 
+  // Filter state
+  const [filter, setFilter] = useState('');
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
   // Remote sorting preference (persisted)
   const [remoteSortOrder, setRemoteSortOrder] = useLocalStorage<RemoteSortOrder>(
     'forky:remote-sort-order',
     'alphabetically'
   );
+
+  // Expanded folders state (persisted per repo)
+  const expandedStorageKey = repoPath ? `forky:expanded-folders:${repoPath}` : '';
+  const [expandedPathsArray, setExpandedPathsArray] = useLocalStorage<string[]>(
+    expandedStorageKey,
+    []
+  );
+  const expandedPaths = useMemo(() => new Set(expandedPathsArray), [expandedPathsArray]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -136,13 +166,73 @@ export const Sidebar: FC<SidebarProps> = memo(({
   // Sort remote branches based on preference
   const remoteBranches = sortRemoteBranches(remoteBranchesUnsorted, remoteSortOrder);
 
-  // Create a map of branch names to their commit SHAs
-  const branchToCommit = new Map<string, string>();
-  branchHeads.forEach(bh => {
-    branchToCommit.set(bh.name, bh.commit_sha);
-  });
+  // Build tree structures
+  const localBranchTree = useMemo(() => buildBranchTree(localBranches), [localBranches]);
+  const remoteTree = useMemo(() => buildRemoteTree(remoteBranches, remotes), [remoteBranches, remotes]);
+  const tagTree = useMemo(() => buildTagTree(tags), [tags]);
 
-  const handleBranchClick = (branch: BranchInfo) => {
+  // Filter trees
+  const filteredLocalBranchTree = useMemo(
+    () => filterTree(localBranchTree, filter),
+    [localBranchTree, filter]
+  );
+  const filteredRemoteTree = useMemo(
+    () => filterTree(remoteTree, filter),
+    [remoteTree, filter]
+  );
+  const filteredTagTree = useMemo(
+    () => filterTree(tagTree, filter),
+    [tagTree, filter]
+  );
+
+  // Create a map of branch names to their commit SHAs
+  const branchToCommit = useMemo(() => {
+    const map = new Map<string, string>();
+    branchHeads.forEach(bh => {
+      map.set(bh.name, bh.commit_sha);
+    });
+    return map;
+  }, [branchHeads]);
+
+  // Toggle folder expansion
+  const handleToggleExpand = useCallback((path: string) => {
+    const newSet = new Set(expandedPathsArray);
+    if (newSet.has(path)) {
+      newSet.delete(path);
+    } else {
+      newSet.add(path);
+    }
+    setExpandedPathsArray(Array.from(newSet));
+  }, [expandedPathsArray, setExpandedPathsArray]);
+
+  // Expand all folders that match filter
+  useEffect(() => {
+    if (filter.trim()) {
+      // When filtering, expand all folders that have matching children
+      const pathsToExpand = new Set<string>();
+
+      const collectPaths = (nodes: TreeNode[]) => {
+        for (const node of nodes) {
+          if (node.type === 'folder' || node.type === 'remote') {
+            pathsToExpand.add(node.fullPath);
+          }
+          collectPaths(node.children);
+        }
+      };
+
+      collectPaths(filteredLocalBranchTree);
+      collectPaths(filteredRemoteTree);
+      collectPaths(filteredTagTree);
+
+      if (pathsToExpand.size > 0) {
+        const newSet = new Set(expandedPathsArray);
+        pathsToExpand.forEach(p => newSet.add(p));
+        setExpandedPathsArray(Array.from(newSet));
+      }
+    }
+  }, [filter, filteredLocalBranchTree, filteredRemoteTree, filteredTagTree, expandedPathsArray, setExpandedPathsArray]);
+
+  const handleBranchClick = useCallback((branch: BranchInfo) => {
     onBranchSelect(branch);
     // Switch to all-commits view and navigate to the branch's commit
     onViewModeChange('all-commits');
@@ -150,22 +240,22 @@ export const Sidebar: FC<SidebarProps> = memo(({
     if (commitSha) {
       onNavigateToCommit(commitSha);
     }
-  };
+  }, [onBranchSelect, onViewModeChange, branchToCommit, onNavigateToCommit]);
 
-  const handleLocalBranchDoubleClick = (branch: BranchInfo) => {
+  const handleLocalBranchDoubleClick = useCallback((branch: BranchInfo) => {
     // Don't checkout if already on this branch
     if (branch.is_head) return;
     onBranchCheckout(branch.name);
-  };
+  }, [onBranchCheckout]);
 
-  const handleRemoteBranchDoubleClick = (branch: BranchInfo) => {
+  const handleRemoteBranchDoubleClick = useCallback((branch: BranchInfo) => {
     onTrackRemoteBranch(branch.name);
-  };
+  }, [onTrackRemoteBranch]);
 
-  const handleTagClick = (tag: TagInfo) => {
+  const handleTagClick = useCallback((tag: TagInfo) => {
     onViewModeChange('all-commits');
     onNavigateToCommit(tag.commit_sha);
-  };
+  }, [onViewModeChange, onNavigateToCommit]);
 
   // Context menu handlers
   const handleRemotesContextMenu = useCallback((e: React.MouseEvent) => {
@@ -191,6 +281,12 @@ export const Sidebar: FC<SidebarProps> = memo(({
     setRemoteSortOrder(order);
     closeContextMenu();
   }, [setRemoteSortOrder, closeContextMenu]);
+
+  // Clear filter
+  const handleClearFilter = useCallback(() => {
+    setFilter('');
+    filterInputRef.current?.focus();
+  }, []);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -229,6 +325,11 @@ export const Sidebar: FC<SidebarProps> = memo(({
 
   const parentFolder = getParentFolder(repoPath);
 
+  // Count items for display
+  const localBranchCount = localBranches.length;
+  const remoteCount = remotes.length;
+  const tagCount = tags.length;
+
   return (
     <div className="sidebar">
       {repoName && (
@@ -242,6 +343,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           </div>
         </div>
       )}
+
       <div className="sidebar-content">
         <div className="sidebar-nav-section">
           <div
@@ -267,63 +369,102 @@ export const Sidebar: FC<SidebarProps> = memo(({
           </div>
         </div>
 
-        <CollapsibleSection title={t('sidebar.branches')} count={localBranches.length}>
-          {localBranches.map((branch) => (
-            <div
-              key={branch.name}
-              className={`sidebar-item ${branch.is_head ? 'active' : ''}`}
-              onClick={() => handleBranchClick(branch)}
-              onDoubleClick={() => handleLocalBranchDoubleClick(branch)}
-            >
-              <span className="item-icon">{branch.is_head ? '●' : '○'}</span>
-              <span className="branch-label">{branch.name}</span>
-            </div>
-          ))}
+        {/* Filter Input */}
+        <div className="sidebar-filter">
+          <Search size={14} className="filter-icon" />
+          <input
+            ref={filterInputRef}
+            type="text"
+            className="filter-input"
+            placeholder={t('sidebar.filter')}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          {filter && (
+            <button className="filter-clear" onClick={handleClearFilter}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <CollapsibleSection
+          title={t('sidebar.branches')}
+          count={localBranchCount}
+          storageKey="branches"
+        >
+          {filteredLocalBranchTree.length > 0 ? (
+            <BranchTree
+              nodes={filteredLocalBranchTree}
+              expandedPaths={expandedPaths}
+              onToggleExpand={handleToggleExpand}
+              onBranchClick={handleBranchClick}
+              onBranchDoubleClick={handleLocalBranchDoubleClick}
+            />
+          ) : filter ? (
+            <div className="sidebar-empty">{t('sidebar.noMatches')}</div>
+          ) : (
+            <div className="sidebar-empty">{t('sidebar.noBranches')}</div>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection
           title={t('sidebar.remotes')}
-          count={remotes.length}
+          count={remoteCount}
           defaultOpen={false}
+          storageKey="remotes"
           onContextMenu={handleRemotesContextMenu}
         >
-          {remotes.map((remote) => (
-            <div key={remote} className="sidebar-item remote-item">
-              <span className="item-icon">🌐</span>
-              <span>{remote}</span>
-            </div>
-          ))}
-          {remoteBranches.map((branch) => (
-            <div
-              key={branch.name}
-              className="sidebar-item remote-branch"
-              onClick={() => handleBranchClick(branch)}
-              onDoubleClick={() => handleRemoteBranchDoubleClick(branch)}
-            >
-              <span className="item-icon">↳</span>
-              <span className="branch-label">{branch.name}</span>
-            </div>
-          ))}
+          {filteredRemoteTree.length > 0 ? (
+            <BranchTree
+              nodes={filteredRemoteTree}
+              expandedPaths={expandedPaths}
+              onToggleExpand={handleToggleExpand}
+              onBranchClick={handleBranchClick}
+              onBranchDoubleClick={handleRemoteBranchDoubleClick}
+              isRemote
+            />
+          ) : filter ? (
+            <div className="sidebar-empty">{t('sidebar.noMatches')}</div>
+          ) : (
+            <div className="sidebar-empty">{t('sidebar.noRemotes')}</div>
+          )}
         </CollapsibleSection>
 
-        <CollapsibleSection title={t('sidebar.tags')} count={tags.length} defaultOpen={false}>
-          {tags.map((tag) => (
-            <div
-              key={tag.name}
-              className="sidebar-item"
-              onClick={() => handleTagClick(tag)}
-            >
-              <span className="item-icon">🏷</span>
-              <span>{tag.name}</span>
-            </div>
-          ))}
+        <CollapsibleSection
+          title={t('sidebar.tags')}
+          count={tagCount}
+          defaultOpen={false}
+          storageKey="tags"
+        >
+          {filteredTagTree.length > 0 ? (
+            <BranchTree
+              nodes={filteredTagTree}
+              expandedPaths={expandedPaths}
+              onToggleExpand={handleToggleExpand}
+              onTagClick={handleTagClick}
+            />
+          ) : filter ? (
+            <div className="sidebar-empty">{t('sidebar.noMatches')}</div>
+          ) : (
+            <div className="sidebar-empty">{t('sidebar.noTags')}</div>
+          )}
         </CollapsibleSection>
 
-        <CollapsibleSection title={t('sidebar.stashes')} count={0} defaultOpen={false}>
+        <CollapsibleSection
+          title={t('sidebar.stashes')}
+          count={0}
+          defaultOpen={false}
+          storageKey="stashes"
+        >
           <div className="sidebar-empty">{t('sidebar.noStashes')}</div>
         </CollapsibleSection>
 
-        <CollapsibleSection title={t('sidebar.submodules')} count={0} defaultOpen={false}>
+        <CollapsibleSection
+          title={t('sidebar.submodules')}
+          count={0}
+          defaultOpen={false}
+          storageKey="submodules"
+        >
           <div className="sidebar-empty">{t('sidebar.noSubmodules')}</div>
         </CollapsibleSection>
       </div>

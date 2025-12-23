@@ -56,7 +56,12 @@
     "stashes": "Stash",
     "submodules": "Sottomoduli",
     "noStashes": "Nessuno stash",
-    "noSubmodules": "Nessun sottomodulo"
+    "noSubmodules": "Nessun sottomodulo",
+    "noBranches": "Nessun branch",
+    "noRemotes": "Nessun remoto",
+    "noTags": "Nessun tag",
+    "noMatches": "Nessuna corrispondenza",
+    "filter": "Filtra"
   },
   "localChanges": {
     "staged": "Staged",
@@ -242,5 +247,18 @@
     "newVersion": "Nuova versione",
     "additions": "aggiunte",
     "deletions": "eliminazioni"
+  },
+  "feedback": {
+    "title": "Invia Feedback",
+    "description": "Aiutaci a migliorare Forky",
+    "rating": "Valutazione",
+    "name": "Nome",
+    "namePlaceholder": "Il tuo nome (opzionale)",
+    "email": "Email",
+    "emailPlaceholder": "La tua email (opzionale)",
+    "comments": "Commenti",
+    "commentsPlaceholder": "Raccontaci la tua esperienza...",
+    "send": "Invia Feedback",
+    "ratingRequired": "Per favore, seleziona una valutazione"
   }
 }

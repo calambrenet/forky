@@ -21,6 +21,7 @@ import {
   Info,
   LogOut,
   Check,
+  Smile,
 } from 'lucide-react';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
 import { RepositoryInfoBox, GitOperationState } from '../repository-info-box';
@@ -43,6 +44,7 @@ interface ToolbarProps {
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
   onOpenActivityLog?: () => void;
+  onFeedback?: () => void;
 }
 
 const ICON_SIZE = 16;
@@ -63,6 +65,7 @@ export const Toolbar: FC<ToolbarProps> = memo(({
   gitOperation,
   onDismissOperation,
   onOpenActivityLog,
+  onFeedback,
 }) => {
   const { t } = useTranslation();
   const appWindow = getCurrentWindow();
@@ -154,6 +157,13 @@ export const Toolbar: FC<ToolbarProps> = memo(({
           <span className="btn-label">{t('toolbar.merge')}</span>
         </button>
         <div className="toolbar-separator" />
+        <button
+          className="toolbar-icon-btn"
+          title={t('feedback.title')}
+          onClick={onFeedback}
+        >
+          <Smile size={18} />
+        </button>
         <Menu
           trigger={
             <button className="hamburger-btn" title={t('menu.repository')}>

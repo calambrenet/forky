@@ -22,6 +22,7 @@ const GitCredentialModal = lazy(() => import('./components/git-modals/GitCredent
 const TrackRemoteBranchModal = lazy(() => import('./components/git-modals/TrackRemoteBranchModal').then(m => ({ default: m.TrackRemoteBranchModal })));
 const GitActivityLog = lazy(() => import('./components/git-activity-log').then(m => ({ default: m.GitActivityLog })));
 const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m => ({ default: m.AddRemoteModal })));
+const FeedbackModal = lazy(() => import('./components/feedback-modal').then(m => ({ default: m.FeedbackModal })));
 
 // Zustand stores
 import {
@@ -126,6 +127,9 @@ function App() {
   // Track Remote Branch modal state
   const [trackBranchModalOpen, setTrackBranchModalOpen] = useState(false);
   const [selectedRemoteBranch, setSelectedRemoteBranch] = useState('');
+
+  // Feedback modal state
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
@@ -553,6 +557,7 @@ function App() {
             gitOperation={currentOperation}
             onDismissOperation={clearOperation}
             onOpenActivityLog={openActivityLog}
+            onFeedback={() => setFeedbackModalOpen(true)}
           />
         </TitleBar>
         <div className="loading-overlay">
@@ -584,6 +589,7 @@ function App() {
           gitOperation={currentOperation}
           onDismissOperation={clearOperation}
           onOpenActivityLog={openActivityLog}
+          onFeedback={() => setFeedbackModalOpen(true)}
         />
       </TitleBar>
 
@@ -728,6 +734,14 @@ function App() {
             onTrack={handleTrackRemoteBranch}
             remoteBranch={selectedRemoteBranch}
             localBranches={activeTabState?.branches.filter(b => !b.is_remote) ?? []}
+          />
+        )}
+
+        {/* Feedback Modal */}
+        {feedbackModalOpen && (
+          <FeedbackModal
+            isOpen={true}
+            onClose={() => setFeedbackModalOpen(false)}
           />
         )}
 

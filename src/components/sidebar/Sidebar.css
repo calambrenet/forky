@@ -17,6 +17,55 @@
   background-color: var(--bg-tertiary);
 }
 
+/* Filter Input */
+.sidebar-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 4px 8px 8px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.sidebar-filter .filter-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.sidebar-filter .filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.sidebar-filter .filter-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.sidebar-filter .filter-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.sidebar-filter .filter-clear:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .repo-icon-large {
   display: flex;
   align-items: center;
@@ -297,4 +346,91 @@
 
 .sidebar-context-menu .context-submenu .context-menu-item.checked {
   padding-left: 8px;
+}
+
+/* Branch Tree Styles */
+.branch-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  border-radius: 4px;
+  margin: 1px 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+  min-height: 24px;
+}
+
+.tree-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.tree-item.current-branch {
+  font-weight: 600;
+}
+
+.tree-item.current-branch .tree-icon.branch-icon {
+  color: var(--accent-green);
+}
+
+.tree-expand-icon {
+  width: 12px;
+  font-size: 8px;
+  color: var(--text-secondary);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.tree-expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-expand-icon.placeholder {
+  visibility: hidden;
+}
+
+.tree-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.tree-icon {
+  color: var(--text-secondary);
+}
+
+.tree-icon.folder-icon {
+  color: var(--text-secondary);
+}
+
+.tree-icon.branch-icon {
+  color: var(--text-secondary);
+}
+
+.tree-icon.branch-icon.current {
+  color: var(--accent-green);
+}
+
+.tree-icon.tag-icon {
+  color: var(--accent-orange);
+}
+
+.tree-icon.remote-icon {
+  color: var(--accent-blue);
+}
+
+.tree-node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
