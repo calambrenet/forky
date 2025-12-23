@@ -18,3 +18,5 @@ export { TrackRemoteBranchModal } from './TrackRemoteBranchModal';
 export { CreateBranchModal } from './CreateBranchModal';
 
 export { CreateTagModal } from './CreateTagModal';
+
+export { RenameBranchModal } from './RenameBranchModal';

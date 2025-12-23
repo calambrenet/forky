@@ -5,7 +5,7 @@ import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../.
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { BranchTree } from './BranchTree';
 import { BranchContextMenu } from './BranchContextMenu';
-import { CreateBranchModal, CreateTagModal } from '../git-modals';
+import { CreateBranchModal, CreateTagModal, RenameBranchModal } from '../git-modals';
 import {
   buildBranchTree,
   buildRemoteTree,
@@ -34,6 +34,7 @@ interface SidebarProps {
   onAddRemote?: () => void;
   onCreateBranch?: (branchName: string, startPoint: string, checkout: boolean) => void;
   onCreateTag?: (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => void;
+  onRenameBranch?: (oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => void;
   expandTagsSection?: boolean;
 }
 
@@ -152,6 +153,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
   onAddRemote,
   onCreateBranch,
   onCreateTag,
+  onRenameBranch,
   expandTagsSection,
 }) => {
   const { t } = useTranslation();
@@ -199,6 +201,12 @@ export const Sidebar: FC<SidebarProps> = memo(({
   const [createTagModal, setCreateTagModal] = useState<{ isOpen: boolean; sourceBranch: BranchInfo | null }>({
     isOpen: false,
     sourceBranch: null,
+  });
+
+  // Rename branch modal state
+  const [renameBranchModal, setRenameBranchModal] = useState<{ isOpen: boolean; branch: BranchInfo | null }>({
+    isOpen: false,
+    branch: null,
   });
 
   // Get current branch name
@@ -374,6 +382,21 @@ export const Sidebar: FC<SidebarProps> = memo(({
     onCreateTag?.(tagName, startPoint, message, pushToRemotes);
     handleCloseCreateTagModal();
   }, [onCreateTag, handleCloseCreateTagModal]);
+
+  // Rename branch modal handlers
+  const handleRenameBranchClick = useCallback((branch: BranchInfo) => {
+    closeBranchContextMenu();
+    setRenameBranchModal({ isOpen: true, branch });
+  }, [closeBranchContextMenu]);
+
+  const handleCloseRenameBranchModal = useCallback(() => {
+    setRenameBranchModal({ isOpen: false, branch: null });
+  }, []);
+
+  const handleRenameBranch = useCallback((oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => {
+    onRenameBranch?.(oldName, newName, renameRemote, remoteName);
+    handleCloseRenameBranchModal();
+  }, [onRenameBranch, handleCloseRenameBranchModal]);
 
   // Clear filter
   const handleClearFilter = useCallback(() => {
@@ -669,6 +692,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           onCopyBranchName={handleCopyBranchName}
           onNewBranch={handleNewBranch}
           onNewTag={handleNewTag}
+          onRename={handleRenameBranchClick}
         />
       )}
 
@@ -688,6 +712,15 @@ export const Sidebar: FC<SidebarProps> = memo(({
         onCreate={handleCreateTag}
         sourceBranch={createTagModal.sourceBranch}
         existingTags={tags}
+      />
+
+      {/* Rename Branch Modal */}
+      <RenameBranchModal
+        isOpen={renameBranchModal.isOpen}
+        onClose={handleCloseRenameBranchModal}
+        onRename={handleRenameBranch}
+        branch={renameBranchModal.branch}
+        localBranches={localBranches}
       />
     </div>
   );

@@ -205,6 +205,15 @@
       "tagExists": "El tag '{{tag}}' ya existe",
       "create": "Crear",
       "createAndPush": "Crear y Push"
+    },
+    "renameBranch": {
+      "title": "Renombrar Rama Local",
+      "description": "Renombrar rama local",
+      "newName": "Nuevo nombre",
+      "newNamePlaceholder": "Introduce el nuevo nombre de la rama",
+      "alsoRenameRemote": "También renombrar '{{remote}}'",
+      "branchExists": "La rama '{{branch}}' ya existe",
+      "rename": "Renombrar"
     }
   },
   "activityLog": {

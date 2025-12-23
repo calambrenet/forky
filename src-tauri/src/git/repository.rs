@@ -1510,3 +1510,115 @@ pub fn git_create_tag(
         Ok(create_success_result(format!("Tag '{}' created", tag_name)))
     }
 }
+
+/// Renames a local branch
+/// If rename_remote is true and the branch has an upstream, also renames the remote branch
+pub fn git_rename_branch(
+    repo_path: &str,
+    old_name: &str,
+    new_name: &str,
+    rename_remote: bool,
+    remote_name: Option<&str>,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    // Rename local branch: git branch -m old_name new_name
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("branch")
+        .arg("-m")
+        .arg(old_name)
+        .arg(new_name)
+        .output()
+        .map_err(|e| format!("Failed to execute git branch -m: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    // If rename_remote is true and we have a remote name, also rename on remote
+    if rename_remote {
+        if let Some(remote) = remote_name {
+            // Push the new branch name to remote
+            let push_output = Command::new("git")
+                .arg("-C")
+                .arg(repo_path)
+                .arg("push")
+                .arg(remote)
+                .arg(new_name)
+                .output()
+                .map_err(|e| format!("Failed to push new branch: {}", e))?;
+
+            if !push_output.status.success() {
+                let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!("Local branch renamed but failed to push to remote: {}", push_stderr.trim()),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("push_failed".to_string()),
+                });
+            }
+
+            // Delete the old branch from remote
+            let delete_output = Command::new("git")
+                .arg("-C")
+                .arg(repo_path)
+                .arg("push")
+                .arg(remote)
+                .arg("--delete")
+                .arg(old_name)
+                .output()
+                .map_err(|e| format!("Failed to delete old remote branch: {}", e))?;
+
+            if !delete_output.status.success() {
+                let delete_stderr = String::from_utf8_lossy(&delete_output.stderr).to_string();
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!("Branch renamed and pushed, but failed to delete old remote branch: {}", delete_stderr.trim()),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("delete_remote_failed".to_string()),
+                });
+            }
+
+            // Set upstream for the new branch
+            let upstream_output = Command::new("git")
+                .arg("-C")
+                .arg(repo_path)
+                .arg("branch")
+                .arg("-u")
+                .arg(format!("{}/{}", remote, new_name))
+                .arg(new_name)
+                .output()
+                .map_err(|e| format!("Failed to set upstream: {}", e))?;
+
+            if upstream_output.status.success() {
+                Ok(create_success_result(format!(
+                    "Branch renamed from '{}' to '{}' (local and remote)",
+                    old_name, new_name
+                )))
+            } else {
+                // Upstream setting failed but main operation succeeded
+                Ok(create_success_result(format!(
+                    "Branch renamed from '{}' to '{}' (upstream may need manual setup)",
+                    old_name, new_name
+                )))
+            }
+        } else {
+            Ok(create_success_result(format!(
+                "Branch renamed from '{}' to '{}'",
+                old_name, new_name
+            )))
+        }
+    } else {
+        Ok(create_success_result(format!(
+            "Branch renamed from '{}' to '{}'",
+            old_name, new_name
+        )))
+    }
+}

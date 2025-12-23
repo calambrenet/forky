@@ -205,6 +205,15 @@
       "tagExists": "Le tag '{{tag}}' existe déjà",
       "create": "Créer",
       "createAndPush": "Créer et Envoyer"
+    },
+    "renameBranch": {
+      "title": "Renommer la Branche Locale",
+      "description": "Renommer la branche locale",
+      "newName": "Nouveau nom",
+      "newNamePlaceholder": "Entrez le nouveau nom de la branche",
+      "alsoRenameRemote": "Renommer aussi '{{remote}}'",
+      "branchExists": "La branche '{{branch}}' existe déjà",
+      "rename": "Renommer"
     }
   },
   "activityLog": {

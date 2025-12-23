@@ -305,3 +305,16 @@ pub fn git_create_tag(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_create_tag(path, &tag_name, &start_point, message.as_deref(), push_to_remotes)
 }
+
+#[tauri::command]
+pub fn git_rename_branch(
+    old_name: String,
+    new_name: String,
+    rename_remote: bool,
+    remote_name: Option<String>,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_rename_branch(path, &old_name, &new_name, rename_remote, remote_name.as_deref())
+}

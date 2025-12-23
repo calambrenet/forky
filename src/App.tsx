@@ -414,6 +414,46 @@ function App() {
     }
   }, [activeTab?.path, isGitLoading, activeTabState?.branchHeads, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleViewModeChange, handleNavigateToCommit]);
 
+  // Handle renaming a branch
+  const handleRenameBranch = useCallback(async (oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => {
+    if (!activeTab?.path || isGitLoading) return;
+
+    const command = renameRemote && remoteName
+      ? `git branch -m ${oldName} ${newName} && git push ${remoteName} ${newName} && git push ${remoteName} --delete ${oldName}`
+      : `git branch -m ${oldName} ${newName}`;
+    startOperation('Other', newName);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_rename_branch', {
+        oldName,
+        newName,
+        renameRemote,
+        remoteName,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Rename '${oldName}' to '${newName}'`, command, result.message, result.success);
+
+      if (result.success) {
+        // If we renamed the current branch, update the tab's current branch
+        const activeTabId = useRepositoryStore.getState().activeTabId;
+        if (activeTabId && activeTab.currentBranch === oldName) {
+          setTabCurrentBranch(activeTabId, newName);
+        }
+        // Refresh repository data
+        await refreshActiveTab();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Rename');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error renaming branch:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Rename '${oldName}' to '${newName}'`, command, String(error), false);
+      addAlert('error', 'Rename Error', String(error));
+    }
+  }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
+
   // Add Remote handler
   const handleAddRemote = useCallback(async (name: string, url: string) => {
     const command = `git remote add ${name} ${url}`;
@@ -722,6 +762,7 @@ function App() {
               onAddRemote={openAddRemoteModal}
               onCreateBranch={handleCreateBranch}
               onCreateTag={handleCreateTag}
+              onRenameBranch={handleRenameBranch}
               expandTagsSection={expandTagsSection}
             />
           </div>
