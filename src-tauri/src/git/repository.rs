@@ -1622,3 +1622,85 @@ pub fn git_rename_branch(
         )))
     }
 }
+
+/// Deletes a local branch
+/// If force is true, uses -D (force delete), otherwise uses -d (safe delete)
+/// If delete_remote is true and remote_name is provided, also deletes the remote branch
+pub fn git_delete_branch(
+    repo_path: &str,
+    branch_name: &str,
+    force: bool,
+    delete_remote: bool,
+    remote_name: Option<&str>,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    // Delete local branch: git branch -d/-D branch_name
+    let delete_flag = if force { "-D" } else { "-d" };
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("branch")
+        .arg(delete_flag)
+        .arg(branch_name)
+        .output()
+        .map_err(|e| format!("Failed to execute git branch {}: {}", delete_flag, e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check if it's an unmerged branch error
+        if stderr.contains("not fully merged") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: format!("Branch '{}' is not fully merged. Use force delete to remove it anyway.", branch_name),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("not_merged".to_string()),
+            });
+        }
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    // If delete_remote is true and we have a remote name, also delete on remote
+    if delete_remote {
+        if let Some(remote) = remote_name {
+            let push_output = Command::new("git")
+                .arg("-C")
+                .arg(repo_path)
+                .arg("push")
+                .arg(remote)
+                .arg("--delete")
+                .arg(branch_name)
+                .output()
+                .map_err(|e| format!("Failed to delete remote branch: {}", e))?;
+
+            if !push_output.status.success() {
+                let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!("Local branch deleted but failed to delete remote branch: {}", push_stderr.trim()),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("delete_remote_failed".to_string()),
+                });
+            }
+
+            Ok(create_success_result(format!(
+                "Branch '{}' deleted (local and remote)",
+                branch_name
+            )))
+        } else {
+            Ok(create_success_result(format!(
+                "Branch '{}' deleted",
+                branch_name
+            )))
+        }
+    } else {
+        Ok(create_success_result(format!(
+            "Branch '{}' deleted",
+            branch_name
+        )))
+    }
+}

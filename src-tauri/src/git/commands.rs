@@ -318,3 +318,16 @@ pub fn git_rename_branch(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_rename_branch(path, &old_name, &new_name, rename_remote, remote_name.as_deref())
 }
+
+#[tauri::command]
+pub fn git_delete_branch(
+    branch_name: String,
+    force: bool,
+    delete_remote: bool,
+    remote_name: Option<String>,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_delete_branch(path, &branch_name, force, delete_remote, remote_name.as_deref())
+}

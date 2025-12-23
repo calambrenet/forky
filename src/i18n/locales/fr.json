@@ -214,6 +214,14 @@
       "alsoRenameRemote": "Renommer aussi '{{remote}}'",
       "branchExists": "La branche '{{branch}}' existe déjà",
       "rename": "Renommer"
+    },
+    "deleteBranch": {
+      "title": "Supprimer la Branche",
+      "description": "Supprimer la branche locale de votre dépôt",
+      "branch": "Branche",
+      "alsoDeleteRemote": "Supprimer aussi la branche distante",
+      "forceDelete": "Forcer la suppression",
+      "delete": "Supprimer"
     }
   },
   "activityLog": {

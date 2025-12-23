@@ -49,6 +49,7 @@ pub fn run() {
             git_commands::git_create_branch,
             git_commands::git_create_tag,
             git_commands::git_rename_branch,
+            git_commands::git_delete_branch,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
             watcher_commands::start_file_watcher,

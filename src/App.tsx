@@ -454,6 +454,42 @@ function App() {
     }
   }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
 
+  // Handle deleting a branch
+  const handleDeleteBranch = useCallback(async (branchName: string, force: boolean, deleteRemote: boolean, remoteName: string | null) => {
+    if (!activeTab?.path || isGitLoading) return;
+
+    const deleteFlag = force ? '-D' : '-d';
+    const command = deleteRemote && remoteName
+      ? `git branch ${deleteFlag} ${branchName} && git push ${remoteName} --delete ${branchName}`
+      : `git branch ${deleteFlag} ${branchName}`;
+    startOperation('Other', branchName);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_delete_branch', {
+        branchName,
+        force,
+        deleteRemote,
+        remoteName,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Delete branch '${branchName}'`, command, result.message, result.success);
+
+      if (result.success) {
+        // Refresh repository data
+        await refreshActiveTab();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Delete');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting branch:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Delete branch '${branchName}'`, command, String(error), false);
+      addAlert('error', 'Delete Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle]);
+
   // Add Remote handler
   const handleAddRemote = useCallback(async (name: string, url: string) => {
     const command = `git remote add ${name} ${url}`;
@@ -763,6 +799,7 @@ function App() {
               onCreateBranch={handleCreateBranch}
               onCreateTag={handleCreateTag}
               onRenameBranch={handleRenameBranch}
+              onDeleteBranch={handleDeleteBranch}
               expandTagsSection={expandTagsSection}
             />
           </div>

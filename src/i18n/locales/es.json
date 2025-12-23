@@ -214,6 +214,14 @@
       "alsoRenameRemote": "También renombrar '{{remote}}'",
       "branchExists": "La rama '{{branch}}' ya existe",
       "rename": "Renombrar"
+    },
+    "deleteBranch": {
+      "title": "Eliminar Rama",
+      "description": "Eliminar rama local del repositorio",
+      "branch": "Rama",
+      "alsoDeleteRemote": "También eliminar rama remota",
+      "forceDelete": "Forzar eliminación",
+      "delete": "Eliminar"
     }
   },
   "activityLog": {

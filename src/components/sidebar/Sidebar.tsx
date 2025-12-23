@@ -5,7 +5,7 @@ import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../.
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { BranchTree } from './BranchTree';
 import { BranchContextMenu } from './BranchContextMenu';
-import { CreateBranchModal, CreateTagModal, RenameBranchModal } from '../git-modals';
+import { CreateBranchModal, CreateTagModal, RenameBranchModal, DeleteBranchModal } from '../git-modals';
 import {
   buildBranchTree,
   buildRemoteTree,
@@ -35,6 +35,7 @@ interface SidebarProps {
   onCreateBranch?: (branchName: string, startPoint: string, checkout: boolean) => void;
   onCreateTag?: (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => void;
   onRenameBranch?: (oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => void;
+  onDeleteBranch?: (branchName: string, force: boolean, deleteRemote: boolean, remoteName: string | null) => void;
   expandTagsSection?: boolean;
 }
 
@@ -154,6 +155,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
   onCreateBranch,
   onCreateTag,
   onRenameBranch,
+  onDeleteBranch,
   expandTagsSection,
 }) => {
   const { t } = useTranslation();
@@ -205,6 +207,12 @@ export const Sidebar: FC<SidebarProps> = memo(({
 
   // Rename branch modal state
   const [renameBranchModal, setRenameBranchModal] = useState<{ isOpen: boolean; branch: BranchInfo | null }>({
+    isOpen: false,
+    branch: null,
+  });
+
+  // Delete branch modal state
+  const [deleteBranchModal, setDeleteBranchModal] = useState<{ isOpen: boolean; branch: BranchInfo | null }>({
     isOpen: false,
     branch: null,
   });
@@ -397,6 +405,21 @@ export const Sidebar: FC<SidebarProps> = memo(({
     onRenameBranch?.(oldName, newName, renameRemote, remoteName);
     handleCloseRenameBranchModal();
   }, [onRenameBranch, handleCloseRenameBranchModal]);
+
+  // Delete branch modal handlers
+  const handleDeleteBranchClick = useCallback((branch: BranchInfo) => {
+    closeBranchContextMenu();
+    setDeleteBranchModal({ isOpen: true, branch });
+  }, [closeBranchContextMenu]);
+
+  const handleCloseDeleteBranchModal = useCallback(() => {
+    setDeleteBranchModal({ isOpen: false, branch: null });
+  }, []);
+
+  const handleDeleteBranch = useCallback((branchName: string, force: boolean, deleteRemote: boolean, remoteName: string | null) => {
+    onDeleteBranch?.(branchName, force, deleteRemote, remoteName);
+    handleCloseDeleteBranchModal();
+  }, [onDeleteBranch, handleCloseDeleteBranchModal]);
 
   // Clear filter
   const handleClearFilter = useCallback(() => {
@@ -693,6 +716,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           onNewBranch={handleNewBranch}
           onNewTag={handleNewTag}
           onRename={handleRenameBranchClick}
+          onDelete={handleDeleteBranchClick}
         />
       )}
 
@@ -721,6 +745,14 @@ export const Sidebar: FC<SidebarProps> = memo(({
         onRename={handleRenameBranch}
         branch={renameBranchModal.branch}
         localBranches={localBranches}
+      />
+
+      {/* Delete Branch Modal */}
+      <DeleteBranchModal
+        isOpen={deleteBranchModal.isOpen}
+        onClose={handleCloseDeleteBranchModal}
+        onDelete={handleDeleteBranch}
+        branch={deleteBranchModal.branch}
       />
     </div>
   );
