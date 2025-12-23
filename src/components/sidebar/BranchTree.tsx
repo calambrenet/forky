@@ -11,6 +11,7 @@ interface BranchTreeProps {
   onToggleExpand: (path: string) => void;
   onBranchClick?: (branch: BranchInfo) => void;
   onBranchDoubleClick?: (branch: BranchInfo) => void;
+  onBranchContextMenu?: (branch: BranchInfo, event: React.MouseEvent) => void;
   onTagClick?: (tag: TagInfo) => void;
   depth?: number;
   isRemote?: boolean;
@@ -22,6 +23,7 @@ interface TreeNodeItemProps {
   onToggleExpand: (path: string) => void;
   onBranchClick?: (branch: BranchInfo) => void;
   onBranchDoubleClick?: (branch: BranchInfo) => void;
+  onBranchContextMenu?: (branch: BranchInfo, event: React.MouseEvent) => void;
   onTagClick?: (tag: TagInfo) => void;
   depth: number;
   isRemote?: boolean;
@@ -33,6 +35,7 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(({
   onToggleExpand,
   onBranchClick,
   onBranchDoubleClick,
+  onBranchContextMenu,
   onTagClick,
   depth,
   isRemote,
@@ -56,6 +59,14 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(({
       onBranchDoubleClick(node.branch);
     }
   }, [node, onBranchDoubleClick]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (node.type === 'branch' && node.branch && onBranchContextMenu) {
+      e.preventDefault();
+      e.stopPropagation();
+      onBranchContextMenu(node.branch, e);
+    }
+  }, [node, onBranchContextMenu]);
 
   const renderIcon = () => {
     switch (node.type) {
@@ -93,6 +104,7 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(({
         style={{ paddingLeft }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
       >
         {(node.type === 'folder' || node.type === 'remote' || hasChildren) && (
           <span className={`tree-expand-icon ${isExpanded ? 'expanded' : ''}`}>
@@ -114,6 +126,7 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(({
           onToggleExpand={onToggleExpand}
           onBranchClick={onBranchClick}
           onBranchDoubleClick={onBranchDoubleClick}
+          onBranchContextMenu={onBranchContextMenu}
           onTagClick={onTagClick}
           depth={depth + 1}
           isRemote={isRemote || node.type === 'remote'}
@@ -129,6 +142,7 @@ export const BranchTree: FC<BranchTreeProps> = memo(({
   onToggleExpand,
   onBranchClick,
   onBranchDoubleClick,
+  onBranchContextMenu,
   onTagClick,
   depth = 0,
   isRemote = false,
@@ -145,6 +159,7 @@ export const BranchTree: FC<BranchTreeProps> = memo(({
           onToggleExpand={onToggleExpand}
           onBranchClick={onBranchClick}
           onBranchDoubleClick={onBranchDoubleClick}
+          onBranchContextMenu={onBranchContextMenu}
           onTagClick={onTagClick}
           depth={depth}
           isRemote={isRemote}

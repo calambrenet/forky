@@ -4,6 +4,8 @@ import { BookOpen, FileEdit, GitMerge, Search, X } from 'lucide-react';
 import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { BranchTree } from './BranchTree';
+import { BranchContextMenu } from './BranchContextMenu';
+import { CreateBranchModal } from '../git-modals';
 import {
   buildBranchTree,
   buildRemoteTree,
@@ -30,6 +32,7 @@ interface SidebarProps {
   onTrackRemoteBranch: (remoteBranchName: string) => void;
   onNavigateToCommit: (commitSha: string) => void;
   onAddRemote?: () => void;
+  onCreateBranch?: (branchName: string, startPoint: string, checkout: boolean) => void;
 }
 
 interface ContextMenuState {
@@ -37,6 +40,11 @@ interface ContextMenuState {
   x: number;
   y: number;
   showSortSubmenu: boolean;
+}
+
+interface BranchContextMenuState {
+  branch: BranchInfo | null;
+  position: { x: number; y: number };
 }
 
 interface CollapsibleSectionProps {
@@ -131,6 +139,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
   onTrackRemoteBranch,
   onNavigateToCommit,
   onAddRemote,
+  onCreateBranch,
 }) => {
   const { t } = useTranslation();
   const localBranches = branches.filter(b => !b.is_remote);
@@ -161,7 +170,23 @@ export const Sidebar: FC<SidebarProps> = memo(({
     y: 0,
     showSortSubmenu: false,
   });
+  const [contextMenuAdjusted, setContextMenuAdjusted] = useState<{ x: number; y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Branch context menu state
+  const [branchContextMenu, setBranchContextMenu] = useState<BranchContextMenuState | null>(null);
+
+  // Create branch modal state
+  const [createBranchModal, setCreateBranchModal] = useState<{ isOpen: boolean; sourceBranch: BranchInfo | null }>({
+    isOpen: false,
+    sourceBranch: null,
+  });
+
+  // Get current branch name
+  const currentBranch = useMemo(() => {
+    const headBranch = localBranches.find(b => b.is_head);
+    return headBranch?.name || null;
+  }, [localBranches]);
 
   // Sort remote branches based on preference
   const remoteBranches = sortRemoteBranches(remoteBranchesUnsorted, remoteSortOrder);
@@ -282,6 +307,40 @@ export const Sidebar: FC<SidebarProps> = memo(({
     closeContextMenu();
   }, [setRemoteSortOrder, closeContextMenu]);
 
+  // Branch context menu handlers
+  const handleBranchContextMenu = useCallback((branch: BranchInfo, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setBranchContextMenu({
+      branch,
+      position: { x: event.clientX, y: event.clientY },
+    });
+  }, []);
+
+  const closeBranchContextMenu = useCallback(() => {
+    setBranchContextMenu(null);
+  }, []);
+
+  // Branch context menu action handlers
+  const handleCopyBranchName = useCallback((branch: BranchInfo) => {
+    navigator.clipboard.writeText(branch.name);
+    closeBranchContextMenu();
+  }, [closeBranchContextMenu]);
+
+  const handleNewBranch = useCallback((branch: BranchInfo) => {
+    closeBranchContextMenu();
+    setCreateBranchModal({ isOpen: true, sourceBranch: branch });
+  }, [closeBranchContextMenu]);
+
+  const handleCloseCreateBranchModal = useCallback(() => {
+    setCreateBranchModal({ isOpen: false, sourceBranch: null });
+  }, []);
+
+  const handleCreateBranch = useCallback((branchName: string, startPoint: string, checkout: boolean) => {
+    onCreateBranch?.(branchName, startPoint, checkout);
+    handleCloseCreateBranchModal();
+  }, [onCreateBranch, handleCloseCreateBranchModal]);
+
   // Clear filter
   const handleClearFilter = useCallback(() => {
     setFilter('');
@@ -312,6 +371,43 @@ export const Sidebar: FC<SidebarProps> = memo(({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [closeContextMenu]);
+
+  // Adjust context menu position to keep it in viewport
+  useEffect(() => {
+    if (contextMenu.visible && contextMenuRef.current) {
+      const rect = contextMenuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const padding = 8;
+
+      let newX = contextMenu.x;
+      let newY = contextMenu.y;
+
+      // Check right edge
+      if (contextMenu.x + rect.width > viewportWidth - padding) {
+        newX = Math.max(padding, viewportWidth - rect.width - padding);
+      }
+
+      // Check left edge
+      if (newX < padding) {
+        newX = padding;
+      }
+
+      // Check bottom edge
+      if (contextMenu.y + rect.height > viewportHeight - padding) {
+        newY = Math.max(padding, viewportHeight - rect.height - padding);
+      }
+
+      // Check top edge
+      if (newY < padding) {
+        newY = padding;
+      }
+
+      setContextMenuAdjusted({ x: newX, y: newY });
+    } else {
+      setContextMenuAdjusted(null);
+    }
+  }, [contextMenu.visible, contextMenu.x, contextMenu.y]);
 
   // Extract parent folder name from path
   const getParentFolder = (path?: string) => {
@@ -399,6 +495,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
               onToggleExpand={handleToggleExpand}
               onBranchClick={handleBranchClick}
               onBranchDoubleClick={handleLocalBranchDoubleClick}
+              onBranchContextMenu={handleBranchContextMenu}
             />
           ) : filter ? (
             <div className="sidebar-empty">{t('sidebar.noMatches')}</div>
@@ -421,6 +518,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
               onToggleExpand={handleToggleExpand}
               onBranchClick={handleBranchClick}
               onBranchDoubleClick={handleRemoteBranchDoubleClick}
+              onBranchContextMenu={handleBranchContextMenu}
               isRemote
             />
           ) : filter ? (
@@ -473,8 +571,11 @@ export const Sidebar: FC<SidebarProps> = memo(({
       {contextMenu.visible && (
         <div
           ref={contextMenuRef}
-          className="sidebar-context-menu"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className={`sidebar-context-menu ${contextMenuAdjusted ? 'visible' : ''}`}
+          style={{
+            top: contextMenuAdjusted?.y ?? contextMenu.y,
+            left: contextMenuAdjusted?.x ?? contextMenu.x
+          }}
         >
           <div className="context-menu-item" onClick={handleAddRemoteClick}>
             <span className="context-menu-label">{t('contextMenu.addNewRemote')}</span>
@@ -522,6 +623,27 @@ export const Sidebar: FC<SidebarProps> = memo(({
           </div>
         </div>
       )}
+
+      {/* Branch Context Menu */}
+      {branchContextMenu && branchContextMenu.branch && (
+        <BranchContextMenu
+          branch={branchContextMenu.branch}
+          currentBranch={currentBranch}
+          position={branchContextMenu.position}
+          onClose={closeBranchContextMenu}
+          onCopyBranchName={handleCopyBranchName}
+          onNewBranch={handleNewBranch}
+        />
+      )}
+
+      {/* Create Branch Modal */}
+      <CreateBranchModal
+        isOpen={createBranchModal.isOpen}
+        onClose={handleCloseCreateBranchModal}
+        onCreate={handleCreateBranch}
+        sourceBranch={createBranchModal.sourceBranch}
+        localBranches={localBranches}
+      />
     </div>
   );
 });

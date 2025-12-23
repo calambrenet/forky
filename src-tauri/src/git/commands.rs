@@ -280,3 +280,15 @@ pub fn git_checkout_track(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_checkout_track(path, &local_branch, &remote_branch)
 }
+
+#[tauri::command]
+pub fn git_create_branch(
+    branch_name: String,
+    start_point: String,
+    checkout: bool,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_create_branch(path, &branch_name, &start_point, checkout)
+}

@@ -267,6 +267,13 @@
   box-shadow: 0 4px 20px var(--shadow-color);
   padding: 6px 0;
   z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.sidebar-context-menu.visible {
+  opacity: 1;
+  visibility: visible;
   animation: contextMenuFadeIn 0.1s ease-out;
 }
 

@@ -46,6 +46,7 @@ pub fn run() {
             git_commands::git_test_remote_connection,
             git_commands::git_checkout,
             git_commands::git_checkout_track,
+            git_commands::git_create_branch,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
             watcher_commands::start_file_watcher,

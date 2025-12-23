@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { GitOperationState, GitOperationResult, GitLogEntry } from '../types/git';
 
-type OperationType = 'Fetch' | 'Pull' | 'Push' | 'Commit' | 'Checkout' | 'Merge' | 'Stash' | 'Other';
+type OperationType = 'Fetch' | 'Pull' | 'Push' | 'Commit' | 'Checkout' | 'Branch' | 'Merge' | 'Stash' | 'Other';
 
 interface GitOperationStore {
   // State

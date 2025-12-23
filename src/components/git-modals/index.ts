@@ -14,3 +14,5 @@ export { GitCredentialModal } from './GitCredentialModal';
 export type { CredentialRequest } from './GitCredentialModal';
 
 export { TrackRemoteBranchModal } from './TrackRemoteBranchModal';
+
+export { CreateBranchModal } from './CreateBranchModal';

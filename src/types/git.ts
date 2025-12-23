@@ -133,7 +133,7 @@ export interface GitOptionsStorage {
 export interface GitLogEntry {
   id: string;
   timestamp: Date;
-  operationType: 'Fetch' | 'Pull' | 'Push' | 'Checkout' | 'Commit' | 'Merge' | 'Stash' | 'Other';
+  operationType: 'Fetch' | 'Pull' | 'Push' | 'Checkout' | 'Branch' | 'Commit' | 'Merge' | 'Stash' | 'Other';
   operationName: string;
   command: string;
   output: string;

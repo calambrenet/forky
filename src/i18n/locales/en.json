@@ -181,6 +181,17 @@
       "localBranch": "Local branch:",
       "branchExists": "Local branch {{branch}} already exists",
       "track": "Track"
+    },
+    "createBranch": {
+      "title": "Create Branch",
+      "description": "Create new branch",
+      "createAt": "Create branch at",
+      "branchName": "Branch name",
+      "branchNamePlaceholder": "Enter branch name",
+      "checkoutAfterCreate": "Check out after create",
+      "branchExists": "Branch '{{branch}}' already exists",
+      "create": "Create",
+      "createAndCheckout": "Create and Checkout"
     }
   },
   "activityLog": {
@@ -260,5 +271,21 @@
     "commentsPlaceholder": "Tell us about your experience...",
     "send": "Send Feedback",
     "ratingRequired": "Please select a rating"
+  },
+  "branchContextMenu": {
+    "checkout": "Checkout '{{branch}}'",
+    "fastForward": "Fast-Forward '{{branch}}' from '{{remote}}'",
+    "pull": "Pull '{{remote}}/{{branch}}' into '{{branch}}'",
+    "push": "Push '{{branch}}' to '{{remote}}'",
+    "createPullRequest": "Create Pull Request on '{{remote}}'",
+    "mergeInto": "Merge '{{branch}}' into Current Branch",
+    "rebaseOn": "Rebase Current Branch on '{{branch}}'",
+    "interactiveRebase": "Interactive Rebase '{{branch}}'",
+    "newBranch": "New Branch...",
+    "newTag": "New Tag...",
+    "gitFlow": "Git-Flow",
+    "rename": "Rename '{{branch}}'...",
+    "delete": "Delete '{{branch}}'...",
+    "copyBranchName": "Copy Branch Name"
   }
 }

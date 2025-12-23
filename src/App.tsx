@@ -280,6 +280,47 @@ function App() {
     }
   }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
 
+  // Handle creating a new branch
+  const handleCreateBranch = useCallback(async (branchName: string, startPoint: string, checkout: boolean) => {
+    if (!activeTab?.path || isGitLoading) return;
+
+    const command = checkout
+      ? `git checkout -b ${branchName} ${startPoint}`
+      : `git branch ${branchName} ${startPoint}`;
+    startOperation('Branch', branchName);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_create_branch', {
+        branchName,
+        startPoint,
+        checkout,
+      });
+
+      completeOperation(result);
+      addLogEntry('Branch', `Create '${branchName}' from '${startPoint}'`, command, result.message, result.success);
+
+      if (result.success) {
+        if (checkout) {
+          // Update the current branch in the tab
+          const activeTabId = useRepositoryStore.getState().activeTabId;
+          if (activeTabId) {
+            setTabCurrentBranch(activeTabId, branchName);
+          }
+        }
+        // Refresh repository data
+        await refreshActiveTab();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Branch');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error creating branch:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Branch', `Create '${branchName}' from '${startPoint}'`, command, String(error), false);
+      addAlert('error', 'Branch Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
+
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {
     try {
@@ -621,6 +662,7 @@ function App() {
               onTrackRemoteBranch={handleOpenTrackBranchModal}
               onNavigateToCommit={handleNavigateToCommit}
               onAddRemote={openAddRemoteModal}
+              onCreateBranch={handleCreateBranch}
             />
           </div>
           <Resizer

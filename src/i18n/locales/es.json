@@ -181,6 +181,17 @@
       "localBranch": "Rama local:",
       "branchExists": "La rama local {{branch}} ya existe",
       "track": "Rastrear"
+    },
+    "createBranch": {
+      "title": "Crear Rama",
+      "description": "Crear nueva rama",
+      "createAt": "Crear rama en",
+      "branchName": "Nombre de rama",
+      "branchNamePlaceholder": "Introduce el nombre de la rama",
+      "checkoutAfterCreate": "Checkout después de crear",
+      "branchExists": "La rama '{{branch}}' ya existe",
+      "create": "Crear",
+      "createAndCheckout": "Crear y Checkout"
     }
   },
   "activityLog": {
@@ -260,5 +271,21 @@
     "commentsPlaceholder": "Cuéntanos tu experiencia...",
     "send": "Enviar Feedback",
     "ratingRequired": "Por favor, selecciona una valoración"
+  },
+  "branchContextMenu": {
+    "checkout": "Checkout '{{branch}}'",
+    "fastForward": "Fast-Forward '{{branch}}' desde '{{remote}}'",
+    "pull": "Pull '{{remote}}/{{branch}}' hacia '{{branch}}'",
+    "push": "Push '{{branch}}' a '{{remote}}'",
+    "createPullRequest": "Crear Pull Request en '{{remote}}'",
+    "mergeInto": "Merge '{{branch}}' en la Rama Actual",
+    "rebaseOn": "Rebase de la Rama Actual sobre '{{branch}}'",
+    "interactiveRebase": "Rebase Interactivo '{{branch}}'",
+    "newBranch": "Nueva Rama...",
+    "newTag": "Nueva Etiqueta...",
+    "gitFlow": "Git-Flow",
+    "rename": "Renombrar '{{branch}}'...",
+    "delete": "Eliminar '{{branch}}'...",
+    "copyBranchName": "Copiar Nombre de Rama"
   }
 }
