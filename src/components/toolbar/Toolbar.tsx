@@ -1,4 +1,4 @@
-import { FC, memo } from 'react';
+import { FC, memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -22,10 +22,12 @@ import {
   LogOut,
   Check,
   Smile,
+  ChevronDown,
 } from 'lucide-react';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
 import { RepositoryInfoBox, GitOperationState } from '../repository-info-box';
-import { BranchInfo } from '../../types/git';
+import { StashDropdown } from './StashDropdown';
+import { BranchInfo, StashInfo } from '../../types/git';
 import './Toolbar.css';
 
 interface ToolbarProps {
@@ -34,12 +36,16 @@ interface ToolbarProps {
   repoPath?: string;
   currentBranch?: string;
   branches?: BranchInfo[];
+  stashes?: StashInfo[];
   onBranchChange?: (branchName: string) => void;
   onThemeChange?: (theme: 'system' | 'light' | 'dark') => void;
   currentTheme?: 'system' | 'light' | 'dark';
   onFetch?: () => void;
   onPull?: () => void;
   onPush?: () => void;
+  onStash?: () => void;
+  onSaveSnapshot?: () => void;
+  onStashSelect?: (stash: StashInfo) => void;
   isLoading?: boolean;
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
@@ -55,12 +61,16 @@ export const Toolbar: FC<ToolbarProps> = memo(({
   repoPath,
   currentBranch,
   branches = [],
+  stashes = [],
   onBranchChange,
   onThemeChange,
   currentTheme = 'system',
   onFetch,
   onPull,
   onPush,
+  onStash,
+  onSaveSnapshot,
+  onStashSelect,
   isLoading = false,
   gitOperation,
   onDismissOperation,
@@ -69,6 +79,7 @@ export const Toolbar: FC<ToolbarProps> = memo(({
 }) => {
   const { t } = useTranslation();
   const appWindow = getCurrentWindow();
+  const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
 
   const handleOpenInTerminal = async () => {
     if (!repoPath) {
@@ -127,10 +138,32 @@ export const Toolbar: FC<ToolbarProps> = memo(({
           <ArrowUp size={ICON_SIZE} />
           <span className="btn-label">{t('toolbar.push')}</span>
         </button>
-        <button className="toolbar-btn" title={t('toolbar.stash')}>
-          <Archive size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.stash')}</span>
-        </button>
+        <div className="toolbar-split-btn">
+          <button
+            className="toolbar-btn split-main"
+            title={t('toolbar.stash')}
+            onClick={onStash}
+            disabled={isLoading}
+          >
+            <Archive size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.stash')}</span>
+          </button>
+          <button
+            className="toolbar-btn split-dropdown-trigger"
+            onClick={() => setStashDropdownOpen(!stashDropdownOpen)}
+            disabled={isLoading}
+          >
+            <ChevronDown size={10} />
+          </button>
+          {stashDropdownOpen && (
+            <StashDropdown
+              stashes={stashes}
+              onStashClick={(stash) => onStashSelect?.(stash)}
+              onSaveSnapshot={() => onSaveSnapshot?.()}
+              onClose={() => setStashDropdownOpen(false)}
+            />
+          )}
+        </div>
       </div>
 
       {/* Center section: Repository Info Box */}

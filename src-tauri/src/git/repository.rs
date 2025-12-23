@@ -35,6 +35,15 @@ pub struct TagInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StashInfo {
+    pub index: usize,
+    pub id: String,
+    pub message: String,
+    pub branch: String,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileStatus {
     pub path: String,
     pub status: String,
@@ -1703,4 +1712,219 @@ pub fn git_delete_branch(
             branch_name
         )))
     }
+}
+
+// ============================================================================
+// Stash Operations
+// ============================================================================
+
+pub fn get_stashes(repo_path: &str) -> Result<Vec<StashInfo>, String> {
+    use std::process::Command;
+
+    // Use git stash list with custom format to get structured data
+    // Format: index|ref|message|timestamp
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("list")
+        .arg("--format=%gd|%gs|%ct")
+        .output()
+        .map_err(|e| format!("Failed to list stashes: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to list stashes: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut stashes = Vec::new();
+
+    for (index, line) in stdout.lines().enumerate() {
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() >= 3 {
+            let id = parts[0].to_string(); // e.g., "stash@{0}"
+            let message = parts[1].to_string(); // e.g., "WIP on main: abc1234 commit message"
+            let timestamp: i64 = parts[2].parse().unwrap_or(0);
+
+            // Extract branch name from message (format: "WIP on branch: ..." or "On branch: ...")
+            let branch = extract_branch_from_stash_message(&message);
+
+            stashes.push(StashInfo {
+                index,
+                id,
+                message,
+                branch,
+                timestamp,
+            });
+        }
+    }
+
+    Ok(stashes)
+}
+
+fn extract_branch_from_stash_message(message: &str) -> String {
+    // Stash messages typically look like:
+    // "WIP on main: abc1234 commit message"
+    // "On main: custom message"
+    // "index on main: abc1234 commit message"
+    if let Some(rest) = message.strip_prefix("WIP on ") {
+        if let Some(colon_pos) = rest.find(':') {
+            return rest[..colon_pos].to_string();
+        }
+    }
+    if let Some(rest) = message.strip_prefix("On ") {
+        if let Some(colon_pos) = rest.find(':') {
+            return rest[..colon_pos].to_string();
+        }
+    }
+    if let Some(rest) = message.strip_prefix("index on ") {
+        if let Some(colon_pos) = rest.find(':') {
+            return rest[..colon_pos].to_string();
+        }
+    }
+    String::new()
+}
+
+pub fn git_stash_save(
+    repo_path: &str,
+    message: Option<&str>,
+    include_untracked: bool,
+    keep_index: bool,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let mut cmd = Command::new("git");
+    cmd.arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("push");
+
+    if include_untracked {
+        cmd.arg("-u");
+    }
+
+    if keep_index {
+        cmd.arg("--keep-index");
+    }
+
+    if let Some(msg) = message {
+        if !msg.trim().is_empty() {
+            cmd.arg("-m").arg(msg);
+        }
+    }
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to save stash: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check if there are no changes to stash
+        if stderr.contains("No local changes to save") || stdout.contains("No local changes to save") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: "No local changes to save".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("no_changes".to_string()),
+            });
+        }
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result("Stash saved successfully".to_string()))
+}
+
+pub fn git_stash_apply(repo_path: &str, stash_index: usize) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let stash_ref = format!("stash@{{{}}}", stash_index);
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("apply")
+        .arg(&stash_ref)
+        .output()
+        .map_err(|e| format!("Failed to apply stash: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check for conflicts
+        if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: format!("Stash applied with conflicts. Resolve conflicts and commit.\n{}", stderr.trim()),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("conflicts".to_string()),
+            });
+        }
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result("Stash applied successfully".to_string()))
+}
+
+pub fn git_stash_pop(repo_path: &str, stash_index: usize) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let stash_ref = format!("stash@{{{}}}", stash_index);
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("pop")
+        .arg(&stash_ref)
+        .output()
+        .map_err(|e| format!("Failed to pop stash: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check for conflicts
+        if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: format!("Stash popped with conflicts. Resolve conflicts and commit. The stash was not dropped.\n{}", stderr.trim()),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("conflicts".to_string()),
+            });
+        }
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result("Stash popped successfully".to_string()))
+}
+
+pub fn git_stash_drop(repo_path: &str, stash_index: usize) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let stash_ref = format!("stash@{{{}}}", stash_index);
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("drop")
+        .arg(&stash_ref)
+        .output()
+        .map_err(|e| format!("Failed to drop stash: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result(format!("Stash {} dropped", stash_ref)))
 }

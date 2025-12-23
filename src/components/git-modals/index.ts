@@ -22,3 +22,7 @@ export { CreateTagModal } from './CreateTagModal';
 export { RenameBranchModal } from './RenameBranchModal';
 
 export { DeleteBranchModal } from './DeleteBranchModal';
+
+export { SaveStashModal } from './SaveStashModal';
+
+export { ApplyStashModal } from './ApplyStashModal';

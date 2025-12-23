@@ -7,6 +7,7 @@ import {
   BranchInfo,
   BranchHead,
   TagInfo,
+  StashInfo,
   CommitInfo,
   FileStatus,
   TabState,
@@ -48,6 +49,7 @@ const createEmptyTabState = (): TabState => ({
   branches: [],
   branchHeads: [],
   tags: [],
+  stashes: [],
   remotes: [],
   commits: [],
   fileStatuses: [],
@@ -199,11 +201,12 @@ export const useRepositoryStore = create<RepositoryStore>()(
         // Internal actions
         _loadRepositoryData: async (tabId: string, persistedData?: PersistedTabData) => {
           try {
-            const [branchesData, branchHeadsData, tagsData, remotesData, commitsData, statusData] =
+            const [branchesData, branchHeadsData, tagsData, stashesData, remotesData, commitsData, statusData] =
               await Promise.all([
                 invoke<BranchInfo[]>('get_branches'),
                 invoke<BranchHead[]>('get_branch_heads'),
                 invoke<TagInfo[]>('get_tags'),
+                invoke<StashInfo[]>('get_stashes'),
                 invoke<string[]>('get_remotes'),
                 invoke<CommitInfo[]>('get_commits', { limit: 100 }),
                 invoke<FileStatus[]>('get_file_status'),
@@ -218,6 +221,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
                     branches: branchesData,
                     branchHeads: branchHeadsData,
                     tags: tagsData,
+                    stashes: stashesData,
                     remotes: remotesData,
                     commits: commitsData,
                     fileStatuses: statusData,
@@ -314,6 +318,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
                 branches: [],
                 branchHeads: [],
                 tags: [],
+                stashes: [],
                 remotes: [],
                 commits: [],
                 fileStatuses: [],
@@ -377,4 +382,9 @@ export const useActiveTabFileStatuses = () => {
 export const useLocalChangesCount = () => {
   const tabState = useActiveTabState();
   return tabState?.fileStatuses.length ?? 0;
+};
+
+export const useActiveTabStashes = () => {
+  const tabState = useActiveTabState();
+  return tabState?.stashes ?? [];
 };

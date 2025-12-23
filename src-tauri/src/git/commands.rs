@@ -1,6 +1,6 @@
 use crate::git::repository::{
     self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FileStatus,
-    GitOperationResult, RepositoryInfo, TagInfo, FetchOptions, PullOptions, PushOptions,
+    GitOperationResult, RepositoryInfo, TagInfo, StashInfo, FetchOptions, PullOptions, PushOptions,
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -330,4 +330,57 @@ pub fn git_delete_branch(
     let repo_path = state.current_repo_path.lock().unwrap();
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_delete_branch(path, &branch_name, force, delete_remote, remote_name.as_deref())
+}
+
+// ============================================================================
+// Stash Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_stashes(state: State<AppState>) -> Result<Vec<StashInfo>, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::get_stashes(path)
+}
+
+#[tauri::command]
+pub fn git_stash_save(
+    message: Option<String>,
+    include_untracked: bool,
+    keep_index: bool,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_stash_save(path, message.as_deref(), include_untracked, keep_index)
+}
+
+#[tauri::command]
+pub fn git_stash_apply(
+    stash_index: usize,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_stash_apply(path, stash_index)
+}
+
+#[tauri::command]
+pub fn git_stash_pop(
+    stash_index: usize,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_stash_pop(path, stash_index)
+}
+
+#[tauri::command]
+pub fn git_stash_drop(
+    stash_index: usize,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_stash_drop(path, stash_index)
 }

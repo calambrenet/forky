@@ -106,3 +106,33 @@
   width: 20px;
   height: 20px;
 }
+
+/* Split button for Stash */
+.toolbar-split-btn {
+  display: flex;
+  position: relative;
+}
+
+.toolbar-split-btn .split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: 8px;
+}
+
+.toolbar-split-btn .split-dropdown-trigger {
+  min-width: 20px;
+  width: 20px;
+  padding: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid var(--border-color);
+}
+
+.toolbar-split-btn .split-dropdown-trigger svg {
+  width: 10px;
+  height: 10px;
+}
+
+.toolbar-split-btn .split-dropdown-trigger:hover {
+  background: var(--bg-hover);
+}

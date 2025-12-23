@@ -62,14 +62,16 @@ export const TitleBar: FC<TitleBarProps> = ({ children }) => {
     // Only drag on left click and if not clicking on interactive elements
     if (e.buttons === 1) {
       const target = e.target as HTMLElement;
-      // Don't drag if clicking on buttons, inputs, menus, or titlebar controls
+      // Don't drag if clicking on buttons, inputs, menus, dropdowns, or titlebar controls
       if (
         target.closest('button') ||
         target.closest('input') ||
         target.closest('.titlebar-controls') ||
         target.closest('.menu-container') ||
         target.closest('.menu-dropdown') ||
-        target.closest('.menu-item')
+        target.closest('.menu-item') ||
+        target.closest('.stash-dropdown') ||
+        target.closest('.stash-dropdown-item')
       ) {
         return;
       }

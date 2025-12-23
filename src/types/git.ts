@@ -26,6 +26,14 @@ export interface TagInfo {
   commit_sha: string;
 }
 
+export interface StashInfo {
+  index: number;
+  id: string;
+  message: string;
+  branch: string;
+  timestamp: number;
+}
+
 export interface FileStatus {
   path: string;
   status: string;
@@ -187,6 +195,7 @@ export interface TabState {
   branches: BranchInfo[];
   branchHeads: BranchHead[];
   tags: TagInfo[];
+  stashes: StashInfo[];
   remotes: string[];
   commits: CommitInfo[];
   fileStatuses: FileStatus[];

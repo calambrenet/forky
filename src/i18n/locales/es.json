@@ -222,7 +222,37 @@
       "alsoDeleteRemote": "También eliminar rama remota",
       "forceDelete": "Forzar eliminación",
       "delete": "Eliminar"
+    },
+    "saveStash": {
+      "title": "Guardar Stash",
+      "titleSnapshot": "Guardar Snapshot",
+      "description": "Guarda tus cambios locales en un nuevo stash",
+      "descriptionSnapshot": "Guarda tus cambios locales en un nuevo stash, pero mantenlos en el directorio de trabajo",
+      "message": "Mensaje",
+      "messagePlaceholder": "Mensaje del stash (opcional)",
+      "stageNewFiles": "Preparar archivos nuevos",
+      "stageNewFilesHint": "El stash ignorará los archivos nuevos hasta que los prepares",
+      "saveStash": "Guardar Stash",
+      "saveSnapshot": "Guardar Snapshot"
+    },
+    "applyStash": {
+      "title": "Aplicar Stash",
+      "description": "Elige cómo aplicar este stash",
+      "stashInfo": "Info del stash",
+      "apply": "Aplicar",
+      "applyDescription": "Aplicar cambios, mantener stash",
+      "pop": "Pop",
+      "popDescription": "Aplicar cambios, eliminar stash",
+      "drop": "Drop",
+      "dropDescription": "Eliminar stash sin aplicar"
     }
+  },
+  "stashDropdown": {
+    "recentStashes": "Stashes Recientes",
+    "saveSnapshot": "Guardar Snapshot...",
+    "noStashes": "Sin stashes",
+    "yesterday": "Ayer",
+    "daysAgo": "días atrás"
   },
   "activityLog": {
     "title": "Registro de Actividad Git",

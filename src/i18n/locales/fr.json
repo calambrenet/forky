@@ -222,7 +222,37 @@
       "alsoDeleteRemote": "Supprimer aussi la branche distante",
       "forceDelete": "Forcer la suppression",
       "delete": "Supprimer"
+    },
+    "saveStash": {
+      "title": "Sauvegarder Stash",
+      "titleSnapshot": "Sauvegarder Snapshot",
+      "description": "Sauvegardez vos modifications locales dans un nouveau stash",
+      "descriptionSnapshot": "Sauvegardez vos modifications locales dans un nouveau stash, mais gardez-les dans le répertoire de travail",
+      "message": "Message",
+      "messagePlaceholder": "Message du stash (optionnel)",
+      "stageNewFiles": "Indexer les nouveaux fichiers",
+      "stageNewFilesHint": "Le stash ignorera les nouveaux fichiers jusqu'à ce que vous les indexiez",
+      "saveStash": "Sauvegarder Stash",
+      "saveSnapshot": "Sauvegarder Snapshot"
+    },
+    "applyStash": {
+      "title": "Appliquer Stash",
+      "description": "Choisissez comment appliquer ce stash",
+      "stashInfo": "Info du stash",
+      "apply": "Appliquer",
+      "applyDescription": "Appliquer les modifications, garder le stash",
+      "pop": "Pop",
+      "popDescription": "Appliquer les modifications, supprimer le stash",
+      "drop": "Drop",
+      "dropDescription": "Supprimer le stash sans l'appliquer"
     }
+  },
+  "stashDropdown": {
+    "recentStashes": "Stashes Récents",
+    "saveSnapshot": "Sauvegarder Snapshot...",
+    "noStashes": "Aucun stash",
+    "yesterday": "Hier",
+    "daysAgo": "jours"
   },
   "activityLog": {
     "title": "Journal d'Activité Git",

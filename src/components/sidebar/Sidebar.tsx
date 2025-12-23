@@ -1,7 +1,7 @@
 import { FC, useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, FileEdit, GitMerge, Search, X } from 'lucide-react';
-import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../../types/git';
+import { BranchInfo, BranchHead, TagInfo, StashInfo, ViewMode, RemoteSortOrder } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { BranchTree } from './BranchTree';
 import { BranchContextMenu } from './BranchContextMenu';
@@ -23,6 +23,7 @@ interface SidebarProps {
   branches: BranchInfo[];
   branchHeads: BranchHead[];
   tags: TagInfo[];
+  stashes: StashInfo[];
   remotes: string[];
   localChangesCount?: number;
   viewMode: ViewMode;
@@ -36,6 +37,7 @@ interface SidebarProps {
   onCreateTag?: (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => void;
   onRenameBranch?: (oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => void;
   onDeleteBranch?: (branchName: string, force: boolean, deleteRemote: boolean, remoteName: string | null) => void;
+  onStashClick?: (stash: StashInfo) => void;
   expandTagsSection?: boolean;
 }
 
@@ -143,6 +145,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
   branches,
   branchHeads,
   tags,
+  stashes,
   remotes,
   localChangesCount = 0,
   viewMode,
@@ -156,6 +159,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
   onCreateTag,
   onRenameBranch,
   onDeleteBranch,
+  onStashClick,
   expandTagsSection,
 }) => {
   const { t } = useTranslation();
@@ -631,11 +635,25 @@ export const Sidebar: FC<SidebarProps> = memo(({
 
         <CollapsibleSection
           title={t('sidebar.stashes')}
-          count={0}
+          count={stashes.length}
           defaultOpen={false}
           storageKey="stashes"
         >
-          <div className="sidebar-empty">{t('sidebar.noStashes')}</div>
+          {stashes.length > 0 ? (
+            <div className="stash-list">
+              {stashes.map((stash) => (
+                <div
+                  key={stash.id}
+                  className="stash-item"
+                  onClick={() => onStashClick?.(stash)}
+                >
+                  <span className="stash-name">{stash.message}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="sidebar-empty">{t('sidebar.noStashes')}</div>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection

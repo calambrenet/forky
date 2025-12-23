@@ -441,3 +441,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Stash List Styles */
+.stash-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.stash-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px 5px 20px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  border-radius: 4px;
+  margin: 1px 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.stash-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.stash-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

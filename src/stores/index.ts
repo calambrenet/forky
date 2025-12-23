@@ -41,6 +41,7 @@ export {
   useActiveTabState,
   useActiveTabBranches,
   useActiveTabRemotes,
+  useActiveTabStashes,
   useActiveTabFileStatuses,
   useLocalChangesCount,
 } from './repositoryStore';

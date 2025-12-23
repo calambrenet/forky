@@ -239,3 +239,78 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Checkbox with hint text */
+.checkbox-with-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkbox-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: 24px;
+  line-height: 1.4;
+}
+
+/* Stash Details */
+.stash-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.stash-details-row {
+  display: flex;
+  gap: 8px;
+}
+
+.stash-details-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.stash-details-value {
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.stash-details-value.stash-message {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+}
+
+/* Stash Actions */
+.stash-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stash-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.btn-secondary {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-hover);
+}

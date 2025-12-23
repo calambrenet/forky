@@ -10,6 +10,7 @@ import './LocalChangesView.css';
 
 interface LocalChangesViewProps {
   repoPath: string;
+  refreshKey?: number;
   onRefreshRepository?: () => void;
 }
 
@@ -22,6 +23,7 @@ interface ContextMenuState {
 
 export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   repoPath,
+  refreshKey,
   onRefreshRepository,
 }) => {
   const { t } = useTranslation();
@@ -69,7 +71,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
 
   useEffect(() => {
     loadFileStatus();
-  }, [loadFileStatus, repoPath]);
+  }, [loadFileStatus, repoPath, refreshKey]);
 
   const loadDiff = useCallback(async (file: FileStatus) => {
     setIsLoadingDiff(true);

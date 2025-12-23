@@ -222,7 +222,37 @@
       "alsoDeleteRemote": "Also delete remote branch",
       "forceDelete": "Force delete",
       "delete": "Delete"
+    },
+    "saveStash": {
+      "title": "Save Stash",
+      "titleSnapshot": "Save Snapshot",
+      "description": "Save your local changes to a new stash",
+      "descriptionSnapshot": "Save your local changes to a new stash, but keep them in the working directory",
+      "message": "Message",
+      "messagePlaceholder": "Stash message (optional)",
+      "stageNewFiles": "Stage new files",
+      "stageNewFilesHint": "Stash will ignore new files until you stage them",
+      "saveStash": "Save Stash",
+      "saveSnapshot": "Save Snapshot"
+    },
+    "applyStash": {
+      "title": "Apply Stash",
+      "description": "Choose how to apply this stash",
+      "stashInfo": "Stash info",
+      "apply": "Apply",
+      "applyDescription": "Apply changes, keep stash",
+      "pop": "Pop",
+      "popDescription": "Apply changes, remove stash",
+      "drop": "Drop",
+      "dropDescription": "Remove stash without applying"
     }
+  },
+  "stashDropdown": {
+    "recentStashes": "Recent Stashes",
+    "saveSnapshot": "Save Snapshot...",
+    "noStashes": "No stashes",
+    "yesterday": "Yesterday",
+    "daysAgo": "days ago"
   },
   "activityLog": {
     "title": "Git Activity Log",

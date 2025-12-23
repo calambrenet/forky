@@ -23,6 +23,8 @@ const TrackRemoteBranchModal = lazy(() => import('./components/git-modals/TrackR
 const GitActivityLog = lazy(() => import('./components/git-activity-log').then(m => ({ default: m.GitActivityLog })));
 const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m => ({ default: m.AddRemoteModal })));
 const FeedbackModal = lazy(() => import('./components/feedback-modal').then(m => ({ default: m.FeedbackModal })));
+const SaveStashModal = lazy(() => import('./components/git-modals/SaveStashModal').then(m => ({ default: m.SaveStashModal })));
+const ApplyStashModal = lazy(() => import('./components/git-modals/ApplyStashModal').then(m => ({ default: m.ApplyStashModal })));
 
 // Zustand stores
 import {
@@ -30,6 +32,7 @@ import {
   useTabs,
   useActiveTab,
   useActiveTabState,
+  useActiveTabStashes,
   useIsRestoring,
   useLocalChangesCount,
   useGitOperationStore,
@@ -49,7 +52,7 @@ import {
 } from './stores';
 
 import { useTheme } from './hooks/useTheme';
-import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage } from './types/git';
+import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage, StashInfo } from './types/git';
 import './styles/global.css';
 import './App.css';
 
@@ -81,6 +84,7 @@ function App() {
   const tabs = useTabs();
   const activeTab = useActiveTab();
   const activeTabState = useActiveTabState();
+  const stashes = useActiveTabStashes();
   const isRestoring = useIsRestoring();
   const localChangesCount = useLocalChangesCount();
   const { openRepository, selectTab, closeTab, updateTabState, refreshActiveTab, setTabHasPendingChanges, setTabCurrentBranch } = useRepositoryStore();
@@ -133,6 +137,15 @@ function App() {
 
   // Feedback modal state
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+
+  // Stash modal state
+  const [saveStashModalOpen, setSaveStashModalOpen] = useState(false);
+  const [isSnapshotMode, setIsSnapshotMode] = useState(false);
+  const [applyStashModalOpen, setApplyStashModalOpen] = useState(false);
+  const [selectedStash, setSelectedStash] = useState<StashInfo | null>(null);
+
+  // Local changes refresh key - increment to force reload
+  const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
 
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
@@ -509,6 +522,155 @@ function App() {
     }
   }, [addLogEntry, addAlert]);
 
+  // Stash handlers
+  const handleOpenSaveStashModal = useCallback(() => {
+    setIsSnapshotMode(false);
+    setSaveStashModalOpen(true);
+  }, []);
+
+  const handleOpenSaveSnapshotModal = useCallback(() => {
+    setIsSnapshotMode(true);
+    setSaveStashModalOpen(true);
+  }, []);
+
+  const handleCloseSaveStashModal = useCallback(() => {
+    setSaveStashModalOpen(false);
+  }, []);
+
+  const handleStashSelect = useCallback((stash: StashInfo) => {
+    setSelectedStash(stash);
+    setApplyStashModalOpen(true);
+  }, []);
+
+  const handleCloseApplyStashModal = useCallback(() => {
+    setApplyStashModalOpen(false);
+    setSelectedStash(null);
+  }, []);
+
+  const handleSaveStash = useCallback(async (message: string, includeUntracked: boolean, keepIndex: boolean) => {
+    if (!activeTab?.path || isGitLoading) return;
+
+    const operationType = keepIndex ? 'Snapshot' : 'Stash';
+    const command = keepIndex
+      ? `git stash push --keep-index${includeUntracked ? ' -u' : ''}${message ? ` -m "${message}"` : ''}`
+      : `git stash push${includeUntracked ? ' -u' : ''}${message ? ` -m "${message}"` : ''}`;
+    startOperation('Other', operationType);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_stash_save', {
+        message: message || null,
+        includeUntracked,
+        keepIndex,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Save ${operationType.toLowerCase()}`, command, result.message, result.success);
+
+      if (result.success) {
+        await refreshActiveTab();
+        setLocalChangesRefreshKey(k => k + 1);
+        setSaveStashModalOpen(false);
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, operationType);
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error(`Error saving ${operationType.toLowerCase()}:`, error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Save ${operationType.toLowerCase()}`, command, String(error), false);
+      addAlert('error', `${operationType} Error`, String(error));
+    }
+  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, setLocalChangesRefreshKey]);
+
+  const handleApplyStash = useCallback(async () => {
+    if (!activeTab?.path || isGitLoading || !selectedStash) return;
+
+    const command = `git stash apply stash@{${selectedStash.index}}`;
+    startOperation('Other', 'Apply stash');
+
+    try {
+      const result = await invoke<GitOperationResult>('git_stash_apply', {
+        stashIndex: selectedStash.index,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Apply stash '${selectedStash.message}'`, command, result.message, result.success);
+
+      if (result.success) {
+        await refreshActiveTab();
+        setLocalChangesRefreshKey(k => k + 1);
+        handleCloseApplyStashModal();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Apply stash');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error applying stash:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Apply stash '${selectedStash.message}'`, command, String(error), false);
+      addAlert('error', 'Apply Stash Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, selectedStash, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleCloseApplyStashModal, setLocalChangesRefreshKey]);
+
+  const handlePopStash = useCallback(async () => {
+    if (!activeTab?.path || isGitLoading || !selectedStash) return;
+
+    const command = `git stash pop stash@{${selectedStash.index}}`;
+    startOperation('Other', 'Pop stash');
+
+    try {
+      const result = await invoke<GitOperationResult>('git_stash_pop', {
+        stashIndex: selectedStash.index,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Pop stash '${selectedStash.message}'`, command, result.message, result.success);
+
+      if (result.success) {
+        await refreshActiveTab();
+        setLocalChangesRefreshKey(k => k + 1);
+        handleCloseApplyStashModal();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Pop stash');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error popping stash:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Pop stash '${selectedStash.message}'`, command, String(error), false);
+      addAlert('error', 'Pop Stash Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, selectedStash, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleCloseApplyStashModal, setLocalChangesRefreshKey]);
+
+  const handleDropStash = useCallback(async () => {
+    if (!activeTab?.path || isGitLoading || !selectedStash) return;
+
+    const command = `git stash drop stash@{${selectedStash.index}}`;
+    startOperation('Other', 'Drop stash');
+
+    try {
+      const result = await invoke<GitOperationResult>('git_stash_drop', {
+        stashIndex: selectedStash.index,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Drop stash '${selectedStash.message}'`, command, result.message, result.success);
+
+      if (result.success) {
+        await refreshActiveTab();
+        handleCloseApplyStashModal();
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Drop stash');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error dropping stash:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Drop stash '${selectedStash.message}'`, command, String(error), false);
+      addAlert('error', 'Drop Stash Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, selectedStash, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleCloseApplyStashModal]);
+
   // Execute fetch with options
   const handleFetchWithOptions = useCallback(async (options: FetchOptions) => {
     if (!activeTab?.path || isGitLoading) return;
@@ -726,6 +888,10 @@ function App() {
             onFetch={openFetchModal}
             onPull={openPullModal}
             onPush={openPushModal}
+            onStash={handleOpenSaveStashModal}
+            onSaveSnapshot={handleOpenSaveSnapshotModal}
+            onStashSelect={handleStashSelect}
+            stashes={[]}
             isLoading={isGitLoading}
             branches={[]}
             onBranchChange={handleBranchChange}
@@ -754,12 +920,16 @@ function App() {
           repoPath={activeTab?.path}
           currentBranch={activeTab?.currentBranch ?? undefined}
           branches={activeTabState?.branches ?? []}
+          stashes={stashes}
           onBranchChange={handleBranchChange}
           onThemeChange={setTheme}
           currentTheme={theme}
           onFetch={openFetchModal}
           onPull={openPullModal}
           onPush={openPushModal}
+          onStash={handleOpenSaveStashModal}
+          onSaveSnapshot={handleOpenSaveSnapshotModal}
+          onStashSelect={handleStashSelect}
           isLoading={isGitLoading}
           gitOperation={currentOperation}
           onDismissOperation={clearOperation}
@@ -787,6 +957,7 @@ function App() {
               branches={activeTabState.branches}
               branchHeads={activeTabState.branchHeads}
               tags={activeTabState.tags}
+              stashes={stashes}
               remotes={activeTabState.remotes}
               localChangesCount={localChangesCount}
               viewMode={activeTabState.viewMode}
@@ -800,6 +971,7 @@ function App() {
               onCreateTag={handleCreateTag}
               onRenameBranch={handleRenameBranch}
               onDeleteBranch={handleDeleteBranch}
+              onStashClick={handleStashSelect}
               expandTagsSection={expandTagsSection}
             />
           </div>
@@ -811,6 +983,7 @@ function App() {
           {activeTabState.viewMode === 'local-changes' ? (
             <LocalChangesView
               repoPath={activeTab?.path ?? ''}
+              refreshKey={localChangesRefreshKey}
               onRefreshRepository={refreshActiveTab}
             />
           ) : (
@@ -922,6 +1095,28 @@ function App() {
           <FeedbackModal
             isOpen={true}
             onClose={() => setFeedbackModalOpen(false)}
+          />
+        )}
+
+        {/* Save Stash Modal */}
+        {saveStashModalOpen && (
+          <SaveStashModal
+            isOpen={true}
+            onClose={handleCloseSaveStashModal}
+            onSave={handleSaveStash}
+            isSnapshot={isSnapshotMode}
+          />
+        )}
+
+        {/* Apply Stash Modal */}
+        {applyStashModalOpen && selectedStash && (
+          <ApplyStashModal
+            isOpen={true}
+            onClose={handleCloseApplyStashModal}
+            onApply={handleApplyStash}
+            onPop={handlePopStash}
+            onDrop={handleDropStash}
+            stash={selectedStash}
           />
         )}
 
