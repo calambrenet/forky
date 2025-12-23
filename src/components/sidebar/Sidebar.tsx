@@ -5,7 +5,7 @@ import { BranchInfo, BranchHead, TagInfo, ViewMode, RemoteSortOrder } from '../.
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { BranchTree } from './BranchTree';
 import { BranchContextMenu } from './BranchContextMenu';
-import { CreateBranchModal } from '../git-modals';
+import { CreateBranchModal, CreateTagModal } from '../git-modals';
 import {
   buildBranchTree,
   buildRemoteTree,
@@ -33,6 +33,8 @@ interface SidebarProps {
   onNavigateToCommit: (commitSha: string) => void;
   onAddRemote?: () => void;
   onCreateBranch?: (branchName: string, startPoint: string, checkout: boolean) => void;
+  onCreateTag?: (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => void;
+  expandTagsSection?: boolean;
 }
 
 interface ContextMenuState {
@@ -53,6 +55,7 @@ interface CollapsibleSectionProps {
   children: React.ReactNode;
   defaultOpen?: boolean;
   storageKey?: string;
+  forceOpen?: boolean;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
@@ -62,6 +65,7 @@ const CollapsibleSection: FC<CollapsibleSectionProps> = ({
   children,
   defaultOpen = true,
   storageKey,
+  forceOpen,
   onContextMenu,
 }) => {
   const [isOpen, setIsOpen] = useLocalStorage<boolean>(
@@ -73,6 +77,13 @@ const CollapsibleSection: FC<CollapsibleSectionProps> = ({
   const [localIsOpen, setLocalIsOpen] = useState(defaultOpen);
   const actualIsOpen = storageKey ? isOpen : localIsOpen;
   const actualSetIsOpen = storageKey ? setIsOpen : setLocalIsOpen;
+
+  // Force open when prop changes to true
+  useEffect(() => {
+    if (forceOpen && !actualIsOpen) {
+      actualSetIsOpen(true);
+    }
+  }, [forceOpen, actualIsOpen, actualSetIsOpen]);
 
   return (
     <div className="sidebar-section">
@@ -140,6 +151,8 @@ export const Sidebar: FC<SidebarProps> = memo(({
   onNavigateToCommit,
   onAddRemote,
   onCreateBranch,
+  onCreateTag,
+  expandTagsSection,
 }) => {
   const { t } = useTranslation();
   const localBranches = branches.filter(b => !b.is_remote);
@@ -178,6 +191,12 @@ export const Sidebar: FC<SidebarProps> = memo(({
 
   // Create branch modal state
   const [createBranchModal, setCreateBranchModal] = useState<{ isOpen: boolean; sourceBranch: BranchInfo | null }>({
+    isOpen: false,
+    sourceBranch: null,
+  });
+
+  // Create tag modal state
+  const [createTagModal, setCreateTagModal] = useState<{ isOpen: boolean; sourceBranch: BranchInfo | null }>({
     isOpen: false,
     sourceBranch: null,
   });
@@ -340,6 +359,21 @@ export const Sidebar: FC<SidebarProps> = memo(({
     onCreateBranch?.(branchName, startPoint, checkout);
     handleCloseCreateBranchModal();
   }, [onCreateBranch, handleCloseCreateBranchModal]);
+
+  // Create tag modal handlers
+  const handleNewTag = useCallback((branch: BranchInfo) => {
+    closeBranchContextMenu();
+    setCreateTagModal({ isOpen: true, sourceBranch: branch });
+  }, [closeBranchContextMenu]);
+
+  const handleCloseCreateTagModal = useCallback(() => {
+    setCreateTagModal({ isOpen: false, sourceBranch: null });
+  }, []);
+
+  const handleCreateTag = useCallback((tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => {
+    onCreateTag?.(tagName, startPoint, message, pushToRemotes);
+    handleCloseCreateTagModal();
+  }, [onCreateTag, handleCloseCreateTagModal]);
 
   // Clear filter
   const handleClearFilter = useCallback(() => {
@@ -533,6 +567,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           count={tagCount}
           defaultOpen={false}
           storageKey="tags"
+          forceOpen={expandTagsSection}
         >
           {filteredTagTree.length > 0 ? (
             <BranchTree
@@ -633,6 +668,7 @@ export const Sidebar: FC<SidebarProps> = memo(({
           onClose={closeBranchContextMenu}
           onCopyBranchName={handleCopyBranchName}
           onNewBranch={handleNewBranch}
+          onNewTag={handleNewTag}
         />
       )}
 
@@ -643,6 +679,15 @@ export const Sidebar: FC<SidebarProps> = memo(({
         onCreate={handleCreateBranch}
         sourceBranch={createBranchModal.sourceBranch}
         localBranches={localBranches}
+      />
+
+      {/* Create Tag Modal */}
+      <CreateTagModal
+        isOpen={createTagModal.isOpen}
+        onClose={handleCloseCreateTagModal}
+        onCreate={handleCreateTag}
+        sourceBranch={createTagModal.sourceBranch}
+        existingTags={tags}
       />
     </div>
   );

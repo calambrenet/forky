@@ -1423,3 +1423,90 @@ pub fn git_create_branch(
         }
     }
 }
+
+/// Creates a new tag at the specified commit/branch
+/// If message is provided, creates an annotated tag; otherwise creates a lightweight tag
+/// If push_to_remotes is true, pushes the tag to all remotes
+pub fn git_create_tag(
+    repo_path: &str,
+    tag_name: &str,
+    start_point: &str,
+    message: Option<&str>,
+    push_to_remotes: bool,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    // Create the tag
+    let output = if let Some(msg) = message {
+        if msg.trim().is_empty() {
+            // Lightweight tag
+            Command::new("git")
+                .arg("-C")
+                .arg(repo_path)
+                .arg("tag")
+                .arg(tag_name)
+                .arg(start_point)
+                .output()
+                .map_err(|e| format!("Failed to execute git tag: {}", e))?
+        } else {
+            // Annotated tag with message
+            Command::new("git")
+                .arg("-C")
+                .arg(repo_path)
+                .arg("tag")
+                .arg("-a")
+                .arg(tag_name)
+                .arg(start_point)
+                .arg("-m")
+                .arg(msg)
+                .output()
+                .map_err(|e| format!("Failed to execute git tag -a: {}", e))?
+        }
+    } else {
+        // Lightweight tag
+        Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("tag")
+            .arg(tag_name)
+            .arg(start_point)
+            .output()
+            .map_err(|e| format!("Failed to execute git tag: {}", e))?
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    // If push_to_remotes is true, push the tag to all remotes
+    if push_to_remotes {
+        let push_output = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("push")
+            .arg("--tags")
+            .output()
+            .map_err(|e| format!("Failed to execute git push --tags: {}", e))?;
+
+        let _push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
+        let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
+
+        if push_output.status.success() {
+            Ok(create_success_result(format!("Tag '{}' created and pushed", tag_name)))
+        } else {
+            // Tag was created but push failed
+            Ok(GitOperationResult {
+                success: false,
+                message: format!("Tag '{}' created but push failed: {}", tag_name, push_stderr.trim()),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("push_failed".to_string()),
+            })
+        }
+    } else {
+        Ok(create_success_result(format!("Tag '{}' created", tag_name)))
+    }
+}

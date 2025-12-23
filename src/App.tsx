@@ -128,6 +128,9 @@ function App() {
   const [trackBranchModalOpen, setTrackBranchModalOpen] = useState(false);
   const [selectedRemoteBranch, setSelectedRemoteBranch] = useState('');
 
+  // Expand tags section (after creating a tag)
+  const [expandTagsSection, setExpandTagsSection] = useState(false);
+
   // Feedback modal state
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 
@@ -355,6 +358,61 @@ function App() {
       updateTabState(activeTabId, { selectedCommitId: commitSha });
     }
   }, [updateTabState]);
+
+  // Handle creating a new tag
+  const handleCreateTag = useCallback(async (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => {
+    if (!activeTab?.path || isGitLoading || !activeTabState) return;
+
+    const command = message
+      ? `git tag -a ${tagName} ${startPoint} -m "${message}"${pushToRemotes ? ' && git push --tags' : ''}`
+      : `git tag ${tagName} ${startPoint}${pushToRemotes ? ' && git push --tags' : ''}`;
+    startOperation('Other', tagName);
+
+    // Get the commit SHA for the startPoint branch before the operation
+    const branchHead = activeTabState.branchHeads.find(bh => bh.name === startPoint);
+    const commitSha = branchHead?.commit_sha;
+
+    try {
+      const result = await invoke<GitOperationResult>('git_create_tag', {
+        tagName,
+        startPoint,
+        message,
+        pushToRemotes,
+      });
+
+      completeOperation(result);
+      addLogEntry('Other', `Create tag '${tagName}' at '${startPoint}'`, command, result.message, result.success);
+
+      if (result.success || result.error_type === 'push_failed') {
+        // Tag was created (even if push failed), refresh and navigate
+        await refreshActiveTab();
+
+        // Expand the tags section and navigate to the commit
+        setExpandTagsSection(true);
+        // Reset after a short delay so it can be triggered again
+        setTimeout(() => setExpandTagsSection(false), 100);
+
+        // Switch to all-commits view and navigate to the tag's commit
+        if (commitSha) {
+          handleViewModeChange('all-commits');
+          handleNavigateToCommit(commitSha);
+        }
+
+        // Show error if push failed but tag was created
+        if (result.error_type === 'push_failed') {
+          addAlert('error', 'Push Failed', result.message);
+        }
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Tag');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error creating tag:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Other', `Create tag '${tagName}' at '${startPoint}'`, command, String(error), false);
+      addAlert('error', 'Tag Error', String(error));
+    }
+  }, [activeTab?.path, isGitLoading, activeTabState?.branchHeads, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleViewModeChange, handleNavigateToCommit]);
 
   // Add Remote handler
   const handleAddRemote = useCallback(async (name: string, url: string) => {
@@ -663,6 +721,8 @@ function App() {
               onNavigateToCommit={handleNavigateToCommit}
               onAddRemote={openAddRemoteModal}
               onCreateBranch={handleCreateBranch}
+              onCreateTag={handleCreateTag}
+              expandTagsSection={expandTagsSection}
             />
           </div>
           <Resizer

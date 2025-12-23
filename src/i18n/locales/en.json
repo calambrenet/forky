@@ -192,6 +192,19 @@
       "branchExists": "Branch '{{branch}}' already exists",
       "create": "Create",
       "createAndCheckout": "Create and Checkout"
+    },
+    "createTag": {
+      "title": "Create Tag",
+      "description": "Create annotated tag",
+      "createAt": "Create tag at",
+      "tagName": "Tag name",
+      "tagNamePlaceholder": "Enter Tag Name",
+      "message": "Message",
+      "messagePlaceholder": "optional",
+      "pushToRemotes": "Push to all remotes",
+      "tagExists": "Tag '{{tag}}' already exists",
+      "create": "Create",
+      "createAndPush": "Create and Push"
     }
   },
   "activityLog": {

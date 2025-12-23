@@ -292,3 +292,16 @@ pub fn git_create_branch(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_create_branch(path, &branch_name, &start_point, checkout)
 }
+
+#[tauri::command]
+pub fn git_create_tag(
+    tag_name: String,
+    start_point: String,
+    message: Option<String>,
+    push_to_remotes: bool,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_create_tag(path, &tag_name, &start_point, message.as_deref(), push_to_remotes)
+}

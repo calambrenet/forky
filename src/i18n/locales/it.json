@@ -192,6 +192,19 @@
       "branchExists": "Il branch '{{branch}}' esiste già",
       "create": "Crea",
       "createAndCheckout": "Crea e Checkout"
+    },
+    "createTag": {
+      "title": "Crea Tag",
+      "description": "Crea un tag annotato",
+      "createAt": "Crea tag da",
+      "tagName": "Nome del tag",
+      "tagNamePlaceholder": "Inserisci il nome del tag",
+      "message": "Messaggio",
+      "messagePlaceholder": "opzionale",
+      "pushToRemotes": "Push a tutti i remoti",
+      "tagExists": "Il tag '{{tag}}' esiste già",
+      "create": "Crea",
+      "createAndPush": "Crea e Push"
     }
   },
   "activityLog": {
