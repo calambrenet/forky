@@ -21,23 +21,97 @@ Built with:
 
 ## Features
 
-- Open and manage multiple Git repositories in tabs
-- View commit history with branch visualization
-- Stage/unstage files with diff preview
-- Commit changes
-- Push, pull, and fetch operations
-- Branch management
-- Dark theme
-- Auto-refresh when files change (using native file system events)
+### Repository Management
+- [x] Open and manage multiple Git repositories in tabs
+- [x] Auto-restore previously opened repositories on startup
+- [x] Real-time file watching with pending changes indicator
+- [x] Open repository in terminal
 
-### Planned Features
+### Commit History
+- [x] View commit history with branch graph visualization
+- [x] Navigate to specific commits
+- [x] View commit details (author, date, message, files changed)
+- [x] Diff viewer with syntax highlighting
 
-- Stash support
-- Interactive rebase
-- Cherry-pick
-- Submodule support
-- Custom themes
-- And more...
+### Working Copy
+- [x] Stage/unstage individual files
+- [x] Stage/unstage all files
+- [x] View diff for staged and unstaged changes
+- [x] Commit changes with message
+- [x] Amend last commit
+- [ ] Discard changes
+- [ ] Partial staging (hunks)
+
+### Remote Operations
+- [x] Fetch (single remote or all remotes)
+- [x] Pull (with rebase and autostash options)
+- [x] Push (with force-with-lease and push tags options)
+- [x] Add new remote
+- [x] SSH host verification
+- [x] Credential management (username/password, SSH passphrase)
+- [ ] Clone repository
+
+### Branch Operations
+- [x] View local and remote branches in tree structure
+- [x] Checkout branch (double-click or context menu)
+- [x] Create new branch (from any branch)
+- [x] Rename branch (local and remote)
+- [x] Delete branch (with force delete option, local and remote)
+- [x] Track remote branch (create local from remote)
+- [x] Copy branch name to clipboard
+- [ ] Fast-forward branch
+
+### Tag Operations
+- [x] View tags in tree structure
+- [x] Create tag (lightweight or annotated)
+- [x] Push tags to remotes
+- [x] Navigate to tag commit
+- [ ] Delete tag
+
+### Stash Operations
+- [ ] View stash list
+- [ ] Create stash
+- [ ] Apply/pop stash
+- [ ] Drop stash
+
+### Git Flow
+- [ ] Initialize Git Flow
+- [ ] Start/finish feature
+- [ ] Start/finish release
+- [ ] Start/finish hotfix
+
+### Pull Requests
+- [ ] View pull requests from GitHub/GitLab/Bitbucket
+- [ ] Create pull request
+- [ ] Review pull request
+
+### Merge, Rebase & Conflicts
+- [ ] Merge branch into current
+- [ ] Rebase current branch on another
+- [ ] Interactive rebase
+- [ ] Conflict resolution window
+- [ ] Visual merge tool integration
+- [ ] Abort merge/rebase
+
+### Settings & Configuration
+- [ ] Settings/preferences window
+- [ ] Configure keyboard shortcuts
+- [ ] Configure external diff/merge tools
+- [ ] Configure Git identity (name, email)
+
+### Other Features
+- [x] Multi-language support (English, Spanish, French, Italian)
+- [x] Dark theme
+- [x] Activity log for Git operations
+- [x] Keyboard shortcuts (⌘B for new branch, ⌘T for new tag)
+- [x] Filter branches/tags in sidebar
+- [x] Sort remote branches
+- [ ] Light theme
+- [ ] Custom themes
+- [ ] Submodule support
+- [ ] Cherry-pick
+- [ ] Blame view
+- [ ] File history
 
 ## Installation
 
