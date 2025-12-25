@@ -676,8 +676,11 @@ fn detect_error_type(stderr: &str) -> Option<String> {
     if lower.contains("could not resolve host") || lower.contains("no se pudo resolver") {
         return Some("host_not_found".to_string());
     }
-    // Checkout would overwrite local changes
-    if lower.contains("would be overwritten by checkout") || lower.contains("serán sobrescritos por checkout") {
+    // Detect checkout conflicts (local changes would be overwritten)
+    if lower.contains("would be overwritten by checkout")
+        || lower.contains("serían sobrescritos por checkout")
+        || lower.contains("serán sobrescritos por checkout")
+    {
         return Some("checkout_would_overwrite".to_string());
     }
     if lower.contains("fatal:") {
@@ -686,7 +689,7 @@ fn detect_error_type(stderr: &str) -> Option<String> {
     None
 }
 
-/// Extract list of files that would be overwritten from git checkout error
+/// Extract list of conflicting files from git checkout error output
 fn extract_conflicting_files(stderr: &str) -> Vec<String> {
     let mut files = Vec::new();
     let mut in_file_list = false;
@@ -694,19 +697,25 @@ fn extract_conflicting_files(stderr: &str) -> Vec<String> {
     for line in stderr.lines() {
         let trimmed = line.trim();
 
-        // Start capturing after "would be overwritten" message
-        if trimmed.contains("would be overwritten") || trimmed.contains("serán sobrescritos") {
+        // Start capturing after "would be overwritten" line
+        if trimmed.contains("would be overwritten")
+            || trimmed.contains("serían sobrescritos")
+            || trimmed.contains("serán sobrescritos")
+        {
             in_file_list = true;
             continue;
         }
 
-        // Stop capturing at "Please commit" or "Aborting" or similar
-        if trimmed.starts_with("Please") || trimmed.starts_with("Por favor") ||
-           trimmed.contains("Aborting") || trimmed.contains("Abortando") {
+        // Stop at "Please commit" or "Aborting" lines
+        if trimmed.starts_with("Please")
+            || trimmed.starts_with("Por favor")
+            || trimmed.contains("Aborting")
+            || trimmed.contains("Abortando")
+        {
             break;
         }
 
-        // Capture file paths (they are indented with tabs or spaces)
+        // Capture file names (non-empty lines that don't start with error)
         if in_file_list && !trimmed.is_empty() && !trimmed.starts_with("error") {
             files.push(trimmed.to_string());
         }
@@ -794,10 +803,14 @@ fn create_error_result(stderr: &str, stdout: &str) -> GitOperationResult {
     // Detect error type
     let error_type = detect_error_type(stderr);
 
-    // Extract conflicting files if this is a checkout conflict
+    // If it's a checkout conflict, extract the conflicting files
     let conflicting_files = if error_type.as_deref() == Some("checkout_would_overwrite") {
         let files = extract_conflicting_files(stderr);
-        if files.is_empty() { None } else { Some(files) }
+        if files.is_empty() {
+            None
+        } else {
+            Some(files)
+        }
     } else {
         None
     };
@@ -1303,6 +1316,119 @@ pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationRe
     } else {
         // Common errors: uncommitted changes, branch doesn't exist
         Ok(create_error_result(&stderr, &stdout))
+    }
+}
+
+/// Execute git checkout with automatic stash/pop for handling uncommitted changes
+/// This function:
+/// 1. Stashes current changes (including untracked files)
+/// 2. Checks out the target branch
+/// 3. Optionally pops the stash to restore changes
+pub fn git_checkout_with_stash(
+    repo_path: &str,
+    branch_name: &str,
+    restore_changes: bool,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    // Step 1: Stash all changes including untracked files
+    let stash_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("push")
+        .arg("-u")
+        .arg("-m")
+        .arg(format!("Auto-stash before switching to {}", branch_name))
+        .output()
+        .map_err(|e| format!("Failed to execute git stash: {}", e))?;
+
+    if !stash_output.status.success() {
+        let stderr = String::from_utf8_lossy(&stash_output.stderr).to_string();
+        return Ok(GitOperationResult {
+            success: false,
+            message: format!("Failed to stash changes: {}", stderr.trim()),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: Some("stash_failed".to_string()),
+            conflicting_files: None,
+        });
+    }
+
+    // Step 2: Checkout the target branch
+    let checkout_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("checkout")
+        .arg(branch_name)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+    if !checkout_output.status.success() {
+        let stderr = String::from_utf8_lossy(&checkout_output.stderr).to_string();
+
+        // Checkout failed, try to restore the stash
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("stash")
+            .arg("pop")
+            .output();
+
+        return Ok(GitOperationResult {
+            success: false,
+            message: format!("Checkout failed (stash restored): {}", stderr.trim()),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: Some("checkout_failed".to_string()),
+            conflicting_files: None,
+        });
+    }
+
+    // Step 3: Optionally pop the stash to restore changes
+    if restore_changes {
+        let pop_output = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("stash")
+            .arg("pop")
+            .output()
+            .map_err(|e| format!("Failed to execute git stash pop: {}", e))?;
+
+        if !pop_output.status.success() {
+            let stderr = String::from_utf8_lossy(&pop_output.stderr).to_string();
+            // Checkout succeeded but pop failed - likely conflicts
+            return Ok(GitOperationResult {
+                success: true,
+                message: format!(
+                    "Switched to '{}' but failed to restore changes. Your changes are in stash. Error: {}",
+                    branch_name,
+                    stderr.trim()
+                ),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("stash_pop_conflict".to_string()),
+                conflicting_files: None,
+            });
+        }
+
+        Ok(GitOperationResult {
+            success: true,
+            message: format!("Switched to '{}' and restored changes", branch_name),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        })
+    } else {
+        Ok(GitOperationResult {
+            success: true,
+            message: format!("Switched to '{}' (changes saved in stash)", branch_name),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        })
     }
 }
 
@@ -2004,136 +2130,6 @@ pub fn git_stash_drop(repo_path: &str, stash_index: usize) -> Result<GitOperatio
     }
 
     Ok(create_success_result(format!("Stash {} dropped", stash_ref)))
-}
-
-// ============================================================================
-// Checkout with Auto-Stash
-// ============================================================================
-
-/// Execute git checkout with automatic stash/pop
-/// This is used when checkout fails due to uncommitted changes
-pub fn git_checkout_with_stash(
-    repo_path: &str,
-    branch_name: &str,
-    restore_changes: bool,
-) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    // Step 1: Stash current changes (include untracked files)
-    let stash_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("stash")
-        .arg("push")
-        .arg("-u")
-        .arg("-m")
-        .arg(format!("Auto-stash before checkout to {}", branch_name))
-        .output()
-        .map_err(|e| format!("Failed to stash changes: {}", e))?;
-
-    let stash_stderr = String::from_utf8_lossy(&stash_output.stderr).to_string();
-    let stash_stdout = String::from_utf8_lossy(&stash_output.stdout).to_string();
-
-    if !stash_output.status.success() {
-        return Ok(GitOperationResult {
-            success: false,
-            message: format!("Failed to stash changes: {}", stash_stderr.trim()),
-            requires_ssh_verification: None,
-            requires_credential: None,
-            error_type: Some("stash_failed".to_string()),
-            conflicting_files: None,
-        });
-    }
-
-    // Check if anything was actually stashed
-    let changes_stashed = !stash_stdout.contains("No local changes to save")
-        && !stash_stderr.contains("No local changes to save");
-
-    // Step 2: Checkout the branch
-    let checkout_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("checkout")
-        .arg(branch_name)
-        .output()
-        .map_err(|e| format!("Failed to checkout branch: {}", e))?;
-
-    let checkout_stderr = String::from_utf8_lossy(&checkout_output.stderr).to_string();
-    let checkout_stdout = String::from_utf8_lossy(&checkout_output.stdout).to_string();
-
-    if !checkout_output.status.success() {
-        // Checkout failed - try to restore the stash
-        if changes_stashed {
-            let _ = Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("stash")
-                .arg("pop")
-                .output();
-        }
-        return Ok(create_error_result(&checkout_stderr, &checkout_stdout));
-    }
-
-    // Step 3: Pop stash if requested and if we stashed something
-    if restore_changes && changes_stashed {
-        let pop_output = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("stash")
-            .arg("pop")
-            .output()
-            .map_err(|e| format!("Failed to pop stash: {}", e))?;
-
-        let pop_stderr = String::from_utf8_lossy(&pop_output.stderr).to_string();
-        let pop_stdout = String::from_utf8_lossy(&pop_output.stdout).to_string();
-
-        if !pop_output.status.success() {
-            // Check for conflicts
-            if pop_stderr.contains("CONFLICT") || pop_stdout.contains("CONFLICT") {
-                return Ok(GitOperationResult {
-                    success: true,  // Checkout succeeded, but there are conflicts
-                    message: format!(
-                        "Switched to branch '{}'. Changes restored with conflicts - please resolve them.",
-                        branch_name
-                    ),
-                    requires_ssh_verification: None,
-                    requires_credential: None,
-                    error_type: Some("stash_conflicts".to_string()),
-                    conflicting_files: None,
-                });
-            }
-            // Other pop error
-            return Ok(GitOperationResult {
-                success: true,  // Checkout succeeded
-                message: format!(
-                    "Switched to branch '{}'. Warning: Could not restore changes - they remain in stash.\n{}",
-                    branch_name, pop_stderr.trim()
-                ),
-                requires_ssh_verification: None,
-                requires_credential: None,
-                error_type: Some("stash_pop_failed".to_string()),
-                conflicting_files: None,
-            });
-        }
-
-        // Everything succeeded with restore
-        Ok(create_success_result(format!(
-            "Switched to branch '{}' and restored changes",
-            branch_name
-        )))
-    } else if changes_stashed {
-        // Checkout succeeded, changes remain in stash
-        Ok(create_success_result(format!(
-            "Switched to branch '{}'. Changes saved in stash.",
-            branch_name
-        )))
-    } else {
-        // No changes were stashed, just checkout succeeded
-        Ok(create_success_result(format!(
-            "Switched to branch '{}'",
-            branch_name
-        )))
-    }
 }
 
 // ============================================================================

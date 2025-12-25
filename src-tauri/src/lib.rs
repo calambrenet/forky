@@ -45,6 +45,7 @@ pub fn run() {
             git_commands::git_add_remote,
             git_commands::git_test_remote_connection,
             git_commands::git_checkout,
+            git_commands::git_checkout_with_stash,
             git_commands::git_checkout_track,
             git_commands::git_create_branch,
             git_commands::git_create_tag,

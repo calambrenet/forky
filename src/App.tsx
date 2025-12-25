@@ -20,12 +20,12 @@ const PushModal = lazy(() => import('./components/git-modals/PushModal').then(m 
 const SshHostVerificationModal = lazy(() => import('./components/git-modals/SshHostVerificationModal').then(m => ({ default: m.SshHostVerificationModal })));
 const GitCredentialModal = lazy(() => import('./components/git-modals/GitCredentialModal').then(m => ({ default: m.GitCredentialModal })));
 const TrackRemoteBranchModal = lazy(() => import('./components/git-modals/TrackRemoteBranchModal').then(m => ({ default: m.TrackRemoteBranchModal })));
+const CheckoutConflictModal = lazy(() => import('./components/git-modals/CheckoutConflictModal').then(m => ({ default: m.CheckoutConflictModal })));
 const GitActivityLog = lazy(() => import('./components/git-activity-log').then(m => ({ default: m.GitActivityLog })));
 const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m => ({ default: m.AddRemoteModal })));
 const FeedbackModal = lazy(() => import('./components/feedback-modal').then(m => ({ default: m.FeedbackModal })));
 const SaveStashModal = lazy(() => import('./components/git-modals/SaveStashModal').then(m => ({ default: m.SaveStashModal })));
 const ApplyStashModal = lazy(() => import('./components/git-modals/ApplyStashModal').then(m => ({ default: m.ApplyStashModal })));
-const CheckoutConflictModal = lazy(() => import('./components/git-modals/CheckoutConflictModal').then(m => ({ default: m.CheckoutConflictModal })));
 
 // Zustand stores
 import {
@@ -243,6 +243,11 @@ function App() {
         }
         // Refresh repository data to update commits, branches, etc.
         await refreshActiveTab();
+      } else if (result.error_type === 'checkout_would_overwrite') {
+        // Show checkout conflict modal with option to stash and switch
+        setCheckoutConflictBranch(branchName);
+        setCheckoutConflictFiles(result.conflicting_files || []);
+        setCheckoutConflictModalOpen(true);
       } else {
         // Check if checkout failed due to uncommitted changes
         if (result.error_type === 'checkout_would_overwrite' && result.conflicting_files) {

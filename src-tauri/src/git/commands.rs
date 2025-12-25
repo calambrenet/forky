@@ -272,6 +272,17 @@ pub fn git_checkout(branch_name: String, state: State<AppState>) -> Result<GitOp
 }
 
 #[tauri::command]
+pub fn git_checkout_with_stash(
+    branch_name: String,
+    restore_changes: bool,
+    state: State<AppState>,
+) -> Result<GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_checkout_with_stash(path, &branch_name, restore_changes)
+}
+
+#[tauri::command]
 pub fn git_checkout_track(
     local_branch: String,
     remote_branch: String,
@@ -384,17 +395,6 @@ pub fn git_stash_drop(
     let repo_path = state.current_repo_path.lock().unwrap();
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_stash_drop(path, stash_index)
-}
-
-#[tauri::command]
-pub fn git_checkout_with_stash(
-    branch_name: String,
-    restore_changes: bool,
-    state: State<AppState>,
-) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_checkout_with_stash(path, &branch_name, restore_changes)
 }
 
 // ============================================================================
