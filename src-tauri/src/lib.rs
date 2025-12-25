@@ -55,6 +55,7 @@ pub fn run() {
             git_commands::git_stash_apply,
             git_commands::git_stash_pop,
             git_commands::git_stash_drop,
+            git_commands::git_checkout_with_stash,
             git_commands::get_image_content,
             git_commands::get_image_from_head,
             git_commands::get_image_from_index,

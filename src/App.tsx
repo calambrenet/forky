@@ -25,6 +25,7 @@ const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m
 const FeedbackModal = lazy(() => import('./components/feedback-modal').then(m => ({ default: m.FeedbackModal })));
 const SaveStashModal = lazy(() => import('./components/git-modals/SaveStashModal').then(m => ({ default: m.SaveStashModal })));
 const ApplyStashModal = lazy(() => import('./components/git-modals/ApplyStashModal').then(m => ({ default: m.ApplyStashModal })));
+const CheckoutConflictModal = lazy(() => import('./components/git-modals/CheckoutConflictModal').then(m => ({ default: m.CheckoutConflictModal })));
 
 // Zustand stores
 import {
@@ -144,6 +145,12 @@ function App() {
   const [applyStashModalOpen, setApplyStashModalOpen] = useState(false);
   const [selectedStash, setSelectedStash] = useState<StashInfo | null>(null);
 
+  // Checkout conflict modal state
+  const [checkoutConflictModalOpen, setCheckoutConflictModalOpen] = useState(false);
+  const [checkoutConflictBranch, setCheckoutConflictBranch] = useState('');
+  const [checkoutConflictFiles, setCheckoutConflictFiles] = useState<string[]>([]);
+  const [isCheckoutWithStashLoading, setIsCheckoutWithStashLoading] = useState(false);
+
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
 
@@ -237,8 +244,16 @@ function App() {
         // Refresh repository data to update commits, branches, etc.
         await refreshActiveTab();
       } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Checkout');
-        addAlert('error', errorTitle, result.message);
+        // Check if checkout failed due to uncommitted changes
+        if (result.error_type === 'checkout_would_overwrite' && result.conflicting_files) {
+          // Show the checkout conflict modal instead of an error
+          setCheckoutConflictBranch(branchName);
+          setCheckoutConflictFiles(result.conflicting_files);
+          setCheckoutConflictModalOpen(true);
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+          addAlert('error', errorTitle, result.message);
+        }
       }
     } catch (error) {
       console.error('Error checking out branch:', error);
@@ -247,6 +262,60 @@ function App() {
       addAlert('error', 'Checkout Error', String(error));
     }
   }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
+
+  // Handle checkout with stash (from conflict modal)
+  const handleCheckoutWithStash = useCallback(async (restoreChanges: boolean) => {
+    if (!activeTab?.path || !checkoutConflictBranch) return;
+
+    setIsCheckoutWithStashLoading(true);
+    const command = restoreChanges
+      ? `git stash push -u && git checkout ${checkoutConflictBranch} && git stash pop`
+      : `git stash push -u && git checkout ${checkoutConflictBranch}`;
+
+    startOperation('Checkout', checkoutConflictBranch);
+
+    try {
+      const result = await invoke<GitOperationResult>('git_checkout_with_stash', {
+        branchName: checkoutConflictBranch,
+        restoreChanges,
+      });
+
+      completeOperation(result);
+      addLogEntry('Checkout', `Checkout '${checkoutConflictBranch}' with stash`, command, result.message, result.success);
+
+      if (result.success) {
+        // Update the current branch in the tab
+        const activeTabId = useRepositoryStore.getState().activeTabId;
+        if (activeTabId) {
+          setTabCurrentBranch(activeTabId, checkoutConflictBranch);
+        }
+        // Refresh repository data to update commits, branches, etc.
+        await refreshActiveTab();
+        // Refresh local changes view
+        setLocalChangesRefreshKey(k => k + 1);
+
+        // Check for special messages (conflicts, stash pop failed)
+        if (result.error_type === 'stash_conflicts') {
+          addAlert('warning', t('alerts.checkoutSuccess'), result.message);
+        } else if (result.error_type === 'stash_pop_failed') {
+          addAlert('warning', t('alerts.checkoutSuccess'), result.message);
+        }
+      } else {
+        const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+        addAlert('error', errorTitle, result.message);
+      }
+    } catch (error) {
+      console.error('Error checking out with stash:', error);
+      completeOperation({ success: false, message: String(error) });
+      addLogEntry('Checkout', `Checkout '${checkoutConflictBranch}' with stash`, command, String(error), false);
+      addAlert('error', 'Checkout Error', String(error));
+    } finally {
+      setIsCheckoutWithStashLoading(false);
+      setCheckoutConflictModalOpen(false);
+      setCheckoutConflictBranch('');
+      setCheckoutConflictFiles([]);
+    }
+  }, [activeTab?.path, checkoutConflictBranch, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle, t]);
 
   // Handle opening track remote branch modal
   const handleOpenTrackBranchModal = useCallback((remoteBranchName: string) => {
@@ -1121,6 +1190,22 @@ function App() {
             onPop={handlePopStash}
             onDrop={handleDropStash}
             stash={selectedStash}
+          />
+        )}
+
+        {/* Checkout Conflict Modal */}
+        {checkoutConflictModalOpen && (
+          <CheckoutConflictModal
+            isOpen={true}
+            onClose={() => {
+              setCheckoutConflictModalOpen(false);
+              setCheckoutConflictBranch('');
+              setCheckoutConflictFiles([]);
+            }}
+            onConfirm={handleCheckoutWithStash}
+            targetBranch={checkoutConflictBranch}
+            conflictingFiles={checkoutConflictFiles}
+            isLoading={isCheckoutWithStashLoading}
           />
         )}
 

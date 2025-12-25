@@ -245,6 +245,17 @@
       "popDescription": "Appliquer les modifications, supprimer le stash",
       "drop": "Drop",
       "dropDescription": "Supprimer le stash sans l'appliquer"
+    },
+    "checkoutConflict": {
+      "title": "Modifications non sauvegardées",
+      "description": "Des modifications locales seraient écrasées lors du changement de branche",
+      "targetBranch": "Basculer vers:",
+      "filesAffected": "{{count}} fichier(s) affecté(s):",
+      "restoreChanges": "Restaurer les modifications après le checkout",
+      "restoreHint": "Les modifications seront mises en stash, la branche sera changée, puis les modifications seront automatiquement restaurées",
+      "noRestoreHint": "Les modifications seront mises en stash et y resteront après le checkout",
+      "stashAndSwitch": "Stash et Basculer",
+      "switching": "Changement..."
     }
   },
   "stashDropdown": {
@@ -267,6 +278,7 @@
     "pushFailed": "Échec du Push",
     "commitFailed": "Échec du Commit",
     "commitSuccess": "Commit Réussi",
+    "checkoutSuccess": "Checkout Réussi",
     "addRemoteFailed": "Échec de l'Ajout du Distant",
     "addRemoteError": "Erreur du Distant",
     "fetchError": "Erreur de Fetch",

@@ -26,3 +26,5 @@ export { DeleteBranchModal } from './DeleteBranchModal';
 export { SaveStashModal } from './SaveStashModal';
 
 export { ApplyStashModal } from './ApplyStashModal';
+
+export { CheckoutConflictModal } from './CheckoutConflictModal';

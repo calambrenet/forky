@@ -4,7 +4,8 @@
       "WebSearch",
       "Bash(npm install:*)",
       "Bash(cargo check:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "WebFetch(domain:v2.tauri.app)"
     ]
   }
 }

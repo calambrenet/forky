@@ -245,6 +245,17 @@
       "popDescription": "Aplicar cambios, eliminar stash",
       "drop": "Drop",
       "dropDescription": "Eliminar stash sin aplicar"
+    },
+    "checkoutConflict": {
+      "title": "Cambios sin guardar",
+      "description": "Hay cambios locales que serían sobrescritos al cambiar de rama",
+      "targetBranch": "Cambiar a:",
+      "filesAffected": "{{count}} archivo(s) afectado(s):",
+      "restoreChanges": "Restaurar cambios después del checkout",
+      "restoreHint": "Los cambios se guardarán en stash, se cambiará de rama y luego se restaurarán automáticamente",
+      "noRestoreHint": "Los cambios se guardarán en stash y permanecerán allí después del checkout",
+      "stashAndSwitch": "Stash y Cambiar",
+      "switching": "Cambiando..."
     }
   },
   "stashDropdown": {
@@ -267,6 +278,7 @@
     "pushFailed": "Push Fallido",
     "commitFailed": "Commit Fallido",
     "commitSuccess": "Commit Exitoso",
+    "checkoutSuccess": "Checkout Exitoso",
     "addRemoteFailed": "Error al Añadir Remoto",
     "addRemoteError": "Error de Remoto",
     "fetchError": "Error de Fetch",
