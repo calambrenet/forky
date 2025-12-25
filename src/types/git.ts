@@ -98,6 +98,7 @@ export interface GitOperationResult {
   requires_ssh_verification?: SshHostVerification;
   requires_credential?: CredentialRequest;
   error_type?: string;
+  conflicting_files?: string[];
 }
 
 // Git operation state for UI display

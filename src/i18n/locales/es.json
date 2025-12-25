@@ -181,6 +181,17 @@
       "localBranch": "Rama local:",
       "branchExists": "La rama local {{branch}} ya existe",
       "track": "Rastrear"
+    },
+    "checkoutConflict": {
+      "title": "Cambios sin guardar",
+      "description": "Hay cambios locales que serían sobrescritos al cambiar de rama",
+      "targetBranch": "Cambiar a:",
+      "filesAffected": "{{count}} archivo(s) afectado(s):",
+      "restoreChanges": "Restaurar cambios después del checkout",
+      "restoreHint": "Los cambios se guardarán en stash, se cambiará de rama y luego se restaurarán automáticamente",
+      "noRestoreHint": "Los cambios se guardarán en stash y permanecerán allí después del checkout",
+      "stashAndSwitch": "Stash y Cambiar",
+      "switching": "Cambiando..."
     }
   },
   "activityLog": {

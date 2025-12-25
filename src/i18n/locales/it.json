@@ -181,6 +181,17 @@
       "localBranch": "Branch locale:",
       "branchExists": "Il branch locale {{branch}} esiste già",
       "track": "Traccia"
+    },
+    "checkoutConflict": {
+      "title": "Modifiche non salvate",
+      "description": "Ci sono modifiche locali che verrebbero sovrascritte dal checkout",
+      "targetBranch": "Passa a:",
+      "filesAffected": "{{count}} file interessati:",
+      "restoreChanges": "Ripristina modifiche dopo il checkout",
+      "restoreHint": "Le modifiche verranno messe in stash, il branch verrà cambiato, poi le modifiche verranno ripristinate automaticamente",
+      "noRestoreHint": "Le modifiche verranno messe in stash e rimarranno lì dopo il checkout",
+      "stashAndSwitch": "Stash e Cambia",
+      "switching": "Cambio in corso..."
     }
   },
   "activityLog": {

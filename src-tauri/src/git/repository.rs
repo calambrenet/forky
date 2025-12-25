@@ -607,6 +607,8 @@ pub struct GitOperationResult {
     pub requires_credential: Option<CredentialRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflicting_files: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -645,10 +647,52 @@ fn detect_error_type(stderr: &str) -> Option<String> {
     if lower.contains("could not resolve host") || lower.contains("no se pudo resolver") {
         return Some("host_not_found".to_string());
     }
+    // Detect checkout conflicts (local changes would be overwritten)
+    if lower.contains("would be overwritten by checkout")
+        || lower.contains("serían sobrescritos por checkout")
+        || lower.contains("serán sobrescritos por checkout")
+    {
+        return Some("checkout_would_overwrite".to_string());
+    }
     if lower.contains("fatal:") {
         return Some("git_error".to_string());
     }
     None
+}
+
+/// Extract list of conflicting files from git checkout error output
+fn extract_conflicting_files(stderr: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    let mut in_file_list = false;
+
+    for line in stderr.lines() {
+        let trimmed = line.trim();
+
+        // Start capturing after "would be overwritten" line
+        if trimmed.contains("would be overwritten")
+            || trimmed.contains("serían sobrescritos")
+            || trimmed.contains("serán sobrescritos")
+        {
+            in_file_list = true;
+            continue;
+        }
+
+        // Stop at "Please commit" or "Aborting" lines
+        if trimmed.starts_with("Please")
+            || trimmed.starts_with("Por favor")
+            || trimmed.contains("Aborting")
+            || trimmed.contains("Abortando")
+        {
+            break;
+        }
+
+        // Capture file names (non-empty lines that don't start with error)
+        if in_file_list && !trimmed.is_empty() && !trimmed.starts_with("error") {
+            files.push(trimmed.to_string());
+        }
+    }
+
+    files
 }
 
 /// Parse credential prompt request from output
@@ -710,6 +754,7 @@ fn create_error_result(stderr: &str, stdout: &str) -> GitOperationResult {
             requires_ssh_verification: Some(ssh_verification),
             requires_credential: None,
             error_type: Some("ssh_host_verification".to_string()),
+            conflicting_files: None,
         };
     }
 
@@ -722,11 +767,24 @@ fn create_error_result(stderr: &str, stdout: &str) -> GitOperationResult {
             requires_ssh_verification: None,
             requires_credential: Some(credential),
             error_type: Some("credential_required".to_string()),
+            conflicting_files: None,
         };
     }
 
     // Detect error type
     let error_type = detect_error_type(stderr);
+
+    // If it's a checkout conflict, extract the conflicting files
+    let conflicting_files = if error_type.as_deref() == Some("checkout_would_overwrite") {
+        let files = extract_conflicting_files(stderr);
+        if files.is_empty() {
+            None
+        } else {
+            Some(files)
+        }
+    } else {
+        None
+    };
 
     GitOperationResult {
         success: false,
@@ -734,6 +792,7 @@ fn create_error_result(stderr: &str, stdout: &str) -> GitOperationResult {
         requires_ssh_verification: None,
         requires_credential: None,
         error_type,
+        conflicting_files,
     }
 }
 
@@ -745,6 +804,7 @@ fn create_success_result(message: String) -> GitOperationResult {
         requires_ssh_verification: None,
         requires_credential: None,
         error_type: None,
+        conflicting_files: None,
     }
 }
 
@@ -831,6 +891,7 @@ pub fn add_ssh_known_host(host: &str) -> Result<GitOperationResult, String> {
             requires_ssh_verification: None,
             requires_credential: None,
             error_type: Some("ssh_keyscan_failed".to_string()),
+            conflicting_files: None,
         });
     }
 
@@ -842,6 +903,7 @@ pub fn add_ssh_known_host(host: &str) -> Result<GitOperationResult, String> {
             requires_ssh_verification: None,
             requires_credential: None,
             error_type: Some("no_host_keys".to_string()),
+            conflicting_files: None,
         });
     }
 
@@ -1225,6 +1287,119 @@ pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationRe
     } else {
         // Common errors: uncommitted changes, branch doesn't exist
         Ok(create_error_result(&stderr, &stdout))
+    }
+}
+
+/// Execute git checkout with automatic stash/pop for handling uncommitted changes
+/// This function:
+/// 1. Stashes current changes (including untracked files)
+/// 2. Checks out the target branch
+/// 3. Optionally pops the stash to restore changes
+pub fn git_checkout_with_stash(
+    repo_path: &str,
+    branch_name: &str,
+    restore_changes: bool,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    // Step 1: Stash all changes including untracked files
+    let stash_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("stash")
+        .arg("push")
+        .arg("-u")
+        .arg("-m")
+        .arg(format!("Auto-stash before switching to {}", branch_name))
+        .output()
+        .map_err(|e| format!("Failed to execute git stash: {}", e))?;
+
+    if !stash_output.status.success() {
+        let stderr = String::from_utf8_lossy(&stash_output.stderr).to_string();
+        return Ok(GitOperationResult {
+            success: false,
+            message: format!("Failed to stash changes: {}", stderr.trim()),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: Some("stash_failed".to_string()),
+            conflicting_files: None,
+        });
+    }
+
+    // Step 2: Checkout the target branch
+    let checkout_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("checkout")
+        .arg(branch_name)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+    if !checkout_output.status.success() {
+        let stderr = String::from_utf8_lossy(&checkout_output.stderr).to_string();
+
+        // Checkout failed, try to restore the stash
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("stash")
+            .arg("pop")
+            .output();
+
+        return Ok(GitOperationResult {
+            success: false,
+            message: format!("Checkout failed (stash restored): {}", stderr.trim()),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: Some("checkout_failed".to_string()),
+            conflicting_files: None,
+        });
+    }
+
+    // Step 3: Optionally pop the stash to restore changes
+    if restore_changes {
+        let pop_output = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("stash")
+            .arg("pop")
+            .output()
+            .map_err(|e| format!("Failed to execute git stash pop: {}", e))?;
+
+        if !pop_output.status.success() {
+            let stderr = String::from_utf8_lossy(&pop_output.stderr).to_string();
+            // Checkout succeeded but pop failed - likely conflicts
+            return Ok(GitOperationResult {
+                success: true,
+                message: format!(
+                    "Switched to '{}' but failed to restore changes. Your changes are in stash. Error: {}",
+                    branch_name,
+                    stderr.trim()
+                ),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("stash_pop_conflict".to_string()),
+                conflicting_files: None,
+            });
+        }
+
+        Ok(GitOperationResult {
+            success: true,
+            message: format!("Switched to '{}' and restored changes", branch_name),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        })
+    } else {
+        Ok(GitOperationResult {
+            success: true,
+            message: format!("Switched to '{}' (changes saved in stash)", branch_name),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        })
     }
 }
 

@@ -181,6 +181,17 @@
       "localBranch": "Local branch:",
       "branchExists": "Local branch {{branch}} already exists",
       "track": "Track"
+    },
+    "checkoutConflict": {
+      "title": "Unsaved Changes",
+      "description": "There are local changes that would be overwritten by checkout",
+      "targetBranch": "Switch to:",
+      "filesAffected": "{{count}} file(s) affected:",
+      "restoreChanges": "Restore changes after checkout",
+      "restoreHint": "Changes will be stashed, branch will be switched, then changes will be automatically restored",
+      "noRestoreHint": "Changes will be stashed and will remain there after checkout",
+      "stashAndSwitch": "Stash and Switch",
+      "switching": "Switching..."
     }
   },
   "activityLog": {
