@@ -180,7 +180,27 @@ pub fn get_branch_heads(repo: &Repository) -> Result<Vec<BranchHead>, String> {
 
 pub fn get_commits(repo: &Repository, limit: usize) -> Result<Vec<CommitInfo>, String> {
     let mut revwalk = repo.revwalk().map_err(|e| e.message().to_string())?;
-    revwalk.push_head().map_err(|e| e.message().to_string())?;
+
+    // Push all local branches to include all commits in the graph
+    let mut has_branches = false;
+    if let Ok(local_branches) = repo.branches(Some(BranchType::Local)) {
+        for branch in local_branches.flatten() {
+            let (branch, _) = branch;
+            if let Ok(reference) = branch.get().peel_to_commit() {
+                let _ = revwalk.push(reference.id());
+                has_branches = true;
+            }
+        }
+    }
+
+    // Fallback to HEAD if no branches were pushed
+    if !has_branches {
+        revwalk.push_head().map_err(|e| e.message().to_string())?;
+    }
+
+    // Sort by topological order with time
+    revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)
+        .map_err(|e| e.message().to_string())?;
 
     let commits: Vec<CommitInfo> = revwalk
         .take(limit)
