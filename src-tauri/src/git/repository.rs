@@ -1928,3 +1928,110 @@ pub fn git_stash_drop(repo_path: &str, stash_index: usize) -> Result<GitOperatio
 
     Ok(create_success_result(format!("Stash {} dropped", stash_ref)))
 }
+
+// ============================================================================
+// Image Content Functions
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImageContent {
+    pub base64: String,
+    pub mime_type: String,
+    pub file_size: u64,
+}
+
+/// Get MIME type from file extension
+fn get_mime_type(file_path: &str) -> String {
+    let lower = file_path.to_lowercase();
+    if lower.ends_with(".png") {
+        "image/png".to_string()
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg".to_string()
+    } else if lower.ends_with(".gif") {
+        "image/gif".to_string()
+    } else if lower.ends_with(".bmp") {
+        "image/bmp".to_string()
+    } else if lower.ends_with(".webp") {
+        "image/webp".to_string()
+    } else if lower.ends_with(".svg") {
+        "image/svg+xml".to_string()
+    } else if lower.ends_with(".ico") {
+        "image/x-icon".to_string()
+    } else {
+        "application/octet-stream".to_string()
+    }
+}
+
+/// Get current image content from working directory as base64
+pub fn get_image_content(repo: &Repository, file_path: &str) -> Result<ImageContent, String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    let workdir = repo.workdir().ok_or("No working directory")?;
+    let full_path = workdir.join(file_path);
+
+    if !full_path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+
+    let content = std::fs::read(&full_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let file_size = content.len() as u64;
+    let base64_content = STANDARD.encode(&content);
+    let mime_type = get_mime_type(file_path);
+
+    Ok(ImageContent {
+        base64: base64_content,
+        mime_type,
+        file_size,
+    })
+}
+
+/// Get image content from HEAD commit as base64
+pub fn get_image_from_head(repo: &Repository, file_path: &str) -> Result<ImageContent, String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    let head = repo.head().map_err(|e| e.message().to_string())?;
+    let tree = head.peel_to_tree().map_err(|e| e.message().to_string())?;
+
+    let entry = tree.get_path(std::path::Path::new(file_path))
+        .map_err(|e| format!("File not found in HEAD: {}", e.message()))?;
+
+    let blob = repo.find_blob(entry.id())
+        .map_err(|e| format!("Failed to get blob: {}", e.message()))?;
+
+    let content = blob.content();
+    let file_size = content.len() as u64;
+    let base64_content = STANDARD.encode(content);
+    let mime_type = get_mime_type(file_path);
+
+    Ok(ImageContent {
+        base64: base64_content,
+        mime_type,
+        file_size,
+    })
+}
+
+/// Get image content from index (staged) as base64
+pub fn get_image_from_index(repo: &Repository, file_path: &str) -> Result<ImageContent, String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    let index = repo.index().map_err(|e| e.message().to_string())?;
+
+    let entry = index.get_path(std::path::Path::new(file_path), 0)
+        .ok_or_else(|| format!("File not found in index: {}", file_path))?;
+
+    let blob = repo.find_blob(entry.id)
+        .map_err(|e| format!("Failed to get blob: {}", e.message()))?;
+
+    let content = blob.content();
+    let file_size = content.len() as u64;
+    let base64_content = STANDARD.encode(content);
+    let mime_type = get_mime_type(file_path);
+
+    Ok(ImageContent {
+        base64: base64_content,
+        mime_type,
+        file_size,
+    })
+}

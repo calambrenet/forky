@@ -1,12 +1,23 @@
 import { FC, useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
 import { useGitOperationStore, useRepositoryStore } from '../../stores';
 import './LocalChangesView.css';
+
+interface ImageContent {
+  base64: string;
+  mime_type: string;
+  file_size: number;
+}
+
+interface ImageDiffState {
+  oldImage: ImageContent | null;
+  newImage: ImageContent | null;
+  isLoading: boolean;
+}
 
 interface LocalChangesViewProps {
   repoPath: string;
@@ -49,6 +60,13 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   const [lastCommitMessage, setLastCommitMessage] = useState<CommitMessage | null>(null);
   const [isCommitLoading, setIsCommitLoading] = useState(false);
 
+  // Image diff state
+  const [imageDiff, setImageDiff] = useState<ImageDiffState>({
+    oldImage: null,
+    newImage: null,
+    isLoading: false,
+  });
+
   // Get store actions for updating pending changes indicator
   const { setTabHasPendingChanges } = useRepositoryStore.getState();
 
@@ -73,6 +91,48 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     loadFileStatus();
   }, [loadFileStatus, repoPath, refreshKey]);
 
+  const loadImageContent = useCallback(async (file: FileStatus) => {
+    setImageDiff({ oldImage: null, newImage: null, isLoading: true });
+
+    try {
+      let oldImage: ImageContent | null = null;
+      let newImage: ImageContent | null = null;
+
+      // Determine what images to load based on file status
+      if (file.status === 'untracked' || file.status === 'new') {
+        // New file: only show new image
+        newImage = await invoke<ImageContent>('get_image_content', { filePath: file.path });
+      } else if (file.status === 'deleted') {
+        // Deleted file: only show old image from HEAD
+        oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
+      } else if (file.status === 'modified') {
+        // Modified file: show both old and new
+        // For staged files, get old from HEAD, new from index
+        // For unstaged files, get old from index (or HEAD if not staged), new from working dir
+        if (file.staged) {
+          try {
+            oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
+          } catch {
+            // File might be new in this branch
+          }
+          newImage = await invoke<ImageContent>('get_image_from_index', { filePath: file.path });
+        } else {
+          try {
+            oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
+          } catch {
+            // File might be new
+          }
+          newImage = await invoke<ImageContent>('get_image_content', { filePath: file.path });
+        }
+      }
+
+      setImageDiff({ oldImage, newImage, isLoading: false });
+    } catch (error) {
+      console.error('Error loading image content:', error);
+      setImageDiff({ oldImage: null, newImage: null, isLoading: false });
+    }
+  }, []);
+
   const loadDiff = useCallback(async (file: FileStatus) => {
     setIsLoadingDiff(true);
     try {
@@ -82,13 +142,21 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
         fileStatus: file.status,
       });
       setDiffInfo(diff);
+
+      // If it's a binary image, also load the image content
+      if (diff.is_binary && diff.binary_type === 'image') {
+        loadImageContent(file);
+      } else {
+        setImageDiff({ oldImage: null, newImage: null, isLoading: false });
+      }
     } catch (error) {
       console.error('Error loading diff:', error);
       setDiffInfo(null);
+      setImageDiff({ oldImage: null, newImage: null, isLoading: false });
     } finally {
       setIsLoadingDiff(false);
     }
-  }, []);
+  }, [loadImageContent]);
 
   const handleFileSelect = (file: FileStatus) => {
     setSelectedFile(file);
@@ -370,27 +438,78 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   const renderBinaryViewer = () => {
     if (!diffInfo || !selectedFile) return null;
 
-    const fullPath = `${repoPath}/${selectedFile.path}`;
-
     if (diffInfo.binary_type === 'image') {
-      // For images, show a preview
-      const imageSrc = convertFileSrc(fullPath);
+      // Loading state
+      if (imageDiff.isLoading) {
+        return (
+          <div className="binary-viewer image-viewer">
+            <div className="binary-header">
+              <span className="binary-icon">🖼️</span>
+              <span className="binary-info">{t('common.loading')}</span>
+            </div>
+          </div>
+        );
+      }
+
+      const { oldImage, newImage } = imageDiff;
+      const hasOldImage = oldImage !== null;
+      const hasNewImage = newImage !== null;
+      const isSideBySide = hasOldImage && hasNewImage;
+
+      // No images loaded
+      if (!hasOldImage && !hasNewImage) {
+        return (
+          <div className="binary-viewer image-viewer">
+            <div className="binary-header">
+              <span className="binary-icon">🖼️</span>
+              <span className="binary-info">{t('diff.imagePreview')}</span>
+            </div>
+            <div className="image-preview-empty">
+              <span>{t('diff.noChanges')}</span>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="binary-viewer image-viewer">
           <div className="binary-header">
             <span className="binary-icon">🖼️</span>
             <span className="binary-info">
-              {t('diff.imagePreview')} • {formatFileSize(diffInfo.file_size)}
+              {t('diff.imagePreview')}
+              {newImage && ` • ${formatFileSize(newImage.file_size)}`}
+              {!newImage && oldImage && ` • ${formatFileSize(oldImage.file_size)}`}
             </span>
           </div>
-          <div className="image-preview">
-            <img
-              src={imageSrc}
-              alt={selectedFile.path}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
+          <div className={`image-diff-container ${isSideBySide ? 'side-by-side' : 'single'}`}>
+            {hasOldImage && (
+              <div className="image-diff-panel old">
+                <div className="image-diff-label">
+                  <span className="label-text">{t('diff.oldVersion')}</span>
+                  <span className="label-size">{formatFileSize(oldImage.file_size)}</span>
+                </div>
+                <div className="image-preview">
+                  <img
+                    src={`data:${oldImage.mime_type};base64,${oldImage.base64}`}
+                    alt={`Old: ${selectedFile.path}`}
+                  />
+                </div>
+              </div>
+            )}
+            {hasNewImage && (
+              <div className="image-diff-panel new">
+                <div className="image-diff-label">
+                  <span className="label-text">{t('diff.newVersion')}</span>
+                  <span className="label-size">{formatFileSize(newImage.file_size)}</span>
+                </div>
+                <div className="image-preview">
+                  <img
+                    src={`data:${newImage.mime_type};base64,${newImage.base64}`}
+                    alt={`New: ${selectedFile.path}`}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       );

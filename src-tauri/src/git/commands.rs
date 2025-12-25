@@ -1,6 +1,7 @@
 use crate::git::repository::{
     self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FileStatus,
     GitOperationResult, RepositoryInfo, TagInfo, StashInfo, FetchOptions, PullOptions, PushOptions,
+    ImageContent,
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -383,4 +384,41 @@ pub fn git_stash_drop(
     let repo_path = state.current_repo_path.lock().unwrap();
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_stash_drop(path, stash_index)
+}
+
+// ============================================================================
+// Image Content Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_image_content(
+    file_path: String,
+    state: State<AppState>,
+) -> Result<ImageContent, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let repo = repository::open_repository(path)?;
+    repository::get_image_content(&repo, &file_path)
+}
+
+#[tauri::command]
+pub fn get_image_from_head(
+    file_path: String,
+    state: State<AppState>,
+) -> Result<ImageContent, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let repo = repository::open_repository(path)?;
+    repository::get_image_from_head(&repo, &file_path)
+}
+
+#[tauri::command]
+pub fn get_image_from_index(
+    file_path: String,
+    state: State<AppState>,
+) -> Result<ImageContent, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let repo = repository::open_repository(path)?;
+    repository::get_image_from_index(&repo, &file_path)
 }
