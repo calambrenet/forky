@@ -58,10 +58,13 @@ jobs:
         run: npm ci
 
       - name: Type check
-        run: npm run type-check || npx tsc --noEmit
+        run: npx tsc --noEmit
 
       - name: Lint
-        run: npm run lint || true
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
 
       - name: Build frontend
         run: npm run build

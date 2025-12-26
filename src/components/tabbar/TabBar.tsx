@@ -1,6 +1,7 @@
-import { FC, useState } from 'react';
+import type { FC } from 'react';
+import { useState } from 'react';
 import { BookOpen, X, Plus } from 'lucide-react';
-import { RepositoryTab } from '../../types/git';
+import type { RepositoryTab } from '../../types/git';
 import { TabContextMenu } from './TabContextMenu';
 import './TabBar.css';
 
@@ -75,9 +76,7 @@ export const TabBar: FC<TabBarProps> = ({
               <span className="tab-pending-indicator" title="Pending changes" />
             )}
             <span className="tab-name">{tab.name}</span>
-            {tab.currentBranch && (
-              <span className="tab-branch">{tab.currentBranch}</span>
-            )}
+            {tab.currentBranch && <span className="tab-branch">{tab.currentBranch}</span>}
             <button
               className="tab-close"
               onClick={(e) => handleCloseClick(e, tab.id)}

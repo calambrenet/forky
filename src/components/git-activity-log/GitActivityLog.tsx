@@ -1,8 +1,9 @@
-import { FC, useState } from 'react';
+import type { FC } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Check } from 'lucide-react';
 import { useLocale } from '../../i18n/useLocale';
-import { GitLogEntry } from '../../types/git';
+import type { GitLogEntry } from '../../types/git';
 import './GitActivityLog.css';
 
 interface GitActivityLogProps {
@@ -13,11 +14,7 @@ interface GitActivityLogProps {
 
 type FilterType = 'all' | 'user' | 'background';
 
-export const GitActivityLog: FC<GitActivityLogProps> = ({
-  entries,
-  isOpen,
-  onClose,
-}) => {
+export const GitActivityLog: FC<GitActivityLogProps> = ({ entries, isOpen, onClose }) => {
   const { t } = useTranslation();
   const { formatTime, formatDate } = useLocale();
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(
@@ -104,7 +101,9 @@ export const GitActivityLog: FC<GitActivityLogProps> = ({
                 <div className="detail-header">
                   <div className="detail-title-row">
                     <span className="detail-title">{selectedEntry.operationName}</span>
-                    <span className={`detail-status ${selectedEntry.success ? 'success' : 'error'}`}>
+                    <span
+                      className={`detail-status ${selectedEntry.success ? 'success' : 'error'}`}
+                    >
                       {selectedEntry.success ? <Check size={12} /> : <X size={12} />}
                       {selectedEntry.output.split('\n')[0]}
                     </span>

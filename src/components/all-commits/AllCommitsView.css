@@ -39,7 +39,9 @@
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
 }
 
 .load-more-btn:hover {

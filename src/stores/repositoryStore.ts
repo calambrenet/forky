@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
-import {
+import type {
   RepositoryTab,
   RepositoryInfo,
   BranchInfo,
@@ -275,9 +275,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
 
         setTabHasPendingChanges: (tabId: string, hasPendingChanges: boolean) => {
           set((state) => ({
-            tabs: state.tabs.map((tab) =>
-              tab.id === tabId ? { ...tab, hasPendingChanges } : tab
-            ),
+            tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, hasPendingChanges } : tab)),
           }));
         },
 
@@ -292,16 +290,23 @@ export const useRepositoryStore = create<RepositoryStore>()(
         // Internal actions
         _loadRepositoryData: async (tabId: string, persistedData?: PersistedTabData) => {
           try {
-            const [branchesData, branchHeadsData, tagsData, stashesData, remotesData, commitsData, statusData] =
-              await Promise.all([
-                invoke<BranchInfo[]>('get_branches'),
-                invoke<BranchHead[]>('get_branch_heads'),
-                invoke<TagInfo[]>('get_tags'),
-                invoke<StashInfo[]>('get_stashes'),
-                invoke<string[]>('get_remotes'),
-                invoke<CommitInfo[]>('get_commits', { limit: 100 }),
-                invoke<FileStatus[]>('get_file_status'),
-              ]);
+            const [
+              branchesData,
+              branchHeadsData,
+              tagsData,
+              stashesData,
+              remotesData,
+              commitsData,
+              statusData,
+            ] = await Promise.all([
+              invoke<BranchInfo[]>('get_branches'),
+              invoke<BranchHead[]>('get_branch_heads'),
+              invoke<TagInfo[]>('get_tags'),
+              invoke<StashInfo[]>('get_stashes'),
+              invoke<string[]>('get_remotes'),
+              invoke<CommitInfo[]>('get_commits', { limit: 100 }),
+              invoke<FileStatus[]>('get_file_status'),
+            ]);
 
             set((state) => {
               const existingState = state.tabStates[tabId];

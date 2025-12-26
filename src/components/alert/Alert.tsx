@@ -1,4 +1,5 @@
-import { FC, useEffect, useCallback, ReactElement } from 'react';
+import type { FC, ReactElement } from 'react';
+import { useEffect, useCallback } from 'react';
 import { XCircle, CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
 import './Alert.css';
 

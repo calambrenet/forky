@@ -1,4 +1,4 @@
-import { CommitInfo, BranchHead } from '../../types/git';
+import type { CommitInfo, BranchHead } from '../../types/git';
 
 export interface GraphNode {
   commit: CommitInfo;
@@ -40,10 +40,7 @@ const BRANCH_COLORS = [
   '#17a2b8', // teal
 ];
 
-export function calculateGraphLayout(
-  commits: CommitInfo[],
-  branchHeads: BranchHead[]
-): GraphData {
+export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchHead[]): GraphData {
   if (commits.length === 0) {
     return { nodes: [], maxLane: 0 };
   }
@@ -57,7 +54,7 @@ export function calculateGraphLayout(
 
   // Map branch heads to their commits for labels
   const branchHeadsMap = new Map<string, BranchHead[]>();
-  branchHeads.forEach(branch => {
+  branchHeads.forEach((branch) => {
     const existing = branchHeadsMap.get(branch.commit_sha) || [];
     existing.push(branch);
     branchHeadsMap.set(branch.commit_sha, existing);
@@ -124,7 +121,7 @@ export function calculateGraphLayout(
 
     // Get branch labels for this commit
     const commitBranches = branchHeadsMap.get(commit.id) || [];
-    const branchLabels: BranchLabel[] = commitBranches.map(b => ({
+    const branchLabels: BranchLabel[] = commitBranches.map((b) => ({
       name: b.name,
       isHead: b.is_head,
       color: branchColors.get(b.name) || BRANCH_COLORS[0],
@@ -153,7 +150,7 @@ export function calculateGraphLayout(
   });
 
   // Third pass: calculate parent connections
-  nodes.forEach(node => {
+  nodes.forEach((node) => {
     node.commit.parent_ids.forEach((parentId, index) => {
       const parentNode = commitToNode.get(parentId);
       if (parentNode) {
@@ -183,7 +180,7 @@ export function calculateGraphLayout(
     });
   });
 
-  const maxLane = Math.max(...nodes.map(n => n.lane), 0);
+  const maxLane = Math.max(...nodes.map((n) => n.lane), 0);
 
   return { nodes, maxLane };
 }
@@ -209,7 +206,7 @@ export function formatDate(dateStr: string): string {
       return date.toLocaleDateString([], {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
       });
     }
   } catch {

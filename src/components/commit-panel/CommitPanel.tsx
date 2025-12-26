@@ -1,4 +1,5 @@
-import { FC, useState, useEffect, useCallback } from 'react';
+import type { FC } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import './CommitPanel.css';
@@ -35,10 +36,13 @@ export const CommitPanel: FC<CommitPanelProps> = ({
     }
   }, [amend, lastCommitMessage]);
 
-  const handleAmendChange = useCallback((checked: boolean) => {
-    setAmend(checked);
-    onAmendChange(checked);
-  }, [onAmendChange]);
+  const handleAmendChange = useCallback(
+    (checked: boolean) => {
+      setAmend(checked);
+      onAmendChange(checked);
+    },
+    [onAmendChange]
+  );
 
   const handleCommit = useCallback(async () => {
     if (!subject.trim()) return;
@@ -52,19 +56,20 @@ export const CommitPanel: FC<CommitPanelProps> = ({
     setAmend(false);
   }, [subject, description, amend, stagedCount, onCommit]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Cmd/Ctrl + Enter to commit
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleCommit();
-    }
-  }, [handleCommit]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      // Cmd/Ctrl + Enter to commit
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleCommit();
+      }
+    },
+    [handleCommit]
+  );
 
   const isCommitDisabled = !subject.trim() || (stagedCount === 0 && !amend) || isLoading;
 
-  const buttonText = amend
-    ? t('localChanges.amendLastCommit')
-    : t('localChanges.commit');
+  const buttonText = amend ? t('localChanges.amendLastCommit') : t('localChanges.commit');
 
   return (
     <div className="commit-panel" onKeyDown={handleKeyDown}>
@@ -101,11 +106,7 @@ export const CommitPanel: FC<CommitPanelProps> = ({
           </span>
           <span className="commit-amend-text">{t('localChanges.amendLastCommit')}</span>
         </label>
-        <button
-          className="commit-button"
-          onClick={handleCommit}
-          disabled={isCommitDisabled}
-        >
+        <button className="commit-button" onClick={handleCommit} disabled={isCommitDisabled}>
           {isLoading ? t('localChanges.committing') : buttonText}
         </button>
       </div>

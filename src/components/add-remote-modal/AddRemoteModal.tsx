@@ -1,9 +1,10 @@
-import { FC, useState, useEffect, useCallback } from 'react';
+import type { FC } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { Globe, Check, AlertCircle } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal/Modal';
-import { GitOperationResult } from '../../types/git';
+import type { GitOperationResult } from '../../types/git';
 import './AddRemoteModal.css';
 
 interface AddRemoteModalProps {
@@ -40,17 +41,19 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   }, [isOpen]);
 
   // Validation
-  const isValidName = remoteName.trim().length > 0 &&
+  const isValidName =
+    remoteName.trim().length > 0 &&
     /^[a-zA-Z0-9_-]+$/.test(remoteName) &&
     !existingRemotes.includes(remoteName.trim());
 
   const isValidUrl = repoUrl.trim().length > 0;
 
-  const nameError = remoteName.trim().length > 0 && !isValidName
-    ? existingRemotes.includes(remoteName.trim())
-      ? 'Remote name already exists'
-      : 'Invalid name (use alphanumeric, - or _)'
-    : '';
+  const nameError =
+    remoteName.trim().length > 0 && !isValidName
+      ? existingRemotes.includes(remoteName.trim())
+        ? 'Remote name already exists'
+        : 'Invalid name (use alphanumeric, - or _)'
+      : '';
 
   const canAdd = isValidName && isValidUrl && !isAdding;
 
@@ -92,12 +95,15 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
     }
   }, [canAdd, remoteName, repoUrl, onAdd, onClose]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && canAdd) {
-      e.preventDefault();
-      handleAdd();
-    }
-  }, [canAdd, handleAdd]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && canAdd) {
+        e.preventDefault();
+        handleAdd();
+      }
+    },
+    [canAdd, handleAdd]
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
@@ -142,7 +148,9 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
               onClick={handleTestConnection}
               disabled={!isValidUrl || testStatus === 'testing' || isAdding}
             >
-              {testStatus === 'testing' ? t('modals.addRemote.testing') : t('modals.addRemote.testConnection')}
+              {testStatus === 'testing'
+                ? t('modals.addRemote.testing')
+                : t('modals.addRemote.testConnection')}
             </button>
             {testStatus === 'success' && (
               <div className="add-remote-test-result success">
@@ -163,11 +171,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
         <button className="btn-cancel" onClick={onClose} disabled={isAdding}>
           {t('common.cancel')}
         </button>
-        <button
-          className="btn-primary"
-          onClick={handleAdd}
-          disabled={!canAdd}
-        >
+        <button className="btn-primary" onClick={handleAdd} disabled={!canAdd}>
           {isAdding ? t('modals.addRemote.adding') : t('modals.addRemote.add')}
         </button>
       </ModalFooter>

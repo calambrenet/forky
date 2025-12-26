@@ -8,7 +8,7 @@
 }
 
 /* Warning style for force push checkbox */
-.checkbox-container:has(input:checked) .checkbox-label:contains("Force") {
+.checkbox-container:has(input:checked) .checkbox-label:contains('Force') {
   color: var(--accent-orange);
 }
 
@@ -279,7 +279,9 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.15s, opacity 0.15s;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
 }
 
 .btn-danger:hover {
@@ -353,7 +355,9 @@
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.15s, opacity 0.15s;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
 }
 
 .btn-secondary {
@@ -444,7 +448,7 @@
   cursor: pointer;
 }
 
-.checkout-conflict-option .checkbox-label input[type="checkbox"] {
+.checkout-conflict-option .checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   cursor: pointer;

@@ -1,13 +1,5 @@
-import {
-  FC,
-  ReactNode,
-  createContext,
-  useContext,
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-} from 'react';
+import type { FC, ReactNode } from 'react';
+import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronRight, Check } from 'lucide-react';
 import './Menu.css';
 
@@ -228,9 +220,7 @@ export const MenuCheckbox: FC<MenuCheckboxProps> = ({ checked, onChange, childre
 
   return (
     <div className="menu-item menu-checkbox" onClick={handleClick}>
-      <span className="menu-item-icon">
-        {checked && <Check size={14} />}
-      </span>
+      <span className="menu-item-icon">{checked && <Check size={14} />}</span>
       <span className="menu-item-label">{children}</span>
     </div>
   );

@@ -1,4 +1,5 @@
-import { FC, memo, useState } from 'react';
+import type { FC } from 'react';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -25,9 +26,10 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
-import { RepositoryInfoBox, GitOperationState } from '../repository-info-box';
+import type { GitOperationState } from '../repository-info-box';
+import { RepositoryInfoBox } from '../repository-info-box';
 import { StashDropdown } from './StashDropdown';
-import { BranchInfo, StashInfo } from '../../types/git';
+import type { BranchInfo, StashInfo } from '../../types/git';
 import './Toolbar.css';
 
 interface ToolbarProps {
@@ -55,207 +57,237 @@ interface ToolbarProps {
 
 const ICON_SIZE = 16;
 
-export const Toolbar: FC<ToolbarProps> = memo(({
-  onOpenRepo,
-  repoName,
-  repoPath,
-  currentBranch,
-  branches = [],
-  stashes = [],
-  onBranchChange,
-  onThemeChange,
-  currentTheme = 'system',
-  onFetch,
-  onPull,
-  onPush,
-  onStash,
-  onSaveSnapshot,
-  onStashSelect,
-  isLoading = false,
-  gitOperation,
-  onDismissOperation,
-  onOpenActivityLog,
-  onFeedback,
-}) => {
-  const { t } = useTranslation();
-  const appWindow = getCurrentWindow();
-  const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
+export const Toolbar: FC<ToolbarProps> = memo(
+  ({
+    onOpenRepo,
+    repoName,
+    repoPath,
+    currentBranch,
+    branches = [],
+    stashes = [],
+    onBranchChange,
+    onThemeChange,
+    currentTheme = 'system',
+    onFetch,
+    onPull,
+    onPush,
+    onStash,
+    onSaveSnapshot,
+    onStashSelect,
+    isLoading = false,
+    gitOperation,
+    onDismissOperation,
+    onOpenActivityLog,
+    onFeedback,
+  }) => {
+    const { t } = useTranslation();
+    const appWindow = getCurrentWindow();
+    const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
 
-  const handleOpenInTerminal = async () => {
-    if (!repoPath) {
-      console.warn('No repository path available');
-      return;
-    }
-    try {
-      await invoke('open_in_terminal', { path: repoPath });
-    } catch (error) {
-      console.error('Failed to open terminal:', error);
-    }
-  };
+    const handleOpenInTerminal = async () => {
+      if (!repoPath) {
+        console.warn('No repository path available');
+        return;
+      }
+      try {
+        await invoke('open_in_terminal', { path: repoPath });
+      } catch (error) {
+        console.error('Failed to open terminal:', error);
+      }
+    };
 
-  const handleSettings = () => {
-    console.log('Settings');
-  };
+    const handleSettings = () => {
+      // TODO: Open settings
+    };
 
-  const handleKeyboardShortcuts = () => {
-    console.log('Keyboard shortcuts');
-  };
+    const handleKeyboardShortcuts = () => {
+      // TODO: Show keyboard shortcuts
+    };
 
-  const handleAbout = () => {
-    console.log('About');
-  };
+    const handleAbout = () => {
+      // TODO: Show about dialog
+    };
 
-  const handleHelp = () => {
-    console.log('Help');
-  };
+    const handleHelp = () => {
+      // TODO: Open help
+    };
 
-  const handleExit = async () => {
-    await appWindow.close();
-  };
+    const handleExit = async () => {
+      await appWindow.close();
+    };
 
-  const handleThemeChange = (theme: 'system' | 'light' | 'dark') => {
-    onThemeChange?.(theme);
-  };
+    const handleThemeChange = (theme: 'system' | 'light' | 'dark') => {
+      onThemeChange?.(theme);
+    };
 
-  return (
-    <div className="toolbar">
-      {/* Left section: Open, Fetch, Pull, Push, Stash */}
-      <div className="toolbar-left">
-        <button className="toolbar-btn" onClick={onOpenRepo} title={t('toolbar.openRepository')}>
-          <FolderOpen size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.open')}</span>
-        </button>
-        <div className="toolbar-separator" />
-        <button className="toolbar-btn" title={t('toolbar.fetch')} onClick={onFetch} disabled={isLoading}>
-          <Download size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.fetch')}</span>
-        </button>
-        <button className="toolbar-btn" title={t('toolbar.pull')} onClick={onPull} disabled={isLoading}>
-          <ArrowDown size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.pull')}</span>
-        </button>
-        <button className="toolbar-btn" title={t('toolbar.push')} onClick={onPush} disabled={isLoading}>
-          <ArrowUp size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.push')}</span>
-        </button>
-        <div className="toolbar-split-btn">
+    return (
+      <div className="toolbar">
+        {/* Left section: Open, Fetch, Pull, Push, Stash */}
+        <div className="toolbar-left">
+          <button className="toolbar-btn" onClick={onOpenRepo} title={t('toolbar.openRepository')}>
+            <FolderOpen size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.open')}</span>
+          </button>
+          <div className="toolbar-separator" />
           <button
-            className="toolbar-btn split-main"
-            title={t('toolbar.stash')}
-            onClick={onStash}
+            className="toolbar-btn"
+            title={t('toolbar.fetch')}
+            onClick={onFetch}
             disabled={isLoading}
           >
-            <Archive size={ICON_SIZE} />
-            <span className="btn-label">{t('toolbar.stash')}</span>
+            <Download size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.fetch')}</span>
           </button>
           <button
-            className="toolbar-btn split-dropdown-trigger"
-            onClick={() => setStashDropdownOpen(!stashDropdownOpen)}
+            className="toolbar-btn"
+            title={t('toolbar.pull')}
+            onClick={onPull}
             disabled={isLoading}
           >
-            <ChevronDown size={10} />
+            <ArrowDown size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.pull')}</span>
           </button>
-          {stashDropdownOpen && (
-            <StashDropdown
-              stashes={stashes}
-              onStashClick={(stash) => onStashSelect?.(stash)}
-              onSaveSnapshot={() => onSaveSnapshot?.()}
-              onClose={() => setStashDropdownOpen(false)}
-            />
-          )}
+          <button
+            className="toolbar-btn"
+            title={t('toolbar.push')}
+            onClick={onPush}
+            disabled={isLoading}
+          >
+            <ArrowUp size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.push')}</span>
+          </button>
+          <div className="toolbar-split-btn">
+            <button
+              className="toolbar-btn split-main"
+              title={t('toolbar.stash')}
+              onClick={onStash}
+              disabled={isLoading}
+            >
+              <Archive size={ICON_SIZE} />
+              <span className="btn-label">{t('toolbar.stash')}</span>
+            </button>
+            <button
+              className="toolbar-btn split-dropdown-trigger"
+              onClick={() => setStashDropdownOpen(!stashDropdownOpen)}
+              disabled={isLoading}
+            >
+              <ChevronDown size={10} />
+            </button>
+            {stashDropdownOpen && (
+              <StashDropdown
+                stashes={stashes}
+                onStashClick={(stash) => onStashSelect?.(stash)}
+                onSaveSnapshot={() => onSaveSnapshot?.()}
+                onClose={() => setStashDropdownOpen(false)}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Center section: Repository Info Box */}
+        <div className="toolbar-center">
+          <RepositoryInfoBox
+            repoName={repoName}
+            currentBranch={currentBranch}
+            branches={branches}
+            onBranchChange={onBranchChange || (() => {})}
+            gitOperation={gitOperation}
+            onDismissOperation={onDismissOperation}
+            onOpenActivityLog={onOpenActivityLog}
+          />
+        </div>
+
+        {/* Right section: Branch, Merge, Menu */}
+        <div className="toolbar-right">
+          <button className="toolbar-btn" title={t('toolbar.branch')}>
+            <GitBranch size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.branch')}</span>
+          </button>
+          <button className="toolbar-btn" title={t('toolbar.merge')}>
+            <GitMerge size={ICON_SIZE} />
+            <span className="btn-label">{t('toolbar.merge')}</span>
+          </button>
+          <div className="toolbar-separator" />
+          <button className="toolbar-icon-btn" title={t('feedback.title')} onClick={onFeedback}>
+            <Smile size={18} />
+          </button>
+          <Menu
+            trigger={
+              <button className="hamburger-btn" title={t('menu.repository')}>
+                <MenuIcon size={18} />
+              </button>
+            }
+            align="right"
+          >
+            <MenuHeader>{t('menu.repository')}</MenuHeader>
+            <MenuItem
+              icon={<FolderInput size={ICON_SIZE} />}
+              shortcut="Ctrl+O"
+              onClick={onOpenRepo}
+            >
+              {t('menu.openRepository')}
+            </MenuItem>
+            <MenuItem icon={<Copy size={ICON_SIZE} />} shortcut="Ctrl+Shift+O">
+              {t('menu.cloneRepository')}
+            </MenuItem>
+            <MenuItem icon={<Terminal size={ICON_SIZE} />} onClick={handleOpenInTerminal}>
+              {t('menu.openInTerminal')}
+            </MenuItem>
+            <MenuSeparator />
+            <SubMenu icon={<Sun size={ICON_SIZE} />} label={t('menu.theme')}>
+              <MenuItem
+                icon={currentTheme === 'system' ? <Check size={ICON_SIZE} /> : undefined}
+                onClick={() => handleThemeChange('system')}
+              >
+                {t('menu.themeSystem')}
+              </MenuItem>
+              <MenuItem
+                icon={currentTheme === 'light' ? <Check size={ICON_SIZE} /> : undefined}
+                onClick={() => handleThemeChange('light')}
+              >
+                {t('menu.themeLight')}
+              </MenuItem>
+              <MenuItem
+                icon={currentTheme === 'dark' ? <Check size={ICON_SIZE} /> : undefined}
+                onClick={() => handleThemeChange('dark')}
+              >
+                {t('menu.themeDark')}
+              </MenuItem>
+            </SubMenu>
+            <MenuSeparator />
+            <MenuItem
+              icon={<Settings size={ICON_SIZE} />}
+              shortcut="Ctrl+,"
+              onClick={handleSettings}
+            >
+              {t('menu.settings')}
+            </MenuItem>
+            <MenuItem
+              icon={<Keyboard size={ICON_SIZE} />}
+              shortcut="Ctrl+K"
+              onClick={handleKeyboardShortcuts}
+            >
+              {t('menu.keyboardShortcuts')}
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem icon={<HelpCircle size={ICON_SIZE} />} shortcut="F1" onClick={handleHelp}>
+              {t('menu.help')}
+            </MenuItem>
+            <MenuItem icon={<Info size={ICON_SIZE} />} onClick={handleAbout}>
+              {t('menu.about')}
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem
+              icon={<LogOut size={ICON_SIZE} />}
+              shortcut="Ctrl+Q"
+              danger
+              onClick={handleExit}
+            >
+              {t('menu.exit')}
+            </MenuItem>
+          </Menu>
         </div>
       </div>
-
-      {/* Center section: Repository Info Box */}
-      <div className="toolbar-center">
-        <RepositoryInfoBox
-          repoName={repoName}
-          currentBranch={currentBranch}
-          branches={branches}
-          onBranchChange={onBranchChange || (() => {})}
-          gitOperation={gitOperation}
-          onDismissOperation={onDismissOperation}
-          onOpenActivityLog={onOpenActivityLog}
-        />
-      </div>
-
-      {/* Right section: Branch, Merge, Menu */}
-      <div className="toolbar-right">
-        <button className="toolbar-btn" title={t('toolbar.branch')}>
-          <GitBranch size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.branch')}</span>
-        </button>
-        <button className="toolbar-btn" title={t('toolbar.merge')}>
-          <GitMerge size={ICON_SIZE} />
-          <span className="btn-label">{t('toolbar.merge')}</span>
-        </button>
-        <div className="toolbar-separator" />
-        <button
-          className="toolbar-icon-btn"
-          title={t('feedback.title')}
-          onClick={onFeedback}
-        >
-          <Smile size={18} />
-        </button>
-        <Menu
-          trigger={
-            <button className="hamburger-btn" title={t('menu.repository')}>
-              <MenuIcon size={18} />
-            </button>
-          }
-          align="right"
-        >
-          <MenuHeader>{t('menu.repository')}</MenuHeader>
-          <MenuItem icon={<FolderInput size={ICON_SIZE} />} shortcut="Ctrl+O" onClick={onOpenRepo}>
-            {t('menu.openRepository')}
-          </MenuItem>
-          <MenuItem icon={<Copy size={ICON_SIZE} />} shortcut="Ctrl+Shift+O">
-            {t('menu.cloneRepository')}
-          </MenuItem>
-          <MenuItem icon={<Terminal size={ICON_SIZE} />} onClick={handleOpenInTerminal}>
-            {t('menu.openInTerminal')}
-          </MenuItem>
-          <MenuSeparator />
-          <SubMenu icon={<Sun size={ICON_SIZE} />} label={t('menu.theme')}>
-            <MenuItem
-              icon={currentTheme === 'system' ? <Check size={ICON_SIZE} /> : undefined}
-              onClick={() => handleThemeChange('system')}
-            >
-              {t('menu.themeSystem')}
-            </MenuItem>
-            <MenuItem
-              icon={currentTheme === 'light' ? <Check size={ICON_SIZE} /> : undefined}
-              onClick={() => handleThemeChange('light')}
-            >
-              {t('menu.themeLight')}
-            </MenuItem>
-            <MenuItem
-              icon={currentTheme === 'dark' ? <Check size={ICON_SIZE} /> : undefined}
-              onClick={() => handleThemeChange('dark')}
-            >
-              {t('menu.themeDark')}
-            </MenuItem>
-          </SubMenu>
-          <MenuSeparator />
-          <MenuItem icon={<Settings size={ICON_SIZE} />} shortcut="Ctrl+," onClick={handleSettings}>
-            {t('menu.settings')}
-          </MenuItem>
-          <MenuItem icon={<Keyboard size={ICON_SIZE} />} shortcut="Ctrl+K" onClick={handleKeyboardShortcuts}>
-            {t('menu.keyboardShortcuts')}
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem icon={<HelpCircle size={ICON_SIZE} />} shortcut="F1" onClick={handleHelp}>
-            {t('menu.help')}
-          </MenuItem>
-          <MenuItem icon={<Info size={ICON_SIZE} />} onClick={handleAbout}>
-            {t('menu.about')}
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem icon={<LogOut size={ICON_SIZE} />} shortcut="Ctrl+Q" danger onClick={handleExit}>
-            {t('menu.exit')}
-          </MenuItem>
-        </Menu>
-      </div>
-    </div>
-  );
-});
+    );
+  }
+);

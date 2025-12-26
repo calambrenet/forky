@@ -1,9 +1,1 @@
-export {
-  Menu,
-  MenuItem,
-  MenuSeparator,
-  MenuHeader,
-  SubMenu,
-  MenuCheckbox,
-  useMenu,
-} from './Menu';
+export { Menu, MenuItem, MenuSeparator, MenuHeader, SubMenu, MenuCheckbox, useMenu } from './Menu';

@@ -1,14 +1,14 @@
-import { BranchInfo, TagInfo } from '../../types/git';
+import type { BranchInfo, TagInfo } from '../../types/git';
 
 // Tree node types
 export interface TreeNode {
-  name: string;           // Display name (just the segment, not full path)
-  fullPath: string;       // Full path for identification
+  name: string; // Display name (just the segment, not full path)
+  fullPath: string; // Full path for identification
   type: 'folder' | 'branch' | 'tag' | 'remote';
-  branch?: BranchInfo;    // Original branch data if type is 'branch'
-  tag?: TagInfo;          // Original tag data if type is 'tag'
+  branch?: BranchInfo; // Original branch data if type is 'branch'
+  tag?: TagInfo; // Original tag data if type is 'tag'
   children: TreeNode[];
-  isHead?: boolean;       // Is current branch
+  isHead?: boolean; // Is current branch
 }
 
 // Build a tree structure from flat branch list
@@ -24,7 +24,7 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
       const isLast = i === parts.length - 1;
       const fullPath = parts.slice(0, i + 1).join('/');
 
-      let existing = currentLevel.find(node => node.name === part && node.fullPath === fullPath);
+      let existing = currentLevel.find((node) => node.name === part && node.fullPath === fullPath);
 
       if (!existing) {
         if (isLast) {
@@ -81,7 +81,7 @@ export function buildRemoteTree(branches: BranchInfo[], remotes: string[]): Tree
     const remoteName = parts[0];
     const branchPath = parts.slice(1); // Everything after remote name
 
-    const remoteNode = root.find(node => node.name === remoteName);
+    const remoteNode = root.find((node) => node.name === remoteName);
     if (!remoteNode) continue;
 
     let currentLevel = remoteNode.children;
@@ -91,7 +91,7 @@ export function buildRemoteTree(branches: BranchInfo[], remotes: string[]): Tree
       const isLast = i === branchPath.length - 1;
       const fullPath = [remoteName, ...branchPath.slice(0, i + 1)].join('/');
 
-      let existing = currentLevel.find(node => node.name === part && node.fullPath === fullPath);
+      let existing = currentLevel.find((node) => node.name === part && node.fullPath === fullPath);
 
       if (!existing) {
         if (isLast) {
@@ -138,7 +138,7 @@ export function buildTagTree(tags: TagInfo[]): TreeNode[] {
       const isLast = i === parts.length - 1;
       const fullPath = parts.slice(0, i + 1).join('/');
 
-      let existing = currentLevel.find(node => node.name === part && node.fullPath === fullPath);
+      let existing = currentLevel.find((node) => node.name === part && node.fullPath === fullPath);
 
       if (!existing) {
         if (isLast) {
@@ -196,8 +196,11 @@ export function filterTree(nodes: TreeNode[], filter: string): TreeNode[] {
     // Check if this node's name matches
     if (node.name.toLowerCase().includes(lowerFilter)) return true;
     // Check full path for branches/tags
-    if ((node.type === 'branch' || node.type === 'tag') &&
-        node.fullPath.toLowerCase().includes(lowerFilter)) return true;
+    if (
+      (node.type === 'branch' || node.type === 'tag') &&
+      node.fullPath.toLowerCase().includes(lowerFilter)
+    )
+      return true;
     return false;
   }
 
@@ -215,8 +218,8 @@ export function filterTree(nodes: TreeNode[], filter: string): TreeNode[] {
     if (nodeMatches(node) || filteredChildren.length > 0) {
       return {
         ...node,
-        children: filteredChildren.length > 0 ? filteredChildren :
-                  (nodeMatches(node) ? node.children : []),
+        children:
+          filteredChildren.length > 0 ? filteredChildren : nodeMatches(node) ? node.children : [],
       };
     }
 

@@ -88,7 +88,7 @@
   user-select: none;
 }
 
-.commit-amend-label input[type="checkbox"] {
+.commit-amend-label input[type='checkbox'] {
   position: absolute;
   opacity: 0;
   width: 0;
@@ -104,7 +104,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s, border-color 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
   flex-shrink: 0;
 }
 
@@ -112,7 +114,7 @@
   border-color: var(--accent-blue);
 }
 
-.commit-amend-checkbox[data-checked="true"] {
+.commit-amend-checkbox[data-checked='true'] {
   background-color: var(--accent-blue);
   border-color: var(--accent-blue);
 }
@@ -135,7 +137,9 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s, opacity 0.15s;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
 }
 
 .commit-button:hover:not(:disabled) {

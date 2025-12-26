@@ -1,6 +1,7 @@
-import { FC, useState, useRef, useEffect } from 'react';
+import type { FC } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { GitBranch, Check } from 'lucide-react';
-import { BranchInfo } from '../../types/git';
+import type { BranchInfo } from '../../types/git';
 import './BranchSelector.css';
 
 interface BranchSelectorProps {
@@ -38,9 +39,9 @@ export const BranchSelector: FC<BranchSelectorProps> = ({
   }, [onClose]);
 
   // Filter branches - only show local branches (not remote)
-  const localBranches = branches.filter(b => !b.is_remote);
+  const localBranches = branches.filter((b) => !b.is_remote);
   const filteredBranches = filter
-    ? localBranches.filter(b => b.name.toLowerCase().includes(filter.toLowerCase()))
+    ? localBranches.filter((b) => b.name.toLowerCase().includes(filter.toLowerCase()))
     : localBranches;
 
   const handleSelect = (branchName: string) => {
@@ -76,9 +77,7 @@ export const BranchSelector: FC<BranchSelectorProps> = ({
                 {branch.name === currentBranch ? <Check size={14} /> : <GitBranch size={14} />}
               </span>
               <span className="branch-item-name">{branch.name}</span>
-              {branch.is_head && (
-                <span className="branch-item-head">HEAD</span>
-              )}
+              {branch.is_head && <span className="branch-item-head">HEAD</span>}
             </button>
           ))
         )}

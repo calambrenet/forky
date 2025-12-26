@@ -1,6 +1,6 @@
-import { FC } from 'react';
+import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CommitInfo } from '../../types/git';
+import type { CommitInfo } from '../../types/git';
 import './CommitHistory.css';
 
 interface CommitHistoryProps {
@@ -12,7 +12,7 @@ interface CommitHistoryProps {
 export const CommitHistory: FC<CommitHistoryProps> = ({
   commits,
   selectedCommit,
-  onSelectCommit
+  onSelectCommit,
 }) => {
   const { t } = useTranslation();
 
@@ -53,7 +53,10 @@ export const CommitHistory: FC<CommitHistoryProps> = ({
               <div className="graph-node">
                 <div className="graph-line top" style={{ opacity: index === 0 ? 0 : 1 }} />
                 <div className="graph-dot" />
-                <div className="graph-line bottom" style={{ opacity: index === commits.length - 1 ? 0 : 1 }} />
+                <div
+                  className="graph-line bottom"
+                  style={{ opacity: index === commits.length - 1 ? 0 : 1 }}
+                />
               </div>
             </div>
             <div className="commit-col message-col">

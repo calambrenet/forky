@@ -7,7 +7,8 @@ const DEBOUNCE_DELAY = 300;
 const requestIdleCallbackPolyfill =
   typeof window !== 'undefined' && 'requestIdleCallback' in window
     ? window.requestIdleCallback
-    : (cb: IdleRequestCallback) => setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1);
+    : (cb: IdleRequestCallback) =>
+        setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1);
 
 const cancelIdleCallbackPolyfill =
   typeof window !== 'undefined' && 'cancelIdleCallback' in window
@@ -47,15 +48,18 @@ export function useLocalStorage<T>(key: string, defaultValue: T): [T, (value: T)
     // Set up debounced write
     debounceTimerRef.current = setTimeout(() => {
       // Use requestIdleCallback for non-blocking write
-      idleCallbackRef.current = requestIdleCallbackPolyfill(() => {
-        try {
-          if (pendingValueRef.current !== null) {
-            localStorage.setItem(key, JSON.stringify(pendingValueRef.current));
+      idleCallbackRef.current = requestIdleCallbackPolyfill(
+        () => {
+          try {
+            if (pendingValueRef.current !== null) {
+              localStorage.setItem(key, JSON.stringify(pendingValueRef.current));
+            }
+          } catch (error) {
+            console.error('Error saving to localStorage:', error);
           }
-        } catch (error) {
-          console.error('Error saving to localStorage:', error);
-        }
-      }, { timeout: 1000 }); // Max wait 1 second
+        },
+        { timeout: 1000 }
+      ); // Max wait 1 second
     }, DEBOUNCE_DELAY);
 
     // Cleanup on unmount or key change

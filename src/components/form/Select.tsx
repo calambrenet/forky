@@ -1,4 +1,5 @@
-import { FC, useState, useRef, useEffect, useCallback } from 'react';
+import type { FC } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import './Form.css';
 
@@ -26,7 +27,7 @@ export const Select: FC<SelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find(opt => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value);
 
   const handleClickOutside = useCallback((e: MouseEvent) => {
     if (selectRef.current && !selectRef.current.contains(e.target as Node)) {

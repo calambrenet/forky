@@ -76,11 +76,6 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                         .collect();
 
                     if !relevant_events.is_empty() {
-                        println!("[FileWatcher] Detected {} relevant changes", relevant_events.len());
-                        for event in &relevant_events {
-                            println!("[FileWatcher]   - {:?}", event.path);
-                        }
-
                         let timestamp = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
@@ -91,13 +86,9 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                             timestamp,
                         };
 
-                        println!("[FileWatcher] Emitting event for repo: {}", repo_path_clone);
-
                         // Emit event to frontend
                         if let Err(e) = app_handle_clone.emit("repo-files-changed", event) {
-                            eprintln!("[FileWatcher] Failed to emit file change event: {}", e);
-                        } else {
-                            println!("[FileWatcher] Event emitted successfully");
+                            eprintln!("Failed to emit file change event: {}", e);
                         }
                     }
                 }

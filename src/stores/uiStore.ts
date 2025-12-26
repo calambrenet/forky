@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { PanelSizes } from '../types/git';
+import type { PanelSizes } from '../types/git';
 
 // Alert types (replicated from component to avoid circular imports)
 export type AlertType = 'error' | 'success' | 'warning' | 'info';

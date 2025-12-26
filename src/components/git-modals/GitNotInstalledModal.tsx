@@ -1,4 +1,5 @@
-import { FC, memo } from 'react';
+import type { FC } from 'react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
@@ -15,10 +16,7 @@ const GIT_DOWNLOAD_URLS: Record<string, string> = {
   linux: 'https://git-scm.com/download/linux',
 };
 
-export const GitNotInstalledModal: FC<GitNotInstalledModalProps> = memo(({
-  isOpen,
-  onClose,
-}) => {
+export const GitNotInstalledModal: FC<GitNotInstalledModalProps> = memo(({ isOpen, onClose }) => {
   const { t } = useTranslation();
 
   const handleDownloadClick = () => {
@@ -44,28 +42,21 @@ export const GitNotInstalledModal: FC<GitNotInstalledModalProps> = memo(({
       />
       <ModalBody>
         <div className="git-not-installed-content">
-          <p className="git-not-installed-message">
-            {t('modals.gitNotInstalled.message')}
-          </p>
+          <p className="git-not-installed-message">{t('modals.gitNotInstalled.message')}</p>
           <ul className="git-not-installed-limitations">
             <li>{t('modals.gitNotInstalled.limitation1')}</li>
             <li>{t('modals.gitNotInstalled.limitation2')}</li>
             <li>{t('modals.gitNotInstalled.limitation3')}</li>
             <li>{t('modals.gitNotInstalled.limitation4')}</li>
           </ul>
-          <p className="git-not-installed-note">
-            {t('modals.gitNotInstalled.note')}
-          </p>
+          <p className="git-not-installed-note">{t('modals.gitNotInstalled.note')}</p>
         </div>
       </ModalBody>
       <ModalFooter>
         <button className="btn-cancel" onClick={onClose}>
           {t('modals.gitNotInstalled.continueAnyway')}
         </button>
-        <button
-          className="btn-primary"
-          onClick={handleDownloadClick}
-        >
+        <button className="btn-primary" onClick={handleDownloadClick}>
           <ExternalLink size={16} />
           {t('modals.gitNotInstalled.downloadGit')}
         </button>

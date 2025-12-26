@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import type { FC } from 'react';
 import { Check } from 'lucide-react';
 import './Form.css';
 
@@ -9,12 +9,7 @@ interface CheckboxProps {
   disabled?: boolean;
 }
 
-export const Checkbox: FC<CheckboxProps> = ({
-  checked,
-  onChange,
-  label,
-  disabled = false,
-}) => {
+export const Checkbox: FC<CheckboxProps> = ({ checked, onChange, label, disabled = false }) => {
   return (
     <label className={`checkbox-container ${disabled ? 'disabled' : ''}`}>
       <input

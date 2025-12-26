@@ -54,98 +54,101 @@ export function usePanelResize() {
     }
   }, []);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return;
 
-    const now = performance.now();
+      const now = performance.now();
 
-    // Throttle updates using requestAnimationFrame for smooth 60fps
-    if (now - lastUpdateRef.current < THROTTLE_DELAY) {
-      // Schedule update on next frame if not already scheduled
-      if (!rafIdRef.current) {
-        rafIdRef.current = requestAnimationFrame(() => {
-          rafIdRef.current = null;
-          // Use the latest mouse position from the event
-          const currentSizes = sizesRef.current;
+      // Throttle updates using requestAnimationFrame for smooth 60fps
+      if (now - lastUpdateRef.current < THROTTLE_DELAY) {
+        // Schedule update on next frame if not already scheduled
+        if (!rafIdRef.current) {
+          rafIdRef.current = requestAnimationFrame(() => {
+            rafIdRef.current = null;
+            // Use the latest mouse position from the event
+            const currentSizes = sizesRef.current;
 
-          switch (isResizing) {
-            case 'sidebar': {
-              const newWidth = Math.min(
-                MAX_SIZES.sidebarWidth,
-                Math.max(MIN_SIZES.sidebarWidth, e.clientX)
-              );
-              setSizes({ ...currentSizes, sidebarWidth: newWidth });
-              break;
-            }
-            case 'commitPanel': {
-              const container = containerRef.current;
-              if (container) {
-                const rect = container.getBoundingClientRect();
-                const percentage = ((e.clientY - rect.top) / rect.height) * 100;
-                const newHeight = Math.min(
-                  MAX_SIZES.commitPanelHeight,
-                  Math.max(MIN_SIZES.commitPanelHeight, percentage)
-                );
-                setSizes({ ...currentSizes, commitPanelHeight: newHeight });
-              }
-              break;
-            }
-            case 'diffSidebar': {
-              const container = containerRef.current;
-              if (container) {
+            switch (isResizing) {
+              case 'sidebar': {
                 const newWidth = Math.min(
-                  MAX_SIZES.diffSidebarWidth,
-                  Math.max(MIN_SIZES.diffSidebarWidth, e.clientX - currentSizes.sidebarWidth)
+                  MAX_SIZES.sidebarWidth,
+                  Math.max(MIN_SIZES.sidebarWidth, e.clientX)
                 );
-                setSizes({ ...currentSizes, diffSidebarWidth: newWidth });
+                setSizes({ ...currentSizes, sidebarWidth: newWidth });
+                break;
               }
-              break;
+              case 'commitPanel': {
+                const container = containerRef.current;
+                if (container) {
+                  const rect = container.getBoundingClientRect();
+                  const percentage = ((e.clientY - rect.top) / rect.height) * 100;
+                  const newHeight = Math.min(
+                    MAX_SIZES.commitPanelHeight,
+                    Math.max(MIN_SIZES.commitPanelHeight, percentage)
+                  );
+                  setSizes({ ...currentSizes, commitPanelHeight: newHeight });
+                }
+                break;
+              }
+              case 'diffSidebar': {
+                const container = containerRef.current;
+                if (container) {
+                  const newWidth = Math.min(
+                    MAX_SIZES.diffSidebarWidth,
+                    Math.max(MIN_SIZES.diffSidebarWidth, e.clientX - currentSizes.sidebarWidth)
+                  );
+                  setSizes({ ...currentSizes, diffSidebarWidth: newWidth });
+                }
+                break;
+              }
             }
-          }
-          lastUpdateRef.current = performance.now();
-        });
-      }
-      return;
-    }
-
-    lastUpdateRef.current = now;
-    const currentSizes = sizesRef.current;
-
-    switch (isResizing) {
-      case 'sidebar': {
-        const newWidth = Math.min(
-          MAX_SIZES.sidebarWidth,
-          Math.max(MIN_SIZES.sidebarWidth, e.clientX)
-        );
-        setSizes({ ...currentSizes, sidebarWidth: newWidth });
-        break;
-      }
-      case 'commitPanel': {
-        const container = containerRef.current;
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          const percentage = ((e.clientY - rect.top) / rect.height) * 100;
-          const newHeight = Math.min(
-            MAX_SIZES.commitPanelHeight,
-            Math.max(MIN_SIZES.commitPanelHeight, percentage)
-          );
-          setSizes({ ...currentSizes, commitPanelHeight: newHeight });
+            lastUpdateRef.current = performance.now();
+          });
         }
-        break;
+        return;
       }
-      case 'diffSidebar': {
-        const container = containerRef.current;
-        if (container) {
+
+      lastUpdateRef.current = now;
+      const currentSizes = sizesRef.current;
+
+      switch (isResizing) {
+        case 'sidebar': {
           const newWidth = Math.min(
-            MAX_SIZES.diffSidebarWidth,
-            Math.max(MIN_SIZES.diffSidebarWidth, e.clientX - currentSizes.sidebarWidth)
+            MAX_SIZES.sidebarWidth,
+            Math.max(MIN_SIZES.sidebarWidth, e.clientX)
           );
-          setSizes({ ...currentSizes, diffSidebarWidth: newWidth });
+          setSizes({ ...currentSizes, sidebarWidth: newWidth });
+          break;
         }
-        break;
+        case 'commitPanel': {
+          const container = containerRef.current;
+          if (container) {
+            const rect = container.getBoundingClientRect();
+            const percentage = ((e.clientY - rect.top) / rect.height) * 100;
+            const newHeight = Math.min(
+              MAX_SIZES.commitPanelHeight,
+              Math.max(MIN_SIZES.commitPanelHeight, percentage)
+            );
+            setSizes({ ...currentSizes, commitPanelHeight: newHeight });
+          }
+          break;
+        }
+        case 'diffSidebar': {
+          const container = containerRef.current;
+          if (container) {
+            const newWidth = Math.min(
+              MAX_SIZES.diffSidebarWidth,
+              Math.max(MIN_SIZES.diffSidebarWidth, e.clientX - currentSizes.sidebarWidth)
+            );
+            setSizes({ ...currentSizes, diffSidebarWidth: newWidth });
+          }
+          break;
+        }
       }
-    }
-  }, [isResizing, setSizes]);
+    },
+    [isResizing, setSizes]
+  );
 
   useEffect(() => {
     if (isResizing) {

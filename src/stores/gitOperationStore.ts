@@ -1,8 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { GitOperationState, GitOperationResult, GitLogEntry } from '../types/git';
+import type { GitOperationState, GitOperationResult, GitLogEntry } from '../types/git';
 
-type OperationType = 'Fetch' | 'Pull' | 'Push' | 'Commit' | 'Checkout' | 'Branch' | 'Merge' | 'Stash' | 'Other';
+type OperationType =
+  | 'Fetch'
+  | 'Pull'
+  | 'Push'
+  | 'Commit'
+  | 'Checkout'
+  | 'Branch'
+  | 'Merge'
+  | 'Stash'
+  | 'Other';
 
 interface GitOperationStore {
   // State
@@ -52,9 +61,7 @@ export const useGitOperationStore = create<GitOperationStore>()(
               ? operationName
               : 'Commit', // Fallback for UI display
             operationTarget: target,
-            statusMessage: type === 'Commit'
-              ? 'committing...'
-              : `${type.toLowerCase()}ing...`,
+            statusMessage: type === 'Commit' ? 'committing...' : `${type.toLowerCase()}ing...`,
             isComplete: false,
             isError: false,
           },
@@ -96,7 +103,14 @@ export const useGitOperationStore = create<GitOperationStore>()(
         set({ currentOperation: null, isLoading: false });
       },
 
-      addLogEntry: (operationType, operationName, command, output, success, isBackground = false) => {
+      addLogEntry: (
+        operationType,
+        operationName,
+        command,
+        output,
+        success,
+        isBackground = false
+      ) => {
         const entry: GitLogEntry = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           timestamp: new Date(),

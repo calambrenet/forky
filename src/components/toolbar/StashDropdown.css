@@ -8,7 +8,9 @@
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 4px 20px var(--shadow-color), 0 0 1px var(--border-color);
+  box-shadow:
+    0 4px 20px var(--shadow-color),
+    0 0 1px var(--border-color);
   z-index: 1000;
   animation: stashDropdownFadeIn 0.15s ease-out;
 }

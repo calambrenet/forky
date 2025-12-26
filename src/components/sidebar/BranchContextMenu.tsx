@@ -1,4 +1,5 @@
-import { FC, useEffect, useRef, useState, memo } from 'react';
+import type { FC } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   GitBranch,
@@ -13,7 +14,7 @@ import {
   RotateCcw,
   GitPullRequest,
 } from 'lucide-react';
-import { BranchInfo } from '../../types/git';
+import type { BranchInfo } from '../../types/git';
 import './BranchContextMenu.css';
 
 const ICON_SIZE = 14;
@@ -70,219 +71,224 @@ const MenuItem: FC<MenuItemProps> = ({ icon, label, shortcut, disabled, danger, 
 
 const MenuSeparator: FC = () => <div className="branch-menu-separator" />;
 
-export const BranchContextMenu: FC<BranchContextMenuProps> = memo(({
-  branch,
-  currentBranch,
-  position,
-  onClose,
-  onCheckout,
-  onFastForward,
-  onPull,
-  onPush,
-  onCreatePullRequest,
-  onMergeInto,
-  onRebase,
-  onInteractiveRebase,
-  onNewBranch,
-  onNewTag,
-  onRename,
-  onDelete,
-  onCopyBranchName,
-}) => {
-  const { t } = useTranslation();
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
+export const BranchContextMenu: FC<BranchContextMenuProps> = memo(
+  ({
+    branch,
+    currentBranch,
+    position,
+    onClose,
+    onCheckout,
+    onFastForward,
+    onPull,
+    onPush,
+    onCreatePullRequest,
+    onMergeInto,
+    onRebase,
+    onInteractiveRebase,
+    onNewBranch,
+    onNewTag,
+    onRename,
+    onDelete,
+    onCopyBranchName,
+  }) => {
+    const { t } = useTranslation();
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
 
-  const isCurrentBranch = branch.name === currentBranch;
-  const branchDisplayName = branch.name.split('/').pop() || branch.name;
+    const isCurrentBranch = branch.name === currentBranch;
+    const branchDisplayName = branch.name.split('/').pop() || branch.name;
 
-  // Get remote name for remote branches (e.g., "origin" from "origin/main")
-  const remoteName = branch.is_remote ? branch.name.split('/')[0] : 'origin';
+    // Get remote name for remote branches (e.g., "origin" from "origin/main")
+    const remoteName = branch.is_remote ? branch.name.split('/')[0] : 'origin';
 
-  // Close on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
+    // Close on click outside
+    useEffect(() => {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+          onClose();
+        }
+      };
+
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose();
+        }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }, [onClose]);
+
+    // Adjust position to keep menu in viewport
+    useEffect(() => {
+      if (menuRef.current) {
+        const rect = menuRef.current.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let newX = position.x;
+        let newY = position.y;
+
+        // Check right edge
+        if (position.x + rect.width > viewportWidth - VIEWPORT_PADDING) {
+          newX = Math.max(VIEWPORT_PADDING, viewportWidth - rect.width - VIEWPORT_PADDING);
+        }
+
+        // Check left edge
+        if (newX < VIEWPORT_PADDING) {
+          newX = VIEWPORT_PADDING;
+        }
+
+        // Check bottom edge
+        if (position.y + rect.height > viewportHeight - VIEWPORT_PADDING) {
+          newY = Math.max(VIEWPORT_PADDING, viewportHeight - rect.height - VIEWPORT_PADDING);
+        }
+
+        // Check top edge
+        if (newY < VIEWPORT_PADDING) {
+          newY = VIEWPORT_PADDING;
+        }
+
+        setAdjustedPosition({ x: newX, y: newY });
       }
-    };
+    }, [position]);
 
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
+    const finalPosition = adjustedPosition || position;
 
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
+    return (
+      <div
+        ref={menuRef}
+        className={`branch-context-menu ${adjustedPosition ? 'visible' : ''}`}
+        style={{ top: finalPosition.y, left: finalPosition.x }}
+      >
+        {/* Checkout */}
+        <MenuItem
+          icon={<GitBranch size={ICON_SIZE} />}
+          label={t('branchContextMenu.checkout', { branch: branchDisplayName })}
+          disabled={isCurrentBranch}
+          onClick={() => onCheckout?.(branch)}
+        />
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
+        <MenuSeparator />
 
-  // Adjust position to keep menu in viewport
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      let newX = position.x;
-      let newY = position.y;
-
-      // Check right edge
-      if (position.x + rect.width > viewportWidth - VIEWPORT_PADDING) {
-        newX = Math.max(VIEWPORT_PADDING, viewportWidth - rect.width - VIEWPORT_PADDING);
-      }
-
-      // Check left edge
-      if (newX < VIEWPORT_PADDING) {
-        newX = VIEWPORT_PADDING;
-      }
-
-      // Check bottom edge
-      if (position.y + rect.height > viewportHeight - VIEWPORT_PADDING) {
-        newY = Math.max(VIEWPORT_PADDING, viewportHeight - rect.height - VIEWPORT_PADDING);
-      }
-
-      // Check top edge
-      if (newY < VIEWPORT_PADDING) {
-        newY = VIEWPORT_PADDING;
-      }
-
-      setAdjustedPosition({ x: newX, y: newY });
-    }
-  }, [position]);
-
-  const finalPosition = adjustedPosition || position;
-
-  return (
-    <div
-      ref={menuRef}
-      className={`branch-context-menu ${adjustedPosition ? 'visible' : ''}`}
-      style={{ top: finalPosition.y, left: finalPosition.x }}
-    >
-      {/* Checkout */}
-      <MenuItem
-        icon={<GitBranch size={ICON_SIZE} />}
-        label={t('branchContextMenu.checkout', { branch: branchDisplayName })}
-        disabled={isCurrentBranch}
-        onClick={() => onCheckout?.(branch)}
-      />
-
-      <MenuSeparator />
-
-      {/* Fast-Forward */}
-      <MenuItem
-        icon={<ArrowDown size={ICON_SIZE} />}
-        label={t('branchContextMenu.fastForward', { remote: remoteName, branch: branchDisplayName })}
-        onClick={() => onFastForward?.(branch)}
-      />
-
-      {/* Pull (only for current branch) */}
-      {isCurrentBranch && (
+        {/* Fast-Forward */}
         <MenuItem
           icon={<ArrowDown size={ICON_SIZE} />}
-          label={t('branchContextMenu.pull', { remote: remoteName, branch: branchDisplayName })}
-          onClick={() => onPull?.(branch)}
+          label={t('branchContextMenu.fastForward', {
+            remote: remoteName,
+            branch: branchDisplayName,
+          })}
+          onClick={() => onFastForward?.(branch)}
         />
-      )}
 
-      {/* Push */}
-      <MenuItem
-        icon={<ArrowUp size={ICON_SIZE} />}
-        label={t('branchContextMenu.push', { branch: branchDisplayName, remote: remoteName })}
-        onClick={() => onPush?.(branch)}
-      />
+        {/* Pull (only for current branch) */}
+        {isCurrentBranch && (
+          <MenuItem
+            icon={<ArrowDown size={ICON_SIZE} />}
+            label={t('branchContextMenu.pull', { remote: remoteName, branch: branchDisplayName })}
+            onClick={() => onPull?.(branch)}
+          />
+        )}
 
-      {/* Create Pull Request */}
-      <MenuItem
-        icon={<GitPullRequest size={ICON_SIZE} />}
-        label={t('branchContextMenu.createPullRequest', { remote: remoteName })}
-        onClick={() => onCreatePullRequest?.(branch)}
-      />
+        {/* Push */}
+        <MenuItem
+          icon={<ArrowUp size={ICON_SIZE} />}
+          label={t('branchContextMenu.push', { branch: branchDisplayName, remote: remoteName })}
+          onClick={() => onPush?.(branch)}
+        />
 
-      <MenuSeparator />
+        {/* Create Pull Request */}
+        <MenuItem
+          icon={<GitPullRequest size={ICON_SIZE} />}
+          label={t('branchContextMenu.createPullRequest', { remote: remoteName })}
+          onClick={() => onCreatePullRequest?.(branch)}
+        />
 
-      {/* Merge into current branch */}
-      <MenuItem
-        icon={<GitMerge size={ICON_SIZE} />}
-        label={t('branchContextMenu.mergeInto', { branch: currentBranch || '' })}
-        disabled={isCurrentBranch}
-        onClick={() => onMergeInto?.(branch)}
-      />
+        <MenuSeparator />
 
-      {/* Rebase on this branch */}
-      <MenuItem
-        icon={<RotateCcw size={ICON_SIZE} />}
-        label={t('branchContextMenu.rebaseOn', { branch: branchDisplayName })}
-        disabled={isCurrentBranch}
-        onClick={() => onRebase?.(branch)}
-      />
+        {/* Merge into current branch */}
+        <MenuItem
+          icon={<GitMerge size={ICON_SIZE} />}
+          label={t('branchContextMenu.mergeInto', { branch: currentBranch || '' })}
+          disabled={isCurrentBranch}
+          onClick={() => onMergeInto?.(branch)}
+        />
 
-      {/* Interactive Rebase */}
-      <MenuItem
-        icon={<RotateCcw size={ICON_SIZE} />}
-        label={t('branchContextMenu.interactiveRebase', { branch: branchDisplayName })}
-        disabled={isCurrentBranch}
-        onClick={() => onInteractiveRebase?.(branch)}
-      />
+        {/* Rebase on this branch */}
+        <MenuItem
+          icon={<RotateCcw size={ICON_SIZE} />}
+          label={t('branchContextMenu.rebaseOn', { branch: branchDisplayName })}
+          disabled={isCurrentBranch}
+          onClick={() => onRebase?.(branch)}
+        />
 
-      <MenuSeparator />
+        {/* Interactive Rebase */}
+        <MenuItem
+          icon={<RotateCcw size={ICON_SIZE} />}
+          label={t('branchContextMenu.interactiveRebase', { branch: branchDisplayName })}
+          disabled={isCurrentBranch}
+          onClick={() => onInteractiveRebase?.(branch)}
+        />
 
-      {/* New Branch */}
-      <MenuItem
-        icon={<GitBranch size={ICON_SIZE} />}
-        label={t('branchContextMenu.newBranch')}
-        shortcut="⌘B"
-        onClick={() => onNewBranch?.(branch)}
-      />
+        <MenuSeparator />
 
-      {/* New Tag */}
-      <MenuItem
-        icon={<Tag size={ICON_SIZE} />}
-        label={t('branchContextMenu.newTag')}
-        shortcut="⌘T"
-        onClick={() => onNewTag?.(branch)}
-      />
+        {/* New Branch */}
+        <MenuItem
+          icon={<GitBranch size={ICON_SIZE} />}
+          label={t('branchContextMenu.newBranch')}
+          shortcut="⌘B"
+          onClick={() => onNewBranch?.(branch)}
+        />
 
-      <MenuSeparator />
+        {/* New Tag */}
+        <MenuItem
+          icon={<Tag size={ICON_SIZE} />}
+          label={t('branchContextMenu.newTag')}
+          shortcut="⌘T"
+          onClick={() => onNewTag?.(branch)}
+        />
 
-      {/* Git Flow - placeholder for now */}
-      <MenuItem
-        icon={<ExternalLink size={ICON_SIZE} />}
-        label={t('branchContextMenu.gitFlow')}
-        disabled
-      />
+        <MenuSeparator />
 
-      <MenuSeparator />
+        {/* Git Flow - placeholder for now */}
+        <MenuItem
+          icon={<ExternalLink size={ICON_SIZE} />}
+          label={t('branchContextMenu.gitFlow')}
+          disabled
+        />
 
-      {/* Rename */}
-      <MenuItem
-        icon={<Edit3 size={ICON_SIZE} />}
-        label={t('branchContextMenu.rename', { branch: branchDisplayName })}
-        onClick={() => onRename?.(branch)}
-      />
+        <MenuSeparator />
 
-      {/* Delete */}
-      <MenuItem
-        icon={<Trash2 size={ICON_SIZE} />}
-        label={t('branchContextMenu.delete', { branch: branchDisplayName })}
-        disabled={isCurrentBranch}
-        danger
-        onClick={() => onDelete?.(branch)}
-      />
+        {/* Rename */}
+        <MenuItem
+          icon={<Edit3 size={ICON_SIZE} />}
+          label={t('branchContextMenu.rename', { branch: branchDisplayName })}
+          onClick={() => onRename?.(branch)}
+        />
 
-      <MenuSeparator />
+        {/* Delete */}
+        <MenuItem
+          icon={<Trash2 size={ICON_SIZE} />}
+          label={t('branchContextMenu.delete', { branch: branchDisplayName })}
+          disabled={isCurrentBranch}
+          danger
+          onClick={() => onDelete?.(branch)}
+        />
 
-      {/* Copy Branch Name */}
-      <MenuItem
-        icon={<Copy size={ICON_SIZE} />}
-        label={t('branchContextMenu.copyBranchName')}
-        onClick={() => onCopyBranchName?.(branch)}
-      />
-    </div>
-  );
-});
+        <MenuSeparator />
+
+        {/* Copy Branch Name */}
+        <MenuItem
+          icon={<Copy size={ICON_SIZE} />}
+          label={t('branchContextMenu.copyBranchName')}
+          onClick={() => onCopyBranchName?.(branch)}
+        />
+      </div>
+    );
+  }
+);

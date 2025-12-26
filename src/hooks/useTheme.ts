@@ -85,9 +85,12 @@ export function useTheme() {
   }, [resolvedTheme]);
 
   // Set theme function
-  const setTheme = useCallback((theme: Theme) => {
-    setUserTheme(theme);
-  }, [setUserTheme]);
+  const setTheme = useCallback(
+    (theme: Theme) => {
+      setUserTheme(theme);
+    },
+    [setUserTheme]
+  );
 
   // Toggle between light and dark (skipping system)
   const toggleTheme = useCallback(() => {

@@ -1,4 +1,5 @@
-import { FC, useState, useEffect, memo } from 'react';
+import type { FC } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MessageSquare, Star, Send } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -30,10 +31,7 @@ const StarRating: FC<StarRatingProps> = ({ value, onChange }) => {
           onMouseEnter={() => setHoverValue(star)}
           onMouseLeave={() => setHoverValue(0)}
         >
-          <Star
-            size={24}
-            fill={star <= (hoverValue || value) ? 'currentColor' : 'none'}
-          />
+          <Star size={24} fill={star <= (hoverValue || value) ? 'currentColor' : 'none'} />
         </button>
       ))}
     </div>
@@ -144,9 +142,7 @@ export const FeedbackModal: FC<FeedbackModalProps> = memo(({ isOpen, onClose }) 
         <ModalRow label={t('feedback.rating')}>
           <div className="rating-container">
             <StarRating value={rating} onChange={handleRatingChange} />
-            {ratingError && (
-              <span className="rating-error">{t('feedback.ratingRequired')}</span>
-            )}
+            {ratingError && <span className="rating-error">{t('feedback.ratingRequired')}</span>}
           </div>
         </ModalRow>
 
@@ -185,11 +181,7 @@ export const FeedbackModal: FC<FeedbackModalProps> = memo(({ isOpen, onClose }) 
         <button className="btn-cancel" onClick={onClose}>
           {t('common.cancel')}
         </button>
-        <button
-          className="btn-primary"
-          onClick={handleSubmit}
-          disabled={isSubmitDisabled}
-        >
+        <button className="btn-primary" onClick={handleSubmit} disabled={isSubmitDisabled}>
           <Send size={14} />
           {t('feedback.send')}
         </button>

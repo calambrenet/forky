@@ -1,5 +1,5 @@
-import { FC } from 'react';
-import { CommitInfo, FileStatus } from '../../types/git';
+import type { FC } from 'react';
+import type { CommitInfo, FileStatus } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import './DiffView.css';
 
@@ -77,11 +77,7 @@ export const DiffView: FC<DiffViewProps> = ({
           )}
         </div>
       </div>
-      <Resizer
-        direction="horizontal"
-        onMouseDown={onResizeSidebar}
-        isResizing={isResizing}
-      />
+      <Resizer direction="horizontal" onMouseDown={onResizeSidebar} isResizing={isResizing} />
       <div className="diff-content">
         {selectedFile ? (
           <div className="diff-placeholder">
@@ -91,7 +87,7 @@ export const DiffView: FC<DiffViewProps> = ({
             <div className="diff-lines">
               <pre className="diff-code">
                 {/* Diff content will be loaded here */}
-                <span className="diff-line context">  // File diff will be displayed here</span>
+                <span className="diff-line context"> // File diff will be displayed here</span>
                 <span className="diff-line add">+ // Added lines shown in green</span>
                 <span className="diff-line delete">- // Deleted lines shown in red</span>
               </pre>

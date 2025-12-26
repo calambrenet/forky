@@ -14,19 +14,55 @@ import { AlertContainer } from './components/alert';
 import type { FetchOptions, PullOptions, PushOptions } from './components/git-modals';
 
 // Lazy load modals for code splitting
-const FetchModal = lazy(() => import('./components/git-modals/FetchModal').then(m => ({ default: m.FetchModal })));
-const PullModal = lazy(() => import('./components/git-modals/PullModal').then(m => ({ default: m.PullModal })));
-const PushModal = lazy(() => import('./components/git-modals/PushModal').then(m => ({ default: m.PushModal })));
-const SshHostVerificationModal = lazy(() => import('./components/git-modals/SshHostVerificationModal').then(m => ({ default: m.SshHostVerificationModal })));
-const GitCredentialModal = lazy(() => import('./components/git-modals/GitCredentialModal').then(m => ({ default: m.GitCredentialModal })));
-const TrackRemoteBranchModal = lazy(() => import('./components/git-modals/TrackRemoteBranchModal').then(m => ({ default: m.TrackRemoteBranchModal })));
-const CheckoutConflictModal = lazy(() => import('./components/git-modals/CheckoutConflictModal').then(m => ({ default: m.CheckoutConflictModal })));
-const GitActivityLog = lazy(() => import('./components/git-activity-log').then(m => ({ default: m.GitActivityLog })));
-const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m => ({ default: m.AddRemoteModal })));
-const FeedbackModal = lazy(() => import('./components/feedback-modal').then(m => ({ default: m.FeedbackModal })));
-const SaveStashModal = lazy(() => import('./components/git-modals/SaveStashModal').then(m => ({ default: m.SaveStashModal })));
-const ApplyStashModal = lazy(() => import('./components/git-modals/ApplyStashModal').then(m => ({ default: m.ApplyStashModal })));
-const GitNotInstalledModal = lazy(() => import('./components/git-modals/GitNotInstalledModal').then(m => ({ default: m.GitNotInstalledModal })));
+const FetchModal = lazy(() =>
+  import('./components/git-modals/FetchModal').then((m) => ({ default: m.FetchModal }))
+);
+const PullModal = lazy(() =>
+  import('./components/git-modals/PullModal').then((m) => ({ default: m.PullModal }))
+);
+const PushModal = lazy(() =>
+  import('./components/git-modals/PushModal').then((m) => ({ default: m.PushModal }))
+);
+const SshHostVerificationModal = lazy(() =>
+  import('./components/git-modals/SshHostVerificationModal').then((m) => ({
+    default: m.SshHostVerificationModal,
+  }))
+);
+const GitCredentialModal = lazy(() =>
+  import('./components/git-modals/GitCredentialModal').then((m) => ({
+    default: m.GitCredentialModal,
+  }))
+);
+const TrackRemoteBranchModal = lazy(() =>
+  import('./components/git-modals/TrackRemoteBranchModal').then((m) => ({
+    default: m.TrackRemoteBranchModal,
+  }))
+);
+const CheckoutConflictModal = lazy(() =>
+  import('./components/git-modals/CheckoutConflictModal').then((m) => ({
+    default: m.CheckoutConflictModal,
+  }))
+);
+const GitActivityLog = lazy(() =>
+  import('./components/git-activity-log').then((m) => ({ default: m.GitActivityLog }))
+);
+const AddRemoteModal = lazy(() =>
+  import('./components/add-remote-modal').then((m) => ({ default: m.AddRemoteModal }))
+);
+const FeedbackModal = lazy(() =>
+  import('./components/feedback-modal').then((m) => ({ default: m.FeedbackModal }))
+);
+const SaveStashModal = lazy(() =>
+  import('./components/git-modals/SaveStashModal').then((m) => ({ default: m.SaveStashModal }))
+);
+const ApplyStashModal = lazy(() =>
+  import('./components/git-modals/ApplyStashModal').then((m) => ({ default: m.ApplyStashModal }))
+);
+const GitNotInstalledModal = lazy(() =>
+  import('./components/git-modals/GitNotInstalledModal').then((m) => ({
+    default: m.GitNotInstalledModal,
+  }))
+);
 
 // Zustand stores
 import {
@@ -54,7 +90,13 @@ import {
 } from './stores';
 
 import { useTheme } from './hooks/useTheme';
-import { BranchInfo, ViewMode, GitOperationResult, GitOptionsStorage, StashInfo } from './types/git';
+import type {
+  BranchInfo,
+  ViewMode,
+  GitOperationResult,
+  GitOptionsStorage,
+  StashInfo,
+} from './types/git';
 import './styles/global.css';
 import './App.css';
 
@@ -62,26 +104,29 @@ function App() {
   const { t } = useTranslation();
 
   // Helper function for error titles
-  const getErrorTitle = useCallback((errorType: string | undefined, _operationName: string): string => {
-    switch (errorType) {
-      case 'ssh_host_verification_failed':
-        return t('alerts.sshHostVerificationFailed');
-      case 'authentication_failed':
-        return t('alerts.authenticationFailed');
-      case 'remote_access_failed':
-        return t('alerts.remoteAccessFailed');
-      case 'connection_refused':
-        return t('alerts.connectionRefused');
-      case 'connection_timeout':
-        return t('alerts.connectionTimeout');
-      case 'host_not_found':
-        return t('alerts.hostNotFound');
-      case 'git_error':
-        return t('alerts.gitError');
-      default:
-        return t('alerts.gitError');
-    }
-  }, [t]);
+  const getErrorTitle = useCallback(
+    (errorType: string | undefined, _operationName: string): string => {
+      switch (errorType) {
+        case 'ssh_host_verification_failed':
+          return t('alerts.sshHostVerificationFailed');
+        case 'authentication_failed':
+          return t('alerts.authenticationFailed');
+        case 'remote_access_failed':
+          return t('alerts.remoteAccessFailed');
+        case 'connection_refused':
+          return t('alerts.connectionRefused');
+        case 'connection_timeout':
+          return t('alerts.connectionTimeout');
+        case 'host_not_found':
+          return t('alerts.hostNotFound');
+        case 'git_error':
+          return t('alerts.gitError');
+        default:
+          return t('alerts.gitError');
+      }
+    },
+    [t]
+  );
   // Repository store
   const tabs = useTabs();
   const activeTab = useActiveTab();
@@ -89,7 +134,19 @@ function App() {
   const stashes = useActiveTabStashes();
   const isRestoring = useIsRestoring();
   const localChangesCount = useLocalChangesCount();
-  const { openRepository, selectTab, closeTab, closeOtherTabs, closeAllTabs, closeTabsToRight, closeTabsToLeft, updateTabState, refreshActiveTab, setTabHasPendingChanges, setTabCurrentBranch } = useRepositoryStore();
+  const {
+    openRepository,
+    selectTab,
+    closeTab,
+    closeOtherTabs,
+    closeAllTabs,
+    closeTabsToRight,
+    closeTabsToLeft,
+    updateTabState,
+    refreshActiveTab,
+    setTabHasPendingChanges,
+    setTabCurrentBranch,
+  } = useRepositoryStore();
 
   // Git operation store
   const isGitLoading = useIsGitLoading();
@@ -167,25 +224,28 @@ function App() {
   }, [activeTab?.path]);
 
   // Save git options for current repo
-  const saveOptions = useCallback((options: GitOptionsStorage) => {
-    if (!activeTab?.path) return;
-    const key = `forky:git-options:${activeTab.path}`;
-    const current = getStoredOptions();
-    localStorage.setItem(key, JSON.stringify({ ...current, ...options }));
-  }, [activeTab?.path, getStoredOptions]);
+  const saveOptions = useCallback(
+    (options: GitOptionsStorage) => {
+      if (!activeTab?.path) return;
+      const key = `forky:git-options:${activeTab.path}`;
+      const current = getStoredOptions();
+      localStorage.setItem(key, JSON.stringify({ ...current, ...options }));
+    },
+    [activeTab?.path, getStoredOptions]
+  );
 
   // Handle SSH host verification from git operation result
-  const handleSshVerificationRequired = useCallback((
-    result: GitOperationResult,
-    retryOperation: () => Promise<void>
-  ): boolean => {
-    if (result.requires_ssh_verification) {
-      const { host, key_type, fingerprint } = result.requires_ssh_verification;
-      showSshVerification({ host, keyType: key_type, fingerprint }, retryOperation);
-      return true;
-    }
-    return false;
-  }, [showSshVerification]);
+  const handleSshVerificationRequired = useCallback(
+    (result: GitOperationResult, retryOperation: () => Promise<void>): boolean => {
+      if (result.requires_ssh_verification) {
+        const { host, key_type, fingerprint } = result.requires_ssh_verification;
+        showSshVerification({ host, keyType: key_type, fingerprint }, retryOperation);
+        return true;
+      }
+      return false;
+    },
+    [showSshVerification]
+  );
 
   // Accept SSH host and add to known_hosts
   const handleAcceptSshHost = useCallback(async () => {
@@ -198,7 +258,6 @@ function App() {
       });
 
       if (result.success) {
-        console.log('SSH host added:', result.message);
         const pendingOp = sshVerification.pendingOperation;
         closeSshVerification();
         if (pendingOp) {
@@ -215,116 +274,165 @@ function App() {
   }, [sshVerification, closeSshVerification]);
 
   // Handle credential modal submit
-  const handleCredentialSubmit = useCallback(async (value: string) => {
-    const pendingOp = credentialModal.pendingOperation;
-    closeCredentialModal();
-    if (pendingOp) {
-      await pendingOp(value);
-    }
-  }, [credentialModal, closeCredentialModal]);
+  const handleCredentialSubmit = useCallback(
+    async (value: string) => {
+      const pendingOp = credentialModal.pendingOperation;
+      closeCredentialModal();
+      if (pendingOp) {
+        await pendingOp(value);
+      }
+    },
+    [credentialModal, closeCredentialModal]
+  );
 
   // Handle branch change from toolbar (git checkout)
-  const handleBranchChange = useCallback(async (branchName: string) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handleBranchChange = useCallback(
+    async (branchName: string) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    // Don't checkout if already on this branch
-    if (activeTab.currentBranch === branchName) return;
+      // Don't checkout if already on this branch
+      if (activeTab.currentBranch === branchName) return;
 
-    const command = `git checkout ${branchName}`;
-    startOperation('Checkout', branchName);
+      const command = `git checkout ${branchName}`;
+      startOperation('Checkout', branchName);
 
-    try {
-      const result = await invoke<GitOperationResult>('git_checkout', { branchName });
+      try {
+        const result = await invoke<GitOperationResult>('git_checkout', { branchName });
 
-      completeOperation(result);
-      addLogEntry('Checkout', `Checkout '${branchName}'`, command, result.message, result.success);
+        completeOperation(result);
+        addLogEntry(
+          'Checkout',
+          `Checkout '${branchName}'`,
+          command,
+          result.message,
+          result.success
+        );
 
-      if (result.success) {
-        // Update the current branch in the tab
-        const activeTabId = useRepositoryStore.getState().activeTabId;
-        if (activeTabId) {
-          setTabCurrentBranch(activeTabId, branchName);
-        }
-        // Refresh repository data to update commits, branches, etc.
-        await refreshActiveTab();
-      } else if (result.error_type === 'checkout_would_overwrite') {
-        // Show checkout conflict modal with option to stash and switch
-        setCheckoutConflictBranch(branchName);
-        setCheckoutConflictFiles(result.conflicting_files || []);
-        setCheckoutConflictModalOpen(true);
-      } else {
-        // Check if checkout failed due to uncommitted changes
-        if (result.error_type === 'checkout_would_overwrite' && result.conflicting_files) {
-          // Show the checkout conflict modal instead of an error
+        if (result.success) {
+          // Update the current branch in the tab
+          const activeTabId = useRepositoryStore.getState().activeTabId;
+          if (activeTabId) {
+            setTabCurrentBranch(activeTabId, branchName);
+          }
+          // Refresh repository data to update commits, branches, etc.
+          await refreshActiveTab();
+        } else if (result.error_type === 'checkout_would_overwrite') {
+          // Show checkout conflict modal with option to stash and switch
           setCheckoutConflictBranch(branchName);
-          setCheckoutConflictFiles(result.conflicting_files);
+          setCheckoutConflictFiles(result.conflicting_files || []);
           setCheckoutConflictModalOpen(true);
+        } else {
+          // Check if checkout failed due to uncommitted changes
+          if (result.error_type === 'checkout_would_overwrite' && result.conflicting_files) {
+            // Show the checkout conflict modal instead of an error
+            setCheckoutConflictBranch(branchName);
+            setCheckoutConflictFiles(result.conflicting_files);
+            setCheckoutConflictModalOpen(true);
+          } else {
+            const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+            addAlert('error', errorTitle, result.message);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking out branch:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Checkout', `Checkout '${branchName}'`, command, String(error), false);
+        addAlert('error', 'Checkout Error', String(error));
+      }
+    },
+    [
+      activeTab?.path,
+      activeTab?.currentBranch,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      setTabCurrentBranch,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+    ]
+  );
+
+  // Handle checkout with stash (from conflict modal)
+  const handleCheckoutWithStash = useCallback(
+    async (restoreChanges: boolean) => {
+      if (!activeTab?.path || !checkoutConflictBranch) return;
+
+      setIsCheckoutWithStashLoading(true);
+      const command = restoreChanges
+        ? `git stash push -u && git checkout ${checkoutConflictBranch} && git stash pop`
+        : `git stash push -u && git checkout ${checkoutConflictBranch}`;
+
+      startOperation('Checkout', checkoutConflictBranch);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_checkout_with_stash', {
+          branchName: checkoutConflictBranch,
+          restoreChanges,
+        });
+
+        completeOperation(result);
+        addLogEntry(
+          'Checkout',
+          `Checkout '${checkoutConflictBranch}' with stash`,
+          command,
+          result.message,
+          result.success
+        );
+
+        if (result.success) {
+          // Update the current branch in the tab
+          const activeTabId = useRepositoryStore.getState().activeTabId;
+          if (activeTabId) {
+            setTabCurrentBranch(activeTabId, checkoutConflictBranch);
+          }
+          // Refresh repository data to update commits, branches, etc.
+          await refreshActiveTab();
+          // Refresh local changes view
+          setLocalChangesRefreshKey((k) => k + 1);
+
+          // Check for special messages (conflicts, stash pop failed)
+          if (result.error_type === 'stash_conflicts') {
+            addAlert('warning', t('alerts.checkoutSuccess'), result.message);
+          } else if (result.error_type === 'stash_pop_failed') {
+            addAlert('warning', t('alerts.checkoutSuccess'), result.message);
+          }
         } else {
           const errorTitle = getErrorTitle(result.error_type, 'Checkout');
           addAlert('error', errorTitle, result.message);
         }
+      } catch (error) {
+        console.error('Error checking out with stash:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry(
+          'Checkout',
+          `Checkout '${checkoutConflictBranch}' with stash`,
+          command,
+          String(error),
+          false
+        );
+        addAlert('error', 'Checkout Error', String(error));
+      } finally {
+        setIsCheckoutWithStashLoading(false);
+        setCheckoutConflictModalOpen(false);
+        setCheckoutConflictBranch('');
+        setCheckoutConflictFiles([]);
       }
-    } catch (error) {
-      console.error('Error checking out branch:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Checkout', `Checkout '${branchName}'`, command, String(error), false);
-      addAlert('error', 'Checkout Error', String(error));
-    }
-  }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
-
-  // Handle checkout with stash (from conflict modal)
-  const handleCheckoutWithStash = useCallback(async (restoreChanges: boolean) => {
-    if (!activeTab?.path || !checkoutConflictBranch) return;
-
-    setIsCheckoutWithStashLoading(true);
-    const command = restoreChanges
-      ? `git stash push -u && git checkout ${checkoutConflictBranch} && git stash pop`
-      : `git stash push -u && git checkout ${checkoutConflictBranch}`;
-
-    startOperation('Checkout', checkoutConflictBranch);
-
-    try {
-      const result = await invoke<GitOperationResult>('git_checkout_with_stash', {
-        branchName: checkoutConflictBranch,
-        restoreChanges,
-      });
-
-      completeOperation(result);
-      addLogEntry('Checkout', `Checkout '${checkoutConflictBranch}' with stash`, command, result.message, result.success);
-
-      if (result.success) {
-        // Update the current branch in the tab
-        const activeTabId = useRepositoryStore.getState().activeTabId;
-        if (activeTabId) {
-          setTabCurrentBranch(activeTabId, checkoutConflictBranch);
-        }
-        // Refresh repository data to update commits, branches, etc.
-        await refreshActiveTab();
-        // Refresh local changes view
-        setLocalChangesRefreshKey(k => k + 1);
-
-        // Check for special messages (conflicts, stash pop failed)
-        if (result.error_type === 'stash_conflicts') {
-          addAlert('warning', t('alerts.checkoutSuccess'), result.message);
-        } else if (result.error_type === 'stash_pop_failed') {
-          addAlert('warning', t('alerts.checkoutSuccess'), result.message);
-        }
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Checkout');
-        addAlert('error', errorTitle, result.message);
-      }
-    } catch (error) {
-      console.error('Error checking out with stash:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Checkout', `Checkout '${checkoutConflictBranch}' with stash`, command, String(error), false);
-      addAlert('error', 'Checkout Error', String(error));
-    } finally {
-      setIsCheckoutWithStashLoading(false);
-      setCheckoutConflictModalOpen(false);
-      setCheckoutConflictBranch('');
-      setCheckoutConflictFiles([]);
-    }
-  }, [activeTab?.path, checkoutConflictBranch, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle, t]);
+    },
+    [
+      activeTab?.path,
+      checkoutConflictBranch,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      setTabCurrentBranch,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+      t,
+    ]
+  );
 
   // Handle opening track remote branch modal
   const handleOpenTrackBranchModal = useCallback((remoteBranchName: string) => {
@@ -339,81 +447,131 @@ function App() {
   }, []);
 
   // Handle tracking a remote branch (create local branch and checkout)
-  const handleTrackRemoteBranch = useCallback(async (localBranchName: string, remoteBranchName: string) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handleTrackRemoteBranch = useCallback(
+    async (localBranchName: string, remoteBranchName: string) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    const command = `git checkout -b ${localBranchName} --track ${remoteBranchName}`;
-    startOperation('Checkout', localBranchName);
+      const command = `git checkout -b ${localBranchName} --track ${remoteBranchName}`;
+      startOperation('Checkout', localBranchName);
 
-    try {
-      const result = await invoke<GitOperationResult>('git_checkout_track', {
-        localBranch: localBranchName,
-        remoteBranch: remoteBranchName,
-      });
+      try {
+        const result = await invoke<GitOperationResult>('git_checkout_track', {
+          localBranch: localBranchName,
+          remoteBranch: remoteBranchName,
+        });
 
-      completeOperation(result);
-      addLogEntry('Checkout', `Track '${remoteBranchName}' as '${localBranchName}'`, command, result.message, result.success);
+        completeOperation(result);
+        addLogEntry(
+          'Checkout',
+          `Track '${remoteBranchName}' as '${localBranchName}'`,
+          command,
+          result.message,
+          result.success
+        );
 
-      if (result.success) {
-        // Update the current branch in the tab
-        const activeTabId = useRepositoryStore.getState().activeTabId;
-        if (activeTabId) {
-          setTabCurrentBranch(activeTabId, localBranchName);
-        }
-        // Refresh repository data
-        await refreshActiveTab();
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Checkout');
-        addAlert('error', errorTitle, result.message);
-      }
-    } catch (error) {
-      console.error('Error tracking remote branch:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Checkout', `Track '${remoteBranchName}' as '${localBranchName}'`, command, String(error), false);
-      addAlert('error', 'Checkout Error', String(error));
-    }
-  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
-
-  // Handle creating a new branch
-  const handleCreateBranch = useCallback(async (branchName: string, startPoint: string, checkout: boolean) => {
-    if (!activeTab?.path || isGitLoading) return;
-
-    const command = checkout
-      ? `git checkout -b ${branchName} ${startPoint}`
-      : `git branch ${branchName} ${startPoint}`;
-    startOperation('Branch', branchName);
-
-    try {
-      const result = await invoke<GitOperationResult>('git_create_branch', {
-        branchName,
-        startPoint,
-        checkout,
-      });
-
-      completeOperation(result);
-      addLogEntry('Branch', `Create '${branchName}' from '${startPoint}'`, command, result.message, result.success);
-
-      if (result.success) {
-        if (checkout) {
+        if (result.success) {
           // Update the current branch in the tab
           const activeTabId = useRepositoryStore.getState().activeTabId;
           if (activeTabId) {
-            setTabCurrentBranch(activeTabId, branchName);
+            setTabCurrentBranch(activeTabId, localBranchName);
           }
+          // Refresh repository data
+          await refreshActiveTab();
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+          addAlert('error', errorTitle, result.message);
         }
-        // Refresh repository data
-        await refreshActiveTab();
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Branch');
-        addAlert('error', errorTitle, result.message);
+      } catch (error) {
+        console.error('Error tracking remote branch:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry(
+          'Checkout',
+          `Track '${remoteBranchName}' as '${localBranchName}'`,
+          command,
+          String(error),
+          false
+        );
+        addAlert('error', 'Checkout Error', String(error));
       }
-    } catch (error) {
-      console.error('Error creating branch:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Branch', `Create '${branchName}' from '${startPoint}'`, command, String(error), false);
-      addAlert('error', 'Branch Error', String(error));
-    }
-  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      setTabCurrentBranch,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+    ]
+  );
+
+  // Handle creating a new branch
+  const handleCreateBranch = useCallback(
+    async (branchName: string, startPoint: string, checkout: boolean) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      const command = checkout
+        ? `git checkout -b ${branchName} ${startPoint}`
+        : `git branch ${branchName} ${startPoint}`;
+      startOperation('Branch', branchName);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_create_branch', {
+          branchName,
+          startPoint,
+          checkout,
+        });
+
+        completeOperation(result);
+        addLogEntry(
+          'Branch',
+          `Create '${branchName}' from '${startPoint}'`,
+          command,
+          result.message,
+          result.success
+        );
+
+        if (result.success) {
+          if (checkout) {
+            // Update the current branch in the tab
+            const activeTabId = useRepositoryStore.getState().activeTabId;
+            if (activeTabId) {
+              setTabCurrentBranch(activeTabId, branchName);
+            }
+          }
+          // Refresh repository data
+          await refreshActiveTab();
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Branch');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error creating branch:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry(
+          'Branch',
+          `Create '${branchName}' from '${startPoint}'`,
+          command,
+          String(error),
+          false
+        );
+        addAlert('error', 'Branch Error', String(error));
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      setTabCurrentBranch,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+    ]
+  );
 
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {
@@ -432,173 +590,254 @@ function App() {
     }
   }, [openRepository]);
 
-  const handleBranchSelect = useCallback((branch: BranchInfo) => {
-    console.log('Selected branch:', branch);
+  const handleBranchSelect = useCallback((_branch: BranchInfo) => {
+    // Branch selection handled by sidebar
   }, []);
 
-  const handleViewModeChange = useCallback((mode: ViewMode) => {
-    const activeTabId = useRepositoryStore.getState().activeTabId;
-    if (activeTabId) {
-      updateTabState(activeTabId, { viewMode: mode });
-    }
-  }, [updateTabState]);
+  const handleViewModeChange = useCallback(
+    (mode: ViewMode) => {
+      const activeTabId = useRepositoryStore.getState().activeTabId;
+      if (activeTabId) {
+        updateTabState(activeTabId, { viewMode: mode });
+      }
+    },
+    [updateTabState]
+  );
 
-  const handleNavigateToCommit = useCallback((commitSha: string) => {
-    const activeTabId = useRepositoryStore.getState().activeTabId;
-    if (activeTabId) {
-      updateTabState(activeTabId, { selectedCommitId: commitSha });
-    }
-  }, [updateTabState]);
+  const handleNavigateToCommit = useCallback(
+    (commitSha: string) => {
+      const activeTabId = useRepositoryStore.getState().activeTabId;
+      if (activeTabId) {
+        updateTabState(activeTabId, { selectedCommitId: commitSha });
+      }
+    },
+    [updateTabState]
+  );
 
   // Handle creating a new tag
-  const handleCreateTag = useCallback(async (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => {
-    if (!activeTab?.path || isGitLoading || !activeTabState) return;
+  const handleCreateTag = useCallback(
+    async (tagName: string, startPoint: string, message: string | null, pushToRemotes: boolean) => {
+      if (!activeTab?.path || isGitLoading || !activeTabState) return;
 
-    const command = message
-      ? `git tag -a ${tagName} ${startPoint} -m "${message}"${pushToRemotes ? ' && git push --tags' : ''}`
-      : `git tag ${tagName} ${startPoint}${pushToRemotes ? ' && git push --tags' : ''}`;
-    startOperation('Other', tagName);
+      const command = message
+        ? `git tag -a ${tagName} ${startPoint} -m "${message}"${pushToRemotes ? ' && git push --tags' : ''}`
+        : `git tag ${tagName} ${startPoint}${pushToRemotes ? ' && git push --tags' : ''}`;
+      startOperation('Other', tagName);
 
-    // Get the commit SHA for the startPoint branch before the operation
-    const branchHead = activeTabState.branchHeads.find(bh => bh.name === startPoint);
-    const commitSha = branchHead?.commit_sha;
+      // Get the commit SHA for the startPoint branch before the operation
+      const branchHead = activeTabState.branchHeads.find((bh) => bh.name === startPoint);
+      const commitSha = branchHead?.commit_sha;
 
-    try {
-      const result = await invoke<GitOperationResult>('git_create_tag', {
-        tagName,
-        startPoint,
-        message,
-        pushToRemotes,
-      });
+      try {
+        const result = await invoke<GitOperationResult>('git_create_tag', {
+          tagName,
+          startPoint,
+          message,
+          pushToRemotes,
+        });
 
-      completeOperation(result);
-      addLogEntry('Other', `Create tag '${tagName}' at '${startPoint}'`, command, result.message, result.success);
+        completeOperation(result);
+        addLogEntry(
+          'Other',
+          `Create tag '${tagName}' at '${startPoint}'`,
+          command,
+          result.message,
+          result.success
+        );
 
-      if (result.success || result.error_type === 'push_failed') {
-        // Tag was created (even if push failed), refresh and navigate
-        await refreshActiveTab();
+        if (result.success || result.error_type === 'push_failed') {
+          // Tag was created (even if push failed), refresh and navigate
+          await refreshActiveTab();
 
-        // Expand the tags section and navigate to the commit
-        setExpandTagsSection(true);
-        // Reset after a short delay so it can be triggered again
-        setTimeout(() => setExpandTagsSection(false), 100);
+          // Expand the tags section and navigate to the commit
+          setExpandTagsSection(true);
+          // Reset after a short delay so it can be triggered again
+          setTimeout(() => setExpandTagsSection(false), 100);
 
-        // Switch to all-commits view and navigate to the tag's commit
-        if (commitSha) {
-          handleViewModeChange('all-commits');
-          handleNavigateToCommit(commitSha);
+          // Switch to all-commits view and navigate to the tag's commit
+          if (commitSha) {
+            handleViewModeChange('all-commits');
+            handleNavigateToCommit(commitSha);
+          }
+
+          // Show error if push failed but tag was created
+          if (result.error_type === 'push_failed') {
+            addAlert('error', 'Push Failed', result.message);
+          }
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Tag');
+          addAlert('error', errorTitle, result.message);
         }
-
-        // Show error if push failed but tag was created
-        if (result.error_type === 'push_failed') {
-          addAlert('error', 'Push Failed', result.message);
-        }
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Tag');
-        addAlert('error', errorTitle, result.message);
+      } catch (error) {
+        console.error('Error creating tag:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry(
+          'Other',
+          `Create tag '${tagName}' at '${startPoint}'`,
+          command,
+          String(error),
+          false
+        );
+        addAlert('error', 'Tag Error', String(error));
       }
-    } catch (error) {
-      console.error('Error creating tag:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Create tag '${tagName}' at '${startPoint}'`, command, String(error), false);
-      addAlert('error', 'Tag Error', String(error));
-    }
-  }, [activeTab?.path, isGitLoading, activeTabState?.branchHeads, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleViewModeChange, handleNavigateToCommit]);
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      activeTabState?.branchHeads,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+      handleViewModeChange,
+      handleNavigateToCommit,
+    ]
+  );
 
   // Handle renaming a branch
-  const handleRenameBranch = useCallback(async (oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handleRenameBranch = useCallback(
+    async (oldName: string, newName: string, renameRemote: boolean, remoteName: string | null) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    const command = renameRemote && remoteName
-      ? `git branch -m ${oldName} ${newName} && git push ${remoteName} ${newName} && git push ${remoteName} --delete ${oldName}`
-      : `git branch -m ${oldName} ${newName}`;
-    startOperation('Other', newName);
+      const command =
+        renameRemote && remoteName
+          ? `git branch -m ${oldName} ${newName} && git push ${remoteName} ${newName} && git push ${remoteName} --delete ${oldName}`
+          : `git branch -m ${oldName} ${newName}`;
+      startOperation('Other', newName);
 
-    try {
-      const result = await invoke<GitOperationResult>('git_rename_branch', {
-        oldName,
-        newName,
-        renameRemote,
-        remoteName,
-      });
+      try {
+        const result = await invoke<GitOperationResult>('git_rename_branch', {
+          oldName,
+          newName,
+          renameRemote,
+          remoteName,
+        });
 
-      completeOperation(result);
-      addLogEntry('Other', `Rename '${oldName}' to '${newName}'`, command, result.message, result.success);
+        completeOperation(result);
+        addLogEntry(
+          'Other',
+          `Rename '${oldName}' to '${newName}'`,
+          command,
+          result.message,
+          result.success
+        );
 
-      if (result.success) {
-        // If we renamed the current branch, update the tab's current branch
-        const activeTabId = useRepositoryStore.getState().activeTabId;
-        if (activeTabId && activeTab.currentBranch === oldName) {
-          setTabCurrentBranch(activeTabId, newName);
+        if (result.success) {
+          // If we renamed the current branch, update the tab's current branch
+          const activeTabId = useRepositoryStore.getState().activeTabId;
+          if (activeTabId && activeTab.currentBranch === oldName) {
+            setTabCurrentBranch(activeTabId, newName);
+          }
+          // Refresh repository data
+          await refreshActiveTab();
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Rename');
+          addAlert('error', errorTitle, result.message);
         }
-        // Refresh repository data
-        await refreshActiveTab();
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Rename');
-        addAlert('error', errorTitle, result.message);
+      } catch (error) {
+        console.error('Error renaming branch:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Other', `Rename '${oldName}' to '${newName}'`, command, String(error), false);
+        addAlert('error', 'Rename Error', String(error));
       }
-    } catch (error) {
-      console.error('Error renaming branch:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Rename '${oldName}' to '${newName}'`, command, String(error), false);
-      addAlert('error', 'Rename Error', String(error));
-    }
-  }, [activeTab?.path, activeTab?.currentBranch, isGitLoading, startOperation, completeOperation, addLogEntry, setTabCurrentBranch, refreshActiveTab, addAlert, getErrorTitle]);
+    },
+    [
+      activeTab?.path,
+      activeTab?.currentBranch,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      setTabCurrentBranch,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+    ]
+  );
 
   // Handle deleting a branch
-  const handleDeleteBranch = useCallback(async (branchName: string, force: boolean, deleteRemote: boolean, remoteName: string | null) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handleDeleteBranch = useCallback(
+    async (
+      branchName: string,
+      force: boolean,
+      deleteRemote: boolean,
+      remoteName: string | null
+    ) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    const deleteFlag = force ? '-D' : '-d';
-    const command = deleteRemote && remoteName
-      ? `git branch ${deleteFlag} ${branchName} && git push ${remoteName} --delete ${branchName}`
-      : `git branch ${deleteFlag} ${branchName}`;
-    startOperation('Other', branchName);
+      const deleteFlag = force ? '-D' : '-d';
+      const command =
+        deleteRemote && remoteName
+          ? `git branch ${deleteFlag} ${branchName} && git push ${remoteName} --delete ${branchName}`
+          : `git branch ${deleteFlag} ${branchName}`;
+      startOperation('Other', branchName);
 
-    try {
-      const result = await invoke<GitOperationResult>('git_delete_branch', {
-        branchName,
-        force,
-        deleteRemote,
-        remoteName,
-      });
+      try {
+        const result = await invoke<GitOperationResult>('git_delete_branch', {
+          branchName,
+          force,
+          deleteRemote,
+          remoteName,
+        });
 
-      completeOperation(result);
-      addLogEntry('Other', `Delete branch '${branchName}'`, command, result.message, result.success);
+        completeOperation(result);
+        addLogEntry(
+          'Other',
+          `Delete branch '${branchName}'`,
+          command,
+          result.message,
+          result.success
+        );
 
-      if (result.success) {
-        // Refresh repository data
-        await refreshActiveTab();
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, 'Delete');
-        addAlert('error', errorTitle, result.message);
+        if (result.success) {
+          // Refresh repository data
+          await refreshActiveTab();
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Delete');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error deleting branch:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Other', `Delete branch '${branchName}'`, command, String(error), false);
+        addAlert('error', 'Delete Error', String(error));
       }
-    } catch (error) {
-      console.error('Error deleting branch:', error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Delete branch '${branchName}'`, command, String(error), false);
-      addAlert('error', 'Delete Error', String(error));
-    }
-  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle]);
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+    ]
+  );
 
   // Add Remote handler
-  const handleAddRemote = useCallback(async (name: string, url: string) => {
-    const command = `git remote add ${name} ${url}`;
+  const handleAddRemote = useCallback(
+    async (name: string, url: string) => {
+      const command = `git remote add ${name} ${url}`;
 
-    try {
-      const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
-      addLogEntry('Other', `Add remote '${name}'`, command, result.message, result.success);
+      try {
+        const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
+        addLogEntry('Other', `Add remote '${name}'`, command, result.message, result.success);
 
-      if (!result.success) {
-        addAlert('error', 'Add Remote Failed', result.message);
+        if (!result.success) {
+          addAlert('error', 'Add Remote Failed', result.message);
+        }
+      } catch (error) {
+        const errorMessage = String(error);
+        addLogEntry('Other', `Add remote '${name}'`, command, errorMessage, false);
+        addAlert('error', 'Add Remote Error', errorMessage);
+        throw error;
       }
-    } catch (error) {
-      const errorMessage = String(error);
-      addLogEntry('Other', `Add remote '${name}'`, command, errorMessage, false);
-      addAlert('error', 'Add Remote Error', errorMessage);
-      throw error;
-    }
-  }, [addLogEntry, addAlert]);
+    },
+    [addLogEntry, addAlert]
+  );
 
   // Stash handlers
   const handleOpenSaveStashModal = useCallback(() => {
@@ -625,40 +864,59 @@ function App() {
     setSelectedStash(null);
   }, []);
 
-  const handleSaveStash = useCallback(async (message: string, includeUntracked: boolean, keepIndex: boolean) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handleSaveStash = useCallback(
+    async (message: string, includeUntracked: boolean, keepIndex: boolean) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    const operationType = keepIndex ? 'Snapshot' : 'Stash';
-    const command = keepIndex
-      ? `git stash push --keep-index${includeUntracked ? ' -u' : ''}${message ? ` -m "${message}"` : ''}`
-      : `git stash push${includeUntracked ? ' -u' : ''}${message ? ` -m "${message}"` : ''}`;
-    startOperation('Other', operationType);
+      const operationType = keepIndex ? 'Snapshot' : 'Stash';
+      const command = keepIndex
+        ? `git stash push --keep-index${includeUntracked ? ' -u' : ''}${message ? ` -m "${message}"` : ''}`
+        : `git stash push${includeUntracked ? ' -u' : ''}${message ? ` -m "${message}"` : ''}`;
+      startOperation('Other', operationType);
 
-    try {
-      const result = await invoke<GitOperationResult>('git_stash_save', {
-        message: message || null,
-        includeUntracked,
-        keepIndex,
-      });
+      try {
+        const result = await invoke<GitOperationResult>('git_stash_save', {
+          message: message || null,
+          includeUntracked,
+          keepIndex,
+        });
 
-      completeOperation(result);
-      addLogEntry('Other', `Save ${operationType.toLowerCase()}`, command, result.message, result.success);
+        completeOperation(result);
+        addLogEntry(
+          'Other',
+          `Save ${operationType.toLowerCase()}`,
+          command,
+          result.message,
+          result.success
+        );
 
-      if (result.success) {
-        await refreshActiveTab();
-        setLocalChangesRefreshKey(k => k + 1);
-        setSaveStashModalOpen(false);
-      } else {
-        const errorTitle = getErrorTitle(result.error_type, operationType);
-        addAlert('error', errorTitle, result.message);
+        if (result.success) {
+          await refreshActiveTab();
+          setLocalChangesRefreshKey((k) => k + 1);
+          setSaveStashModalOpen(false);
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, operationType);
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error(`Error saving ${operationType.toLowerCase()}:`, error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Other', `Save ${operationType.toLowerCase()}`, command, String(error), false);
+        addAlert('error', `${operationType} Error`, String(error));
       }
-    } catch (error) {
-      console.error(`Error saving ${operationType.toLowerCase()}:`, error);
-      completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Save ${operationType.toLowerCase()}`, command, String(error), false);
-      addAlert('error', `${operationType} Error`, String(error));
-    }
-  }, [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, setLocalChangesRefreshKey]);
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+      setLocalChangesRefreshKey,
+    ]
+  );
 
   const handleApplyStash = useCallback(async () => {
     if (!activeTab?.path || isGitLoading || !selectedStash) return;
@@ -672,11 +930,17 @@ function App() {
       });
 
       completeOperation(result);
-      addLogEntry('Other', `Apply stash '${selectedStash.message}'`, command, result.message, result.success);
+      addLogEntry(
+        'Other',
+        `Apply stash '${selectedStash.message}'`,
+        command,
+        result.message,
+        result.success
+      );
 
       if (result.success) {
         await refreshActiveTab();
-        setLocalChangesRefreshKey(k => k + 1);
+        setLocalChangesRefreshKey((k) => k + 1);
         handleCloseApplyStashModal();
       } else {
         const errorTitle = getErrorTitle(result.error_type, 'Apply stash');
@@ -688,7 +952,19 @@ function App() {
       addLogEntry('Other', `Apply stash '${selectedStash.message}'`, command, String(error), false);
       addAlert('error', 'Apply Stash Error', String(error));
     }
-  }, [activeTab?.path, isGitLoading, selectedStash, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleCloseApplyStashModal, setLocalChangesRefreshKey]);
+  }, [
+    activeTab?.path,
+    isGitLoading,
+    selectedStash,
+    startOperation,
+    completeOperation,
+    addLogEntry,
+    refreshActiveTab,
+    addAlert,
+    getErrorTitle,
+    handleCloseApplyStashModal,
+    setLocalChangesRefreshKey,
+  ]);
 
   const handlePopStash = useCallback(async () => {
     if (!activeTab?.path || isGitLoading || !selectedStash) return;
@@ -702,11 +978,17 @@ function App() {
       });
 
       completeOperation(result);
-      addLogEntry('Other', `Pop stash '${selectedStash.message}'`, command, result.message, result.success);
+      addLogEntry(
+        'Other',
+        `Pop stash '${selectedStash.message}'`,
+        command,
+        result.message,
+        result.success
+      );
 
       if (result.success) {
         await refreshActiveTab();
-        setLocalChangesRefreshKey(k => k + 1);
+        setLocalChangesRefreshKey((k) => k + 1);
         handleCloseApplyStashModal();
       } else {
         const errorTitle = getErrorTitle(result.error_type, 'Pop stash');
@@ -718,7 +1000,19 @@ function App() {
       addLogEntry('Other', `Pop stash '${selectedStash.message}'`, command, String(error), false);
       addAlert('error', 'Pop Stash Error', String(error));
     }
-  }, [activeTab?.path, isGitLoading, selectedStash, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleCloseApplyStashModal, setLocalChangesRefreshKey]);
+  }, [
+    activeTab?.path,
+    isGitLoading,
+    selectedStash,
+    startOperation,
+    completeOperation,
+    addLogEntry,
+    refreshActiveTab,
+    addAlert,
+    getErrorTitle,
+    handleCloseApplyStashModal,
+    setLocalChangesRefreshKey,
+  ]);
 
   const handleDropStash = useCallback(async () => {
     if (!activeTab?.path || isGitLoading || !selectedStash) return;
@@ -732,7 +1026,13 @@ function App() {
       });
 
       completeOperation(result);
-      addLogEntry('Other', `Drop stash '${selectedStash.message}'`, command, result.message, result.success);
+      addLogEntry(
+        'Other',
+        `Drop stash '${selectedStash.message}'`,
+        command,
+        result.message,
+        result.success
+      );
 
       if (result.success) {
         await refreshActiveTab();
@@ -747,146 +1047,207 @@ function App() {
       addLogEntry('Other', `Drop stash '${selectedStash.message}'`, command, String(error), false);
       addAlert('error', 'Drop Stash Error', String(error));
     }
-  }, [activeTab?.path, isGitLoading, selectedStash, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, getErrorTitle, handleCloseApplyStashModal]);
+  }, [
+    activeTab?.path,
+    isGitLoading,
+    selectedStash,
+    startOperation,
+    completeOperation,
+    addLogEntry,
+    refreshActiveTab,
+    addAlert,
+    getErrorTitle,
+    handleCloseApplyStashModal,
+  ]);
 
   // Execute fetch with options
-  const handleFetchWithOptions = useCallback(async (options: FetchOptions) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handleFetchWithOptions = useCallback(
+    async (options: FetchOptions) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    saveOptions({ fetch: options });
+      saveOptions({ fetch: options });
 
-    const target = options.all ? 'all remotes' : options.remote;
-    const command = options.all ? 'git fetch --all --prune' : `git fetch --prune ${options.remote}`;
-    startOperation('Fetch', target);
+      const target = options.all ? 'all remotes' : options.remote;
+      const command = options.all
+        ? 'git fetch --all --prune'
+        : `git fetch --prune ${options.remote}`;
+      startOperation('Fetch', target);
 
-    const doFetch = async () => {
-      try {
-        const result = await invoke<GitOperationResult>('git_fetch_with_options', {
-          remote: options.all ? null : options.remote,
-          all: options.all,
-        });
+      const doFetch = async () => {
+        try {
+          const result = await invoke<GitOperationResult>('git_fetch_with_options', {
+            remote: options.all ? null : options.remote,
+            all: options.all,
+          });
 
-        if (handleSshVerificationRequired(result, () => doFetch())) {
-          return;
+          if (handleSshVerificationRequired(result, () => doFetch())) {
+            return;
+          }
+
+          completeOperation(result);
+          addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
+
+          if (!result.success) {
+            const errorTitle = getErrorTitle(result.error_type, 'Fetch');
+            addAlert('error', errorTitle, result.message);
+          }
+        } catch (error) {
+          console.error('Error fetching:', error);
+          completeOperation({ success: false, message: String(error) });
+          addLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
+          addAlert('error', 'Fetch Error', String(error));
         }
+      };
 
-        completeOperation(result);
-        addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
-
-        if (!result.success) {
-          const errorTitle = getErrorTitle(result.error_type, 'Fetch');
-          addAlert('error', errorTitle, result.message);
-        }
-      } catch (error) {
-        console.error('Error fetching:', error);
-        completeOperation({ success: false, message: String(error) });
-        addLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
-        addAlert('error', 'Fetch Error', String(error));
-      }
-    };
-
-    await doFetch();
-  }, [activeTab?.path, isGitLoading, saveOptions, startOperation, completeOperation, addLogEntry, addAlert, handleSshVerificationRequired]);
+      await doFetch();
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      saveOptions,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      addAlert,
+      handleSshVerificationRequired,
+    ]
+  );
 
   // Execute pull with options
-  const handlePullWithOptions = useCallback(async (options: PullOptions) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handlePullWithOptions = useCallback(
+    async (options: PullOptions) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    saveOptions({ pull: options });
+      saveOptions({ pull: options });
 
-    const target = `${options.remote}/${options.branch}`;
-    let command = `git pull ${options.remote} ${options.branch}`;
-    if (options.rebase) command += ' --rebase';
-    if (options.autostash) command += ' --autostash';
-    startOperation('Pull', target);
+      const target = `${options.remote}/${options.branch}`;
+      let command = `git pull ${options.remote} ${options.branch}`;
+      if (options.rebase) command += ' --rebase';
+      if (options.autostash) command += ' --autostash';
+      startOperation('Pull', target);
 
-    const doPull = async () => {
-      try {
-        const result = await invoke<GitOperationResult>('git_pull_with_options', {
-          remote: options.remote,
-          branch: options.branch,
-          rebase: options.rebase,
-          autostash: options.autostash,
-        });
+      const doPull = async () => {
+        try {
+          const result = await invoke<GitOperationResult>('git_pull_with_options', {
+            remote: options.remote,
+            branch: options.branch,
+            rebase: options.rebase,
+            autostash: options.autostash,
+          });
 
-        if (handleSshVerificationRequired(result, () => doPull())) {
-          return;
+          if (handleSshVerificationRequired(result, () => doPull())) {
+            return;
+          }
+
+          completeOperation(result);
+          addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
+
+          if (!result.success) {
+            const errorTitle = getErrorTitle(result.error_type, 'Pull');
+            addAlert('error', errorTitle, result.message);
+          }
+        } catch (error) {
+          console.error('Error pulling:', error);
+          completeOperation({ success: false, message: String(error) });
+          addLogEntry('Pull', `Pull ${target}`, command, String(error), false);
+          addAlert('error', 'Pull Error', String(error));
         }
+      };
 
-        completeOperation(result);
-        addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
-
-        if (!result.success) {
-          const errorTitle = getErrorTitle(result.error_type, 'Pull');
-          addAlert('error', errorTitle, result.message);
-        }
-      } catch (error) {
-        console.error('Error pulling:', error);
-        completeOperation({ success: false, message: String(error) });
-        addLogEntry('Pull', `Pull ${target}`, command, String(error), false);
-        addAlert('error', 'Pull Error', String(error));
-      }
-    };
-
-    await doPull();
-  }, [activeTab?.path, isGitLoading, saveOptions, startOperation, completeOperation, addLogEntry, addAlert, handleSshVerificationRequired]);
+      await doPull();
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      saveOptions,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      addAlert,
+      handleSshVerificationRequired,
+    ]
+  );
 
   // Execute push with options
-  const handlePushWithOptions = useCallback(async (options: PushOptions) => {
-    if (!activeTab?.path || isGitLoading) return;
+  const handlePushWithOptions = useCallback(
+    async (options: PushOptions) => {
+      if (!activeTab?.path || isGitLoading) return;
 
-    saveOptions({ push: { remote: options.remote, pushTags: options.pushTags, forceWithLease: options.forceWithLease } });
-
-    const target = `${options.remote}/${options.remoteBranch}`;
-    let command = `git push ${options.remote} ${options.branch}:${options.remoteBranch}`;
-    if (options.pushTags) command += ' --tags';
-    if (options.forceWithLease) command += ' --force-with-lease';
-    startOperation('Push', target);
-
-    const doPush = async () => {
-      try {
-        const result = await invoke<GitOperationResult>('git_push_with_options', {
-          branch: options.branch,
+      saveOptions({
+        push: {
           remote: options.remote,
-          remoteBranch: options.remoteBranch,
           pushTags: options.pushTags,
           forceWithLease: options.forceWithLease,
-        });
+        },
+      });
 
-        if (handleSshVerificationRequired(result, () => doPush())) {
-          return;
+      const target = `${options.remote}/${options.remoteBranch}`;
+      let command = `git push ${options.remote} ${options.branch}:${options.remoteBranch}`;
+      if (options.pushTags) command += ' --tags';
+      if (options.forceWithLease) command += ' --force-with-lease';
+      startOperation('Push', target);
+
+      const doPush = async () => {
+        try {
+          const result = await invoke<GitOperationResult>('git_push_with_options', {
+            branch: options.branch,
+            remote: options.remote,
+            remoteBranch: options.remoteBranch,
+            pushTags: options.pushTags,
+            forceWithLease: options.forceWithLease,
+          });
+
+          if (handleSshVerificationRequired(result, () => doPush())) {
+            return;
+          }
+
+          completeOperation(result);
+          addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
+
+          if (!result.success) {
+            const errorTitle = getErrorTitle(result.error_type, 'Push');
+            addAlert('error', errorTitle, result.message);
+          }
+        } catch (error) {
+          console.error('Error pushing:', error);
+          completeOperation({ success: false, message: String(error) });
+          addLogEntry('Push', `Push to ${target}`, command, String(error), false);
+          addAlert('error', 'Push Error', String(error));
         }
+      };
 
-        completeOperation(result);
-        addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
-
-        if (!result.success) {
-          const errorTitle = getErrorTitle(result.error_type, 'Push');
-          addAlert('error', errorTitle, result.message);
-        }
-      } catch (error) {
-        console.error('Error pushing:', error);
-        completeOperation({ success: false, message: String(error) });
-        addLogEntry('Push', `Push to ${target}`, command, String(error), false);
-        addAlert('error', 'Push Error', String(error));
-      }
-    };
-
-    await doPush();
-  }, [activeTab?.path, isGitLoading, saveOptions, startOperation, completeOperation, addLogEntry, addAlert, handleSshVerificationRequired]);
+      await doPush();
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      saveOptions,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      addAlert,
+      handleSshVerificationRequired,
+    ]
+  );
 
   // Panel resize handlers
-  const startResize = useCallback((panel: string) => {
-    setIsResizing(panel);
-  }, [setIsResizing]);
+  const startResize = useCallback(
+    (panel: string) => {
+      setIsResizing(panel);
+    },
+    [setIsResizing]
+  );
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return;
 
-    if (isResizing === 'sidebar') {
-      setPanelSize('sidebarWidth', e.clientX);
-    }
-  }, [isResizing, setPanelSize]);
+      if (isResizing === 'sidebar') {
+        setPanelSize('sidebarWidth', e.clientX);
+      }
+    },
+    [isResizing, setPanelSize]
+  );
 
   const stopResize = useCallback(() => {
     setIsResizing(null);
@@ -933,14 +1294,10 @@ function App() {
       unlisten = await listen<{ repo_path: string; timestamp: number }>(
         'repo-files-changed',
         (event) => {
-          console.log('[FileWatcher] Event received:', event.payload);
-
           const state = useRepositoryStore.getState();
           const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
 
           if (matchingTab) {
-            console.log('[FileWatcher] Matching tab found:', matchingTab.id, 'Active tab:', state.activeTabId);
-
             // Mark tab as having pending changes
             if (!matchingTab.hasPendingChanges) {
               setTabHasPendingChanges(matchingTab.id, true);
@@ -948,11 +1305,8 @@ function App() {
 
             // If this is the active tab, also refresh the local changes view
             if (matchingTab.id === state.activeTabId) {
-              console.log('[FileWatcher] Triggering refresh for active tab');
-              setLocalChangesRefreshKey(k => k + 1);
+              setLocalChangesRefreshKey((k) => k + 1);
             }
-          } else {
-            console.log('[FileWatcher] No matching tab for path:', event.payload.repo_path);
           }
         }
       );
@@ -971,7 +1325,9 @@ function App() {
   useEffect(() => {
     const checkGitInstallation = async () => {
       try {
-        const result = await invoke<{ installed: boolean; version: string | null }>('check_git_installed');
+        const result = await invoke<{ installed: boolean; version: string | null }>(
+          'check_git_installed'
+        );
         if (!result.installed) {
           setGitNotInstalledModalOpen(true);
         }
@@ -1151,13 +1507,17 @@ function App() {
             remotes={activeTabState?.remotes ?? []}
             branches={activeTabState?.branches ?? []}
             currentBranch={activeTab?.currentBranch ?? null}
-            savedOptions={getStoredOptions().push ? {
-              branch: activeTab?.currentBranch ?? 'main',
-              remote: getStoredOptions().push!.remote,
-              remoteBranch: activeTab?.currentBranch ?? 'main',
-              pushTags: getStoredOptions().push!.pushTags,
-              forceWithLease: getStoredOptions().push!.forceWithLease,
-            } : undefined}
+            savedOptions={
+              getStoredOptions().push
+                ? {
+                    branch: activeTab?.currentBranch ?? 'main',
+                    remote: getStoredOptions().push!.remote,
+                    remoteBranch: activeTab?.currentBranch ?? 'main',
+                    pushTags: getStoredOptions().push!.pushTags,
+                    forceWithLease: getStoredOptions().push!.forceWithLease,
+                  }
+                : undefined
+            }
           />
         )}
 
@@ -1201,16 +1561,13 @@ function App() {
             onClose={handleCloseTrackBranchModal}
             onTrack={handleTrackRemoteBranch}
             remoteBranch={selectedRemoteBranch}
-            localBranches={activeTabState?.branches.filter(b => !b.is_remote) ?? []}
+            localBranches={activeTabState?.branches.filter((b) => !b.is_remote) ?? []}
           />
         )}
 
         {/* Feedback Modal */}
         {feedbackModalOpen && (
-          <FeedbackModal
-            isOpen={true}
-            onClose={() => setFeedbackModalOpen(false)}
-          />
+          <FeedbackModal isOpen={true} onClose={() => setFeedbackModalOpen(false)} />
         )}
 
         {/* Save Stash Modal */}
@@ -1253,19 +1610,12 @@ function App() {
 
         {/* Git Activity Log */}
         {isActivityLogOpen && (
-          <GitActivityLog
-            entries={activityLog}
-            isOpen={true}
-            onClose={closeActivityLog}
-          />
+          <GitActivityLog entries={activityLog} isOpen={true} onClose={closeActivityLog} />
         )}
 
         {/* Git Not Installed Modal */}
         {gitNotInstalledModalOpen && (
-          <GitNotInstalledModal
-            isOpen={true}
-            onClose={() => setGitNotInstalledModalOpen(false)}
-          />
+          <GitNotInstalledModal isOpen={true} onClose={() => setGitNotInstalledModalOpen(false)} />
         )}
       </Suspense>
 
