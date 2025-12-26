@@ -30,3 +30,5 @@ export { ApplyStashModal } from './ApplyStashModal';
 export { CheckoutConflictModal } from './CheckoutConflictModal';
 
 export { DiscardChangesModal } from './DiscardChangesModal';
+
+export { GitNotInstalledModal } from './GitNotInstalledModal';

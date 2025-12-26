@@ -26,6 +26,7 @@ const AddRemoteModal = lazy(() => import('./components/add-remote-modal').then(m
 const FeedbackModal = lazy(() => import('./components/feedback-modal').then(m => ({ default: m.FeedbackModal })));
 const SaveStashModal = lazy(() => import('./components/git-modals/SaveStashModal').then(m => ({ default: m.SaveStashModal })));
 const ApplyStashModal = lazy(() => import('./components/git-modals/ApplyStashModal').then(m => ({ default: m.ApplyStashModal })));
+const GitNotInstalledModal = lazy(() => import('./components/git-modals/GitNotInstalledModal').then(m => ({ default: m.GitNotInstalledModal })));
 
 // Zustand stores
 import {
@@ -150,6 +151,9 @@ function App() {
   const [checkoutConflictBranch, setCheckoutConflictBranch] = useState('');
   const [checkoutConflictFiles, setCheckoutConflictFiles] = useState<string[]>([]);
   const [isCheckoutWithStashLoading, setIsCheckoutWithStashLoading] = useState(false);
+
+  // Git not installed modal state
+  const [gitNotInstalledModalOpen, setGitNotInstalledModalOpen] = useState(false);
 
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
@@ -948,6 +952,24 @@ function App() {
     };
   }, [setTabHasPendingChanges]);
 
+  // Check if Git is installed on startup
+  useEffect(() => {
+    const checkGitInstallation = async () => {
+      try {
+        const result = await invoke<{ installed: boolean; version: string | null }>('check_git_installed');
+        if (!result.installed) {
+          setGitNotInstalledModalOpen(true);
+        }
+      } catch (error) {
+        console.error('Failed to check Git installation:', error);
+        // If the check fails, assume Git is not installed
+        setGitNotInstalledModalOpen(true);
+      }
+    };
+
+    checkGitInstallation();
+  }, []);
+
   const hasOpenRepos = tabs.length > 0;
 
   // Loading state
@@ -1220,6 +1242,14 @@ function App() {
             entries={activityLog}
             isOpen={true}
             onClose={closeActivityLog}
+          />
+        )}
+
+        {/* Git Not Installed Modal */}
+        {gitNotInstalledModalOpen && (
+          <GitNotInstalledModal
+            isOpen={true}
+            onClose={() => setGitNotInstalledModalOpen(false)}
           />
         )}
       </Suspense>

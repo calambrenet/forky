@@ -264,6 +264,18 @@
       "file": "Archivo",
       "warning": "Esta acción no se puede deshacer.",
       "discard": "Descartar"
+    },
+    "gitNotInstalled": {
+      "title": "Git No Instalado",
+      "description": "No se encontró la herramienta de línea de comandos Git en tu sistema",
+      "message": "Forky requiere que Git esté instalado para realizar la mayoría de operaciones. Sin Git, las siguientes funciones no estarán disponibles:",
+      "limitation1": "Operaciones Push, Pull y Fetch",
+      "limitation2": "Crear commits",
+      "limitation3": "Gestión de ramas (crear, eliminar, renombrar)",
+      "limitation4": "Operaciones de Stash",
+      "note": "Aún puedes explorar repositorios y ver el historial de commits, ya que estas funciones usan la librería Git integrada.",
+      "downloadGit": "Descargar Git",
+      "continueAnyway": "Continuar de Todos Modos"
     }
   },
   "stashDropdown": {

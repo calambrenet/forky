@@ -264,6 +264,18 @@
       "file": "File",
       "warning": "Questa azione non può essere annullata.",
       "discard": "Annulla"
+    },
+    "gitNotInstalled": {
+      "title": "Git Non Installato",
+      "description": "Lo strumento da riga di comando Git non è stato trovato sul tuo sistema",
+      "message": "Forky richiede che Git sia installato per eseguire la maggior parte delle operazioni. Senza Git, le seguenti funzionalità non funzioneranno:",
+      "limitation1": "Operazioni Push, Pull e Fetch",
+      "limitation2": "Creazione di commit",
+      "limitation3": "Gestione dei branch (creare, eliminare, rinominare)",
+      "limitation4": "Operazioni di Stash",
+      "note": "Puoi comunque esplorare i repository e visualizzare la cronologia dei commit, poiché queste funzionalità utilizzano la libreria Git integrata.",
+      "downloadGit": "Scarica Git",
+      "continueAnyway": "Continua Comunque"
     }
   },
   "stashDropdown": {

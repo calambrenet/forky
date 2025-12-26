@@ -6,6 +6,44 @@ pub struct SystemTheme {
     pub source: String, // where we got the theme from
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GitStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+}
+
+/// Checks if Git is installed on the system
+#[tauri::command]
+pub fn check_git_installed() -> GitStatus {
+    match Command::new("git").arg("--version").output() {
+        Ok(output) => {
+            if output.status.success() {
+                let version_output = String::from_utf8_lossy(&output.stdout);
+                // Parse version from "git version X.Y.Z"
+                let version = version_output
+                    .trim()
+                    .strip_prefix("git version ")
+                    .map(|v| v.to_string())
+                    .or_else(|| Some(version_output.trim().to_string()));
+
+                GitStatus {
+                    installed: true,
+                    version,
+                }
+            } else {
+                GitStatus {
+                    installed: false,
+                    version: None,
+                }
+            }
+        }
+        Err(_) => GitStatus {
+            installed: false,
+            version: None,
+        },
+    }
+}
+
 /// Opens a terminal emulator in the specified directory
 #[tauri::command]
 pub fn open_in_terminal(path: String) -> Result<(), String> {

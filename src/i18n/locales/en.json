@@ -264,6 +264,18 @@
       "file": "File",
       "warning": "This action cannot be undone.",
       "discard": "Discard"
+    },
+    "gitNotInstalled": {
+      "title": "Git Not Installed",
+      "description": "Git command-line tool was not found on your system",
+      "message": "Forky requires Git to be installed to perform most operations. Without Git, the following features will not work:",
+      "limitation1": "Push, Pull, and Fetch operations",
+      "limitation2": "Creating commits",
+      "limitation3": "Branch management (create, delete, rename)",
+      "limitation4": "Stash operations",
+      "note": "You can still browse repositories and view commit history, as these features use the built-in Git library.",
+      "downloadGit": "Download Git",
+      "continueAnyway": "Continue Anyway"
     }
   },
   "stashDropdown": {

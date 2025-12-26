@@ -428,3 +428,56 @@
 .warning-icon {
   color: var(--accent-orange);
 }
+
+/* Git Not Installed Modal */
+.git-not-installed-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.git-not-installed-message {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.git-not-installed-limitations {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.git-not-installed-limitations li {
+  margin-bottom: 4px;
+}
+
+.git-not-installed-note {
+  margin: 0;
+  padding: 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-blue-hover, #1a7fd4);
+}

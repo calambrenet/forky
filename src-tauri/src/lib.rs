@@ -63,6 +63,7 @@ pub fn run() {
             git_commands::get_image_from_index,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
+            system_commands::check_git_installed,
             watcher_commands::start_file_watcher,
             watcher_commands::stop_file_watcher,
             watcher_commands::get_watched_repo_path,
