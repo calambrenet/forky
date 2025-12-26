@@ -79,8 +79,8 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
   // Hunk hover state
   const [hoveredHunkIndex, setHoveredHunkIndex] = useState<number | null>(null);
 
-  // Get store actions for updating pending changes indicator
-  const { setTabHasPendingChanges } = useRepositoryStore.getState();
+  // Get store actions for updating pending changes indicator and file statuses
+  const { setTabHasPendingChanges, updateTabState } = useRepositoryStore.getState();
 
   const loadFileStatus = useCallback(async () => {
     try {
@@ -88,16 +88,20 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
       setUnstaged(result.unstaged);
       setStaged(result.staged);
 
-      // Update the pending changes indicator based on actual file status
+      // Update the store with file statuses and pending changes indicator
       const { activeTabId } = useRepositoryStore.getState();
       if (activeTabId) {
-        const hasChanges = result.unstaged.length > 0 || result.staged.length > 0;
+        const allFiles = [...result.unstaged, ...result.staged];
+        const hasChanges = allFiles.length > 0;
+
+        // Update fileStatuses in store (for sidebar counter)
+        updateTabState(activeTabId, { fileStatuses: allFiles });
         setTabHasPendingChanges(activeTabId, hasChanges);
       }
     } catch (error) {
       console.error('Error loading file status:', error);
     }
-  }, [setTabHasPendingChanges]);
+  }, [setTabHasPendingChanges, updateTabState]);
 
   useEffect(() => {
     loadFileStatus();

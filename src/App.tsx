@@ -933,11 +933,26 @@ function App() {
       unlisten = await listen<{ repo_path: string; timestamp: number }>(
         'repo-files-changed',
         (event) => {
-          // Find the tab matching this repo path and mark it as having pending changes
+          console.log('[FileWatcher] Event received:', event.payload);
+
           const state = useRepositoryStore.getState();
           const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
-          if (matchingTab && !matchingTab.hasPendingChanges) {
-            setTabHasPendingChanges(matchingTab.id, true);
+
+          if (matchingTab) {
+            console.log('[FileWatcher] Matching tab found:', matchingTab.id, 'Active tab:', state.activeTabId);
+
+            // Mark tab as having pending changes
+            if (!matchingTab.hasPendingChanges) {
+              setTabHasPendingChanges(matchingTab.id, true);
+            }
+
+            // If this is the active tab, also refresh the local changes view
+            if (matchingTab.id === state.activeTabId) {
+              console.log('[FileWatcher] Triggering refresh for active tab');
+              setLocalChangesRefreshKey(k => k + 1);
+            }
+          } else {
+            console.log('[FileWatcher] No matching tab for path:', event.payload.repo_path);
           }
         }
       );
