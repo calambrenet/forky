@@ -356,6 +356,12 @@
   padding-right: 16px;
   white-space: pre;
   overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.line-content::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
 }
 
 /* Scrollbar styling */

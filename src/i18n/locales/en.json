@@ -72,8 +72,11 @@
     "unstageAll": "Unstage all",
     "stage": "Stage",
     "unstage": "Unstage",
-    "discard": "Discard changes",
+    "discard": "Discard",
     "discardAll": "Discard all changes",
+    "stageHunk": "Stage this hunk",
+    "unstageHunk": "Unstage this hunk",
+    "discardHunk": "Discard this hunk",
     "commitMessage": "Commit message",
     "commitMessagePlaceholder": "Enter commit message...",
     "commit": "Commit",
@@ -264,6 +267,11 @@
       "file": "File",
       "warning": "This action cannot be undone.",
       "discard": "Discard"
+    },
+    "discardHunk": {
+      "title": "Discard Hunk",
+      "description": "Are you sure you want to discard this group of changes?",
+      "hunkInfo": "Changes"
     },
     "gitNotInstalled": {
       "title": "Git Not Installed",

@@ -661,6 +661,176 @@ pub fn discard_file(repo_path: &str, file_path: &str, is_untracked: bool) -> Res
     Ok(())
 }
 
+// ============================================================================
+// Hunk Operations (Stage/Unstage/Discard individual hunks)
+// ============================================================================
+
+/// Structure to receive hunk data from frontend
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HunkData {
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+    pub lines: Vec<HunkLineData>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HunkLineData {
+    pub content: String,
+    pub line_type: String, // "add", "delete", "context"
+}
+
+/// Generate a unified diff patch from hunk data
+fn generate_patch(file_path: &str, hunk: &HunkData) -> String {
+    let mut patch = String::new();
+
+    // Header
+    patch.push_str(&format!("diff --git a/{} b/{}\n", file_path, file_path));
+    patch.push_str(&format!("--- a/{}\n", file_path));
+    patch.push_str(&format!("+++ b/{}\n", file_path));
+
+    // Hunk header
+    patch.push_str(&format!(
+        "@@ -{},{} +{},{} @@\n",
+        hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
+    ));
+
+    // Lines - content might already have newline, so we need to handle both cases
+    for line in &hunk.lines {
+        let prefix = match line.line_type.as_str() {
+            "add" => "+",
+            "delete" => "-",
+            "context" => " ",
+            _ => " ",
+        };
+
+        // Remove trailing newline/carriage return if present, then add our own
+        let content = line.content.trim_end_matches(|c| c == '\n' || c == '\r');
+        patch.push_str(&format!("{}{}\n", prefix, content));
+    }
+
+    patch
+}
+
+/// Stage a single hunk from unstaged changes
+pub fn stage_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    let patch = generate_patch(file_path, &hunk);
+
+    // Debug: print the generated patch
+    eprintln!("=== STAGE HUNK PATCH ===");
+    eprintln!("repo_path: {}", repo_path);
+    eprintln!("file_path: {}", file_path);
+    eprintln!("patch:\n{}", patch);
+    eprintln!("=== END PATCH ===");
+
+    // Use git apply --cached to stage the hunk
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("apply")
+        .arg("--cached")
+        .arg("--unidiff-zero")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to execute git apply: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(patch.as_bytes())
+            .map_err(|e| format!("Failed to write patch to stdin: {}", e))?;
+    }
+
+    let output = child.wait_with_output()
+        .map_err(|e| format!("Failed to wait for git apply: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("git apply stderr: {}", stderr);
+        return Err(format!("Failed to stage hunk: {}", stderr.trim()));
+    }
+
+    eprintln!("Stage hunk successful!");
+    Ok(())
+}
+
+/// Unstage a single hunk from staged changes
+pub fn unstage_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    let patch = generate_patch(file_path, &hunk);
+
+    // Use git apply --cached -R to unstage the hunk (reverse apply to index)
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("apply")
+        .arg("--cached")
+        .arg("--reverse")
+        .arg("--unidiff-zero")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to execute git apply: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(patch.as_bytes())
+            .map_err(|e| format!("Failed to write patch to stdin: {}", e))?;
+    }
+
+    let output = child.wait_with_output()
+        .map_err(|e| format!("Failed to wait for git apply: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to unstage hunk: {}", stderr.trim()));
+    }
+
+    Ok(())
+}
+
+/// Discard a single hunk from unstaged changes (restore from index or HEAD)
+pub fn discard_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    let patch = generate_patch(file_path, &hunk);
+
+    // Use git apply -R to discard the hunk from working directory
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("apply")
+        .arg("--reverse")
+        .arg("--unidiff-zero")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to execute git apply: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(patch.as_bytes())
+            .map_err(|e| format!("Failed to write patch to stdin: {}", e))?;
+    }
+
+    let output = child.wait_with_output()
+        .map_err(|e| format!("Failed to wait for git apply: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to discard hunk: {}", stderr.trim()));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GitOperationResult {
     pub success: bool,

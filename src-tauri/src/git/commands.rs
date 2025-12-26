@@ -1,7 +1,7 @@
 use crate::git::repository::{
     self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FileStatus,
     GitOperationResult, RepositoryInfo, TagInfo, StashInfo, FetchOptions, PullOptions, PushOptions,
-    ImageContent,
+    ImageContent, HunkData,
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -439,4 +439,41 @@ pub fn get_image_from_index(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     let repo = repository::open_repository(path)?;
     repository::get_image_from_index(&repo, &file_path)
+}
+
+// ============================================================================
+// Hunk Operations Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn stage_hunk(
+    file_path: String,
+    hunk: HunkData,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::stage_hunk(path, &file_path, hunk)
+}
+
+#[tauri::command]
+pub fn unstage_hunk(
+    file_path: String,
+    hunk: HunkData,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::unstage_hunk(path, &file_path, hunk)
+}
+
+#[tauri::command]
+pub fn discard_hunk(
+    file_path: String,
+    hunk: HunkData,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::discard_hunk(path, &file_path, hunk)
 }

@@ -31,4 +31,6 @@ export { CheckoutConflictModal } from './CheckoutConflictModal';
 
 export { DiscardChangesModal } from './DiscardChangesModal';
 
+export { DiscardHunkModal } from './DiscardHunkModal';
+
 export { GitNotInstalledModal } from './GitNotInstalledModal';

@@ -72,8 +72,11 @@
     "unstageAll": "Quitar todo",
     "stage": "Preparar",
     "unstage": "Quitar",
-    "discard": "Descartar cambios",
+    "discard": "Descartar",
     "discardAll": "Descartar todos los cambios",
+    "stageHunk": "Preparar este bloque",
+    "unstageHunk": "Quitar este bloque",
+    "discardHunk": "Descartar este bloque",
     "commitMessage": "Mensaje del commit",
     "commitMessagePlaceholder": "Escribe el mensaje del commit...",
     "commit": "Commit",
@@ -264,6 +267,11 @@
       "file": "Archivo",
       "warning": "Esta acción no se puede deshacer.",
       "discard": "Descartar"
+    },
+    "discardHunk": {
+      "title": "Descartar Bloque",
+      "description": "¿Estás seguro de que quieres descartar este grupo de cambios?",
+      "hunkInfo": "Cambios"
     },
     "gitNotInstalled": {
       "title": "Git No Instalado",

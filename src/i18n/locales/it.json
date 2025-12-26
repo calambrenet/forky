@@ -72,8 +72,11 @@
     "unstageAll": "Unstage tutto",
     "stage": "Stage",
     "unstage": "Unstage",
-    "discard": "Annulla modifiche",
+    "discard": "Annulla",
     "discardAll": "Annulla tutte le modifiche",
+    "stageHunk": "Stage questo blocco",
+    "unstageHunk": "Unstage questo blocco",
+    "discardHunk": "Annulla questo blocco",
     "commitMessage": "Messaggio del commit",
     "commitMessagePlaceholder": "Inserisci il messaggio del commit...",
     "commit": "Commit",
@@ -264,6 +267,11 @@
       "file": "File",
       "warning": "Questa azione non può essere annullata.",
       "discard": "Annulla"
+    },
+    "discardHunk": {
+      "title": "Annulla Blocco",
+      "description": "Sei sicuro di voler annullare questo gruppo di modifiche?",
+      "hunkInfo": "Modifiche"
     },
     "gitNotInstalled": {
       "title": "Git Non Installato",

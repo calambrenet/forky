@@ -1,10 +1,10 @@
 import { FC, useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../types/git';
+import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage, DiffHunk, HunkData } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
-import { DiscardChangesModal } from '../git-modals';
+import { DiscardChangesModal, DiscardHunkModal } from '../git-modals';
 import { useGitOperationStore, useRepositoryStore } from '../../stores';
 import './LocalChangesView.css';
 
@@ -58,6 +58,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     isOpen: false,
     file: null,
   });
+  const [discardHunkModal, setDiscardHunkModal] = useState<{ isOpen: boolean; hunk: DiffHunk | null }>({
+    isOpen: false,
+    hunk: null,
+  });
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +75,9 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     newImage: null,
     isLoading: false,
   });
+
+  // Hunk hover state
+  const [hoveredHunkIndex, setHoveredHunkIndex] = useState<number | null>(null);
 
   // Get store actions for updating pending changes indicator
   const { setTabHasPendingChanges } = useRepositoryStore.getState();
@@ -241,6 +248,92 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
       }
     } catch (error) {
       console.error('Error discarding changes:', error);
+    }
+  };
+
+  // Convert DiffHunk to HunkData for backend
+  const convertToHunkData = (hunk: DiffHunk): HunkData => ({
+    old_start: hunk.old_start,
+    old_lines: hunk.old_lines,
+    new_start: hunk.new_start,
+    new_lines: hunk.new_lines,
+    lines: hunk.lines.map(line => ({
+      content: line.content,
+      line_type: line.line_type,
+    })),
+  });
+
+  // Hunk operation handlers
+  const handleStageHunk = async (hunk: DiffHunk) => {
+    if (!selectedFile) return;
+    const filePath = selectedFile.path;
+    const hunkData = convertToHunkData(hunk);
+
+    console.log('Stage hunk - file:', filePath, 'hunk:', hunkData);
+
+    try {
+      await invoke('stage_hunk', {
+        filePath,
+        hunk: hunkData,
+      });
+      await loadFileStatus();
+      // Reload the diff for the same file
+      const updatedFile = { ...selectedFile, staged: false };
+      setSelectedFile(updatedFile);
+      loadDiff(updatedFile);
+    } catch (error) {
+      console.error('Error staging hunk:', error);
+      alert(`Error staging hunk: ${error}`);
+    }
+  };
+
+  const handleUnstageHunk = async (hunk: DiffHunk) => {
+    if (!selectedFile) return;
+    const filePath = selectedFile.path;
+    const hunkData = convertToHunkData(hunk);
+
+    console.log('Unstage hunk - file:', filePath, 'hunk:', hunkData);
+
+    try {
+      await invoke('unstage_hunk', {
+        filePath,
+        hunk: hunkData,
+      });
+      await loadFileStatus();
+      // Reload the diff for the same file
+      const updatedFile = { ...selectedFile, staged: true };
+      setSelectedFile(updatedFile);
+      loadDiff(updatedFile);
+    } catch (error) {
+      console.error('Error unstaging hunk:', error);
+      alert(`Error unstaging hunk: ${error}`);
+    }
+  };
+
+  const handleDiscardHunk = (hunk: DiffHunk) => {
+    setDiscardHunkModal({ isOpen: true, hunk });
+  };
+
+  const handleConfirmDiscardHunk = async (hunk: DiffHunk) => {
+    if (!selectedFile) return;
+    const filePath = selectedFile.path;
+    const hunkData = convertToHunkData(hunk);
+
+    console.log('Discard hunk - file:', filePath, 'hunk:', hunkData);
+
+    try {
+      await invoke('discard_hunk', {
+        filePath,
+        hunk: hunkData,
+      });
+      await loadFileStatus();
+      // Reload the diff for the same file
+      loadDiff(selectedFile);
+    } catch (error) {
+      console.error('Error discarding hunk:', error);
+      alert(`Error discarding hunk: ${error}`);
+    } finally {
+      setDiscardHunkModal({ isOpen: false, hunk: null });
     }
   };
 
@@ -594,6 +687,9 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
       );
     }
 
+    const isStaged = selectedFile.staged;
+    const isUntracked = selectedFile.status === 'untracked' || selectedFile.status === 'new';
+
     return (
       <div className="diff-content">
         <div className="diff-file-header">
@@ -602,9 +698,59 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
         </div>
         <div className="diff-hunks">
           {diffInfo.hunks.map((hunk, hunkIndex) => (
-            <div key={hunkIndex} className="diff-hunk">
+            <div
+              key={hunkIndex}
+              className="diff-hunk"
+              onMouseEnter={() => setHoveredHunkIndex(hunkIndex)}
+              onMouseLeave={() => setHoveredHunkIndex(null)}
+            >
               <div className="diff-hunk-header">
-                @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                <span className="hunk-info">
+                  @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                </span>
+                {hoveredHunkIndex === hunkIndex && (
+                  <div className="hunk-actions">
+                    {isStaged ? (
+                      // Staged file: only show Unstage button
+                      <button
+                        className="hunk-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUnstageHunk(hunk);
+                        }}
+                        title={t('localChanges.unstageHunk')}
+                      >
+                        {t('localChanges.unstage')}
+                      </button>
+                    ) : (
+                      // Unstaged file: show Stage and Discard buttons
+                      <>
+                        <button
+                          className="hunk-action-btn stage"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStageHunk(hunk);
+                          }}
+                          title={t('localChanges.stageHunk')}
+                        >
+                          {t('localChanges.stage')}
+                        </button>
+                        {!isUntracked && (
+                          <button
+                            className="hunk-action-btn discard"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDiscardHunk(hunk);
+                            }}
+                            title={t('localChanges.discardHunk')}
+                          >
+                            {t('localChanges.discard')}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="diff-lines">
                 {hunk.lines.map((line, lineIndex) => (
@@ -705,6 +851,13 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
         onClose={() => setDiscardModal({ isOpen: false, file: null })}
         onConfirm={handleConfirmDiscard}
         file={discardModal.file}
+      />
+      <DiscardHunkModal
+        isOpen={discardHunkModal.isOpen}
+        onClose={() => setDiscardHunkModal({ isOpen: false, hunk: null })}
+        onConfirm={handleConfirmDiscardHunk}
+        hunk={discardHunkModal.hunk}
+        filePath={selectedFile?.path}
       />
     </div>
   );

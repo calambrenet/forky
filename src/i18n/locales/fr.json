@@ -72,8 +72,11 @@
     "unstageAll": "Tout désindexer",
     "stage": "Indexer",
     "unstage": "Désindexer",
-    "discard": "Annuler les modifications",
+    "discard": "Annuler",
     "discardAll": "Annuler toutes les modifications",
+    "stageHunk": "Indexer ce bloc",
+    "unstageHunk": "Désindexer ce bloc",
+    "discardHunk": "Annuler ce bloc",
     "commitMessage": "Message du commit",
     "commitMessagePlaceholder": "Entrez le message du commit...",
     "commit": "Commit",
@@ -264,6 +267,11 @@
       "file": "Fichier",
       "warning": "Cette action ne peut pas être annulée.",
       "discard": "Annuler"
+    },
+    "discardHunk": {
+      "title": "Annuler le Bloc",
+      "description": "Êtes-vous sûr de vouloir annuler ce groupe de modifications ?",
+      "hunkInfo": "Modifications"
     },
     "gitNotInstalled": {
       "title": "Git Non Installé",

@@ -56,6 +56,20 @@ export interface DiffHunk {
   lines: DiffLine[];
 }
 
+// HunkData for sending to backend (for stage/unstage/discard operations)
+export interface HunkData {
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  lines: HunkLineData[];
+}
+
+export interface HunkLineData {
+  content: string;
+  line_type: string;
+}
+
 export interface DiffLine {
   content: string;
   line_type: "add" | "delete" | "context";

@@ -146,6 +146,39 @@
   font-size: 13px;
 }
 
+/* Hunk info display in discard hunk modal */
+.hunk-info-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.hunk-info-display .hunk-range {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hunk-info-display .hunk-stats {
+  display: flex;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.hunk-info-display .additions {
+  color: var(--accent-green);
+}
+
+.hunk-info-display .deletions {
+  color: var(--accent-red);
+}
+
 .track-branch-input-container {
   display: flex;
   align-items: center;

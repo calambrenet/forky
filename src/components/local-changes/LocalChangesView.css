@@ -232,12 +232,63 @@
 }
 
 .diff-hunk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 16px;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   font-family: monospace;
   font-size: 12px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.hunk-info {
+  flex: 1;
+}
+
+.hunk-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.hunk-action-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.hunk-action-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-blue);
+}
+
+.hunk-action-btn.stage {
+  background-color: rgba(46, 160, 67, 0.1);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.hunk-action-btn.stage:hover {
+  background-color: rgba(46, 160, 67, 0.2);
+}
+
+.hunk-action-btn.discard {
+  background-color: rgba(248, 81, 73, 0.1);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.hunk-action-btn.discard:hover {
+  background-color: rgba(248, 81, 73, 0.2);
 }
 
 .diff-lines {
