@@ -28,3 +28,5 @@ export { SaveStashModal } from './SaveStashModal';
 export { ApplyStashModal } from './ApplyStashModal';
 
 export { CheckoutConflictModal } from './CheckoutConflictModal';
+
+export { DiscardChangesModal } from './DiscardChangesModal';

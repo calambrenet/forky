@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { FileStatus, FileStatusSeparated, DiffInfo, CommitMessage } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
+import { DiscardChangesModal } from '../git-modals';
 import { useGitOperationStore, useRepositoryStore } from '../../stores';
 import './LocalChangesView.css';
 
@@ -51,6 +52,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     visible: false,
     x: 0,
     y: 0,
+    file: null,
+  });
+  const [discardModal, setDiscardModal] = useState<{ isOpen: boolean; file: FileStatus | null }>({
+    isOpen: false,
     file: null,
   });
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -213,9 +218,30 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
     }
   };
 
-  const handleDiscardChanges = async (file: FileStatus) => {
-    // TODO: Implement discard changes (git checkout -- file)
-    console.log('Discard changes:', file.path);
+  const handleDiscardChanges = (file: FileStatus) => {
+    setDiscardModal({ isOpen: true, file });
+  };
+
+  const handleConfirmDiscard = async (file: FileStatus) => {
+    const isUntracked = file.status === 'untracked' || file.status === 'new';
+
+    try {
+      await invoke('discard_file', {
+        filePath: file.path,
+        isUntracked
+      });
+
+      // Refresh file status
+      await loadFileStatus();
+
+      // Clear selection if the discarded file was selected
+      if (selectedFile?.path === file.path) {
+        setSelectedFile(null);
+        setDiffInfo(null);
+      }
+    } catch (error) {
+      console.error('Error discarding changes:', error);
+    }
   };
 
   const handleOpenFile = async (file: FileStatus) => {
@@ -635,7 +661,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
             <span className="context-menu-shortcut">⌘S</span>
           </div>
         )}
-        {!isStaged && file.status !== 'untracked' && (
+        {!isStaged && (
           <div className="context-menu-item danger" onClick={() => { handleDiscardChanges(file); closeContextMenu(); }}>
             <span className="context-menu-label">{t('contextMenu.discardChanges')}</span>
             <span className="context-menu-shortcut">⌘⌫</span>
@@ -674,6 +700,12 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(({
         )}
       </div>
       {renderContextMenu()}
+      <DiscardChangesModal
+        isOpen={discardModal.isOpen}
+        onClose={() => setDiscardModal({ isOpen: false, file: null })}
+        onConfirm={handleConfirmDiscard}
+        file={discardModal.file}
+      />
     </div>
   );
 });

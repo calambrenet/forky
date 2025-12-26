@@ -128,6 +128,24 @@
   white-space: nowrap;
 }
 
+.discard-file-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.discard-file-value .file-path-display {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 13px;
+}
+
 .track-branch-input-container {
   display: flex;
   align-items: center;

@@ -256,6 +256,14 @@
       "noRestoreHint": "Changes will be stashed and will remain there after checkout",
       "stashAndSwitch": "Stash and Switch",
       "switching": "Switching..."
+    },
+    "discardChanges": {
+      "title": "Discard Changes",
+      "description": "Are you sure you want to discard changes in this file?",
+      "descriptionUntracked": "Are you sure you want to delete this untracked file?",
+      "file": "File",
+      "warning": "This action cannot be undone.",
+      "discard": "Discard"
     }
   },
   "stashDropdown": {

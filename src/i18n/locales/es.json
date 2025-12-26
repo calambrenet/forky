@@ -256,6 +256,14 @@
       "noRestoreHint": "Los cambios se guardarán en stash y permanecerán allí después del checkout",
       "stashAndSwitch": "Stash y Cambiar",
       "switching": "Cambiando..."
+    },
+    "discardChanges": {
+      "title": "Descartar Cambios",
+      "description": "¿Estás seguro de que quieres descartar los cambios en este archivo?",
+      "descriptionUntracked": "¿Estás seguro de que quieres eliminar este archivo sin seguimiento?",
+      "file": "Archivo",
+      "warning": "Esta acción no se puede deshacer.",
+      "discard": "Descartar"
     }
   },
   "stashDropdown": {

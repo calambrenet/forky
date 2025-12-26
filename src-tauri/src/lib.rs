@@ -33,6 +33,7 @@ pub fn run() {
             git_commands::get_commit_files,
             git_commands::stage_file,
             git_commands::unstage_file,
+            git_commands::discard_file,
             git_commands::git_pull,
             git_commands::git_push,
             git_commands::git_fetch,

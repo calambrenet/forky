@@ -626,6 +626,41 @@ pub fn unstage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Discard changes in a file (restore from HEAD or delete if untracked)
+pub fn discard_file(repo_path: &str, file_path: &str, is_untracked: bool) -> Result<(), String> {
+    use std::process::Command;
+
+    if is_untracked {
+        // For untracked files, simply delete them
+        let full_path = std::path::Path::new(repo_path).join(file_path);
+        if full_path.is_dir() {
+            std::fs::remove_dir_all(&full_path)
+                .map_err(|e| format!("Failed to remove directory: {}", e))?;
+        } else {
+            std::fs::remove_file(&full_path)
+                .map_err(|e| format!("Failed to remove file: {}", e))?;
+        }
+    } else {
+        // For tracked files, use git checkout to restore from HEAD
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("checkout")
+            .arg("HEAD")
+            .arg("--")
+            .arg(file_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to discard changes: {}", stderr.trim()));
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GitOperationResult {
     pub success: bool,

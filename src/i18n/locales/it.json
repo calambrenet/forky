@@ -256,6 +256,14 @@
       "noRestoreHint": "Le modifiche verranno messe in stash e rimarranno lì dopo il checkout",
       "stashAndSwitch": "Stash e Cambia",
       "switching": "Cambio in corso..."
+    },
+    "discardChanges": {
+      "title": "Annulla Modifiche",
+      "description": "Sei sicuro di voler annullare le modifiche di questo file?",
+      "descriptionUntracked": "Sei sicuro di voler eliminare questo file non tracciato?",
+      "file": "File",
+      "warning": "Questa azione non può essere annullata.",
+      "discard": "Annulla"
     }
   },
   "stashDropdown": {

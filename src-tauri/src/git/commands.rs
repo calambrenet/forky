@@ -155,6 +155,13 @@ pub fn unstage_file(file_path: String, state: State<AppState>) -> Result<(), Str
 }
 
 #[tauri::command]
+pub fn discard_file(file_path: String, is_untracked: bool, state: State<AppState>) -> Result<(), String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::discard_file(path, &file_path, is_untracked)
+}
+
+#[tauri::command]
 pub fn git_pull(state: State<AppState>) -> Result<GitOperationResult, String> {
     let repo_path = state.current_repo_path.lock().unwrap();
     let path = repo_path.as_ref().ok_or("No repository opened")?;
