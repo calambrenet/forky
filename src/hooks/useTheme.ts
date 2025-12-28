@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLocalStorage } from './useLocalStorage';
+import { useWindowFocus } from './useWindowFocus';
 
 export type Theme = 'light' | 'dark' | 'system';
 type ResolvedTheme = 'light' | 'dark';
@@ -15,6 +16,7 @@ export function useTheme() {
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('light');
   const lastThemeRef = useRef<string>('light');
   const initialCheckDone = useRef(false);
+  const { isFocused, isVisible } = useWindowFocus();
 
   // Detect system theme using Rust command (works reliably on Linux)
   const detectSystemTheme = useCallback(async (): Promise<ResolvedTheme> => {
@@ -75,6 +77,30 @@ export function useTheme() {
       mediaQuery.removeEventListener('change', handleMediaChange);
     };
   }, []);
+
+  // Re-detect system theme when window gains focus (handles OS theme changes)
+  useEffect(() => {
+    // Only check when becoming visible/focused, not on initial mount
+    if (!initialCheckDone.current) return;
+    if (!isFocused || !isVisible) return;
+
+    let mounted = true;
+
+    const recheckTheme = async () => {
+      if (!mounted) return;
+      const detectedTheme = await detectSystemTheme();
+      if (detectedTheme !== lastThemeRef.current) {
+        lastThemeRef.current = detectedTheme;
+        setSystemTheme(detectedTheme);
+      }
+    };
+
+    recheckTheme();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isFocused, isVisible, detectSystemTheme]);
 
   // Resolve the actual theme to use
   const resolvedTheme: ResolvedTheme = userTheme === 'system' ? systemTheme : userTheme;
