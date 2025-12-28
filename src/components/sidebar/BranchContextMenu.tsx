@@ -214,7 +214,7 @@ export const BranchContextMenu: FC<BranchContextMenuProps> = memo(
         {/* Merge into current branch */}
         <MenuItem
           icon={<GitMerge size={ICON_SIZE} />}
-          label={t('branchContextMenu.mergeInto', { branch: currentBranch || '' })}
+          label={t('branchContextMenu.mergeInto', { branch: branchDisplayName })}
           disabled={isCurrentBranch}
           onClick={() => onMergeInto?.(branch)}
         />

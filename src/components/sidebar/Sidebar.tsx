@@ -518,7 +518,7 @@ export const Sidebar: FC<SidebarProps> = memo(
       [onDeleteBranch, handleCloseDeleteBranchModal]
     );
 
-    // Merge into current branch handler
+    // Merge into current branch handler (merges clicked branch INTO current branch)
     const handleMergeInto = useCallback(
       (branch: BranchInfo) => {
         closeBranchContextMenu();
