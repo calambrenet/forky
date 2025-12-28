@@ -608,3 +608,68 @@
 .merge-ff-indicator svg {
   color: var(--accent-green);
 }
+
+/* Divergent Branches Modal */
+.divergent-branches-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.divergent-branches-explanation {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.divergent-branches-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.divergent-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.divergent-option-btn:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-blue);
+}
+
+.divergent-option-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.divergent-option-btn svg {
+  color: var(--accent-blue);
+  flex-shrink: 0;
+}
+
+.divergent-option-btn .option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.divergent-option-btn .option-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.divergent-option-btn .option-text span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

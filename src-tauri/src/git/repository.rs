@@ -928,6 +928,13 @@ fn detect_error_type(stderr: &str) -> Option<String> {
     {
         return Some("checkout_would_overwrite".to_string());
     }
+    // Detect divergent branches (need to specify merge or rebase)
+    if lower.contains("divergent branches")
+        || lower.contains("need to specify how to reconcile")
+        || lower.contains("ramas divergentes")
+    {
+        return Some("divergent_branches".to_string());
+    }
     if lower.contains("fatal:") {
         return Some("git_error".to_string());
     }
@@ -1364,6 +1371,9 @@ pub fn git_pull_with_options(repo_path: &str, options: PullOptions) -> Result<Gi
 
     if options.rebase {
         cmd.arg("--rebase");
+    } else {
+        // Explicitly tell git to merge (not rebase) when divergent branches exist
+        cmd.arg("--no-rebase");
     }
 
     if options.autostash {
