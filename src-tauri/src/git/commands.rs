@@ -1,7 +1,7 @@
 use crate::git::repository::{
     self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FileStatus,
     GitOperationResult, RepositoryInfo, TagInfo, StashInfo, FetchOptions, PullOptions, PushOptions,
-    ImageContent, HunkData,
+    ImageContent, HunkData, InteractiveRebaseEntry,
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -508,4 +508,70 @@ pub fn git_merge_abort(state: State<AppState>) -> Result<repository::GitOperatio
     let repo_path = state.current_repo_path.lock().unwrap();
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_merge_abort(path)
+}
+
+// ============================================================================
+// REBASE COMMANDS
+// ============================================================================
+
+#[tauri::command]
+pub fn get_rebase_preview(
+    target_branch: String,
+    state: State<AppState>,
+) -> Result<repository::RebasePreview, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::get_rebase_preview(path, &target_branch)
+}
+
+#[tauri::command]
+pub fn git_rebase(
+    target_branch: String,
+    preserve_merges: bool,
+    autostash: bool,
+    state: State<AppState>,
+) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let options = repository::RebaseOptions {
+        preserve_merges,
+        autostash,
+    };
+    repository::git_rebase(path, &target_branch, options)
+}
+
+#[tauri::command]
+pub fn git_rebase_abort(state: State<AppState>) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_rebase_abort(path)
+}
+
+#[tauri::command]
+pub fn git_rebase_continue(state: State<AppState>) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_rebase_continue(path)
+}
+
+#[tauri::command]
+pub fn get_interactive_rebase_commits(
+    target_branch: String,
+    state: State<AppState>,
+) -> Result<Vec<InteractiveRebaseEntry>, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::get_interactive_rebase_commits(path, &target_branch)
+}
+
+#[tauri::command]
+pub fn git_interactive_rebase(
+    target_branch: String,
+    entries: Vec<InteractiveRebaseEntry>,
+    autostash: bool,
+    state: State<AppState>,
+) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_interactive_rebase(path, &target_branch, entries, autostash)
 }

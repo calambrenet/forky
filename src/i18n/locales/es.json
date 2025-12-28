@@ -300,6 +300,31 @@
       "typeSquash": "Squash",
       "merge": "Fusionar",
       "merging": "Fusionando..."
+    },
+    "rebase": {
+      "title": "Rebase de Rama",
+      "description": "Rebase de la rama actual sobre la rama destino",
+      "current": "Rama Actual",
+      "onto": "Sobre",
+      "commitsToRebase": "{{count}} commit(s) a rebasear",
+      "noCommitsToRebase": "No hay commits para rebase (las ramas son idénticas)",
+      "preserveMerges": "Preservar commits de merge",
+      "autostash": "Guardar y restaurar cambios automáticamente",
+      "rebase": "Rebase",
+      "rebasing": "Rebaseando..."
+    },
+    "interactiveRebase": {
+      "title": "Rebase Interactivo",
+      "description": "Reordenar, editar, combinar o eliminar commits",
+      "rebasing": "Rebaseando",
+      "onto": "Sobre",
+      "action": "Acción",
+      "commit": "Commit",
+      "message": "Mensaje",
+      "author": "Autor",
+      "autostash": "Guardar y restaurar cambios automáticamente",
+      "startRebase": "Iniciar Rebase",
+      "noCommits": "No hay commits para rebase"
     }
   },
   "stashDropdown": {
@@ -337,7 +362,10 @@
     "gitError": "Error de Git",
     "mergeSuccess": "Merge Exitoso",
     "mergeFailed": "Merge Fallido",
-    "mergeConflicts": "Conflictos de Merge"
+    "mergeConflicts": "Conflictos de Merge",
+    "rebaseSuccess": "Rebase Exitoso",
+    "rebaseFailed": "Rebase Fallido",
+    "rebaseConflicts": "Conflictos de Rebase"
   },
   "welcome": {
     "title": "Forky",

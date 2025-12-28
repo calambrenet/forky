@@ -61,6 +61,9 @@ interface SidebarProps {
     remoteName: string | null
   ) => void;
   onStashClick?: (stash: StashInfo) => void;
+  onMergeInto?: (branch: BranchInfo) => void;
+  onRebaseOn?: (branch: BranchInfo) => void;
+  onInteractiveRebase?: (branch: BranchInfo) => void;
   expandTagsSection?: boolean;
 }
 
@@ -184,6 +187,9 @@ export const Sidebar: FC<SidebarProps> = memo(
     onRenameBranch,
     onDeleteBranch,
     onStashClick,
+    onMergeInto,
+    onRebaseOn,
+    onInteractiveRebase,
     expandTagsSection,
   }) => {
     const { t } = useTranslation();
@@ -512,6 +518,33 @@ export const Sidebar: FC<SidebarProps> = memo(
       [onDeleteBranch, handleCloseDeleteBranchModal]
     );
 
+    // Merge into current branch handler
+    const handleMergeInto = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onMergeInto?.(branch);
+      },
+      [closeBranchContextMenu, onMergeInto]
+    );
+
+    // Rebase current branch on target handler
+    const handleRebaseOn = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onRebaseOn?.(branch);
+      },
+      [closeBranchContextMenu, onRebaseOn]
+    );
+
+    // Interactive rebase handler
+    const handleInteractiveRebase = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onInteractiveRebase?.(branch);
+      },
+      [closeBranchContextMenu, onInteractiveRebase]
+    );
+
     // Clear filter
     const handleClearFilter = useCallback(() => {
       setFilter('');
@@ -830,6 +863,9 @@ export const Sidebar: FC<SidebarProps> = memo(
             onNewTag={handleNewTag}
             onRename={handleRenameBranchClick}
             onDelete={handleDeleteBranchClick}
+            onMergeInto={handleMergeInto}
+            onRebase={handleRebaseOn}
+            onInteractiveRebase={handleInteractiveRebase}
           />
         )}
 

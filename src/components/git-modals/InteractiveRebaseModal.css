@@ -1,0 +1,257 @@
+/* Interactive Rebase Modal Styles */
+
+/* Make the modal wider by targeting the modal-dialog container */
+.modal-dialog:has(.interactive-rebase-branches) {
+  max-width: 950px;
+  width: 95vw;
+}
+
+.interactive-rebase-branches {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.interactive-rebase-branches .branch-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.interactive-rebase-branches .branch-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.interactive-rebase-branches .branch-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.interactive-rebase-branches .branch-arrow {
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+/* Commits List */
+.interactive-rebase-commits {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.commits-header {
+  display: grid;
+  grid-template-columns: 30px 100px 80px 1fr 150px;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.commits-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Commit Row */
+.interactive-rebase-row {
+  display: grid;
+  grid-template-columns: 30px 100px 80px 1fr 150px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  align-items: center;
+  transition: background 0.15s ease;
+}
+
+.interactive-rebase-row:last-child {
+  border-bottom: none;
+}
+
+.interactive-rebase-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.interactive-rebase-row.dragging {
+  opacity: 0.5;
+  background: var(--bg-tertiary);
+}
+
+.interactive-rebase-row.drag-over {
+  border-top: 2px solid var(--accent-blue);
+}
+
+.interactive-rebase-row.dropped {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.row-drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.row-drag-handle:hover {
+  color: var(--text-primary);
+}
+
+/* Action Dropdown */
+.row-action-dropdown {
+  position: relative;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.action-button:hover {
+  background: var(--bg-tertiary);
+}
+
+.action-button.action-pick {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.action-button.action-reword {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.action-button.action-edit {
+  border-color: var(--accent-yellow, #f0ad4e);
+  color: var(--accent-yellow, #f0ad4e);
+}
+
+.action-button.action-squash {
+  border-color: var(--accent-purple, #9b59b6);
+  color: var(--accent-purple, #9b59b6);
+}
+
+.action-button.action-fixup {
+  border-color: var(--accent-orange, #e67e22);
+  color: var(--accent-orange, #e67e22);
+}
+
+.action-button.action-drop {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.action-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  min-width: 100px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.action-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s ease;
+}
+
+.action-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.action-option.selected {
+  background: var(--accent-blue);
+  color: white;
+}
+
+/* Commit Info */
+.row-commit-id {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--accent-blue);
+}
+
+.row-commit-message {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-author {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Loading and Empty states */
+.commits-loading,
+.commits-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.commits-loading .spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Options */
+.interactive-rebase-options {
+  padding: 8px 0;
+}

@@ -2689,3 +2689,442 @@ pub fn git_merge_abort(repo_path: &str) -> Result<GitOperationResult, String> {
 
     Ok(create_success_result("Merge aborted successfully.".to_string()))
 }
+
+// ============================================================================
+// REBASE OPERATIONS
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RebasePreview {
+    pub source_branch: String,
+    pub target_branch: String,
+    pub commits_to_rebase: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RebaseOptions {
+    pub preserve_merges: bool,
+    pub autostash: bool,
+}
+
+/// Get a preview of the rebase operation
+pub fn get_rebase_preview(repo_path: &str, target_branch: &str) -> Result<RebasePreview, String> {
+    use std::process::Command;
+
+    // Get current branch name
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to get current branch: {}", e))?;
+
+    if !output.status.success() {
+        return Err("Failed to get current branch".to_string());
+    }
+
+    let source_branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Get merge base
+    let output = Command::new("git")
+        .args(["merge-base", "HEAD", target_branch])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to get merge base: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("Failed to find common ancestor with '{}'", target_branch));
+    }
+
+    let merge_base = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Count commits to rebase (commits in current branch that are not in target)
+    let output = Command::new("git")
+        .args(["rev-list", "--count", &format!("{}..HEAD", merge_base)])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to count commits: {}", e))?;
+
+    let commits_to_rebase = if output.status.success() {
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<usize>()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    Ok(RebasePreview {
+        source_branch,
+        target_branch: target_branch.to_string(),
+        commits_to_rebase,
+    })
+}
+
+/// Execute a rebase operation
+pub fn git_rebase(
+    repo_path: &str,
+    target_branch: &str,
+    options: RebaseOptions,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let mut args = vec!["rebase".to_string()];
+
+    if options.preserve_merges {
+        args.push("--rebase-merges".to_string());
+    }
+
+    if options.autostash {
+        args.push("--autostash".to_string());
+    }
+
+    args.push(target_branch.to_string());
+
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git rebase: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check for conflicts
+        if stderr.contains("CONFLICT") || stderr.contains("conflict") ||
+           stdout.contains("CONFLICT") || stdout.contains("could not apply") {
+            // Get list of conflicting files
+            let status_output = Command::new("git")
+                .args(["diff", "--name-only", "--diff-filter=U"])
+                .current_dir(repo_path)
+                .output();
+
+            let conflicting_files = if let Ok(status) = status_output {
+                String::from_utf8_lossy(&status.stdout)
+                    .lines()
+                    .map(|s| s.to_string())
+                    .collect()
+            } else {
+                vec![]
+            };
+
+            return Ok(GitOperationResult {
+                success: false,
+                message: format!("Rebase conflicts detected. Please resolve conflicts and run 'git rebase --continue'."),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("rebase_conflicts".to_string()),
+                conflicting_files: Some(conflicting_files),
+            });
+        }
+
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    // Check if rebase resulted in "Already up to date" or similar
+    if stdout.contains("is up to date") || stdout.contains("Already applied") {
+        return Ok(GitOperationResult {
+            success: true,
+            message: "Already up to date, nothing to rebase.".to_string(),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        });
+    }
+
+    Ok(create_success_result(format!("Rebase onto '{}' completed successfully.", target_branch)))
+}
+
+/// Abort a rebase in progress
+pub fn git_rebase_abort(repo_path: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["rebase", "--abort"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git rebase --abort: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check if there's no rebase in progress
+        if stderr.contains("No rebase in progress") || stderr.contains("no rebase in progress") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: "No rebase in progress to abort.".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("no_rebase_in_progress".to_string()),
+                conflicting_files: None,
+            });
+        }
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result("Rebase aborted successfully.".to_string()))
+}
+
+/// Continue a rebase after resolving conflicts
+pub fn git_rebase_continue(repo_path: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["rebase", "--continue"])
+        .current_dir(repo_path)
+        .env("GIT_EDITOR", "true") // Skip editor for commit messages
+        .output()
+        .map_err(|e| format!("Failed to execute git rebase --continue: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check if there are still conflicts
+        if stderr.contains("CONFLICT") || stderr.contains("conflict") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: "There are still unresolved conflicts.".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("rebase_conflicts".to_string()),
+                conflicting_files: None,
+            });
+        }
+
+        // Check if there's no rebase in progress
+        if stderr.contains("No rebase in progress") || stderr.contains("no rebase in progress") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: "No rebase in progress.".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("no_rebase_in_progress".to_string()),
+                conflicting_files: None,
+            });
+        }
+
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result("Rebase continued successfully.".to_string()))
+}
+
+/// Interactive rebase action type
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RebaseAction {
+    Pick,
+    Reword,
+    Edit,
+    Squash,
+    Fixup,
+    Drop,
+}
+
+impl RebaseAction {
+    pub fn to_git_command(&self) -> &'static str {
+        match self {
+            RebaseAction::Pick => "pick",
+            RebaseAction::Reword => "reword",
+            RebaseAction::Edit => "edit",
+            RebaseAction::Squash => "squash",
+            RebaseAction::Fixup => "fixup",
+            RebaseAction::Drop => "drop",
+        }
+    }
+}
+
+/// A commit entry for interactive rebase
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InteractiveRebaseEntry {
+    pub action: RebaseAction,
+    pub commit_id: String,
+    pub short_id: String,
+    pub message: String,
+    pub author: String,
+    pub date: String,
+}
+
+/// Get commits for interactive rebase between current branch and target
+pub fn get_interactive_rebase_commits(repo_path: &str, target_branch: &str) -> Result<Vec<InteractiveRebaseEntry>, String> {
+    use std::process::Command;
+
+    // Get merge base between HEAD and target
+    let merge_base_output = Command::new("git")
+        .args(["merge-base", "HEAD", target_branch])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to get merge base: {}", e))?;
+
+    if !merge_base_output.status.success() {
+        return Err("Failed to find merge base between current branch and target".to_string());
+    }
+
+    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout).trim().to_string();
+
+    // Get commits between merge base and HEAD in reverse order (oldest first, like git rebase -i shows)
+    let log_output = Command::new("git")
+        .args([
+            "log",
+            "--reverse",
+            "--format=%H|%h|%s|%an|%aI",
+            &format!("{}..HEAD", merge_base),
+        ])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to get commits: {}", e))?;
+
+    if !log_output.status.success() {
+        let stderr = String::from_utf8_lossy(&log_output.stderr);
+        return Err(format!("Failed to get commits: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&log_output.stdout);
+    let mut entries = Vec::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.splitn(5, '|').collect();
+        if parts.len() >= 5 {
+            entries.push(InteractiveRebaseEntry {
+                action: RebaseAction::Pick,
+                commit_id: parts[0].to_string(),
+                short_id: parts[1].to_string(),
+                message: parts[2].to_string(),
+                author: parts[3].to_string(),
+                date: parts[4].to_string(),
+            });
+        }
+    }
+
+    Ok(entries)
+}
+
+/// Execute interactive rebase with custom action sequence
+pub fn git_interactive_rebase(
+    repo_path: &str,
+    target_branch: &str,
+    entries: Vec<InteractiveRebaseEntry>,
+    autostash: bool,
+) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+    use std::fs;
+
+    // Create temporary file with rebase todo list
+    let todo_content: String = entries
+        .iter()
+        .map(|entry| {
+            format!("{} {} {}", entry.action.to_git_command(), entry.short_id, entry.message)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Create temp file for the todo list
+    let temp_dir = std::env::temp_dir();
+    let todo_file = temp_dir.join(format!("forky_rebase_todo_{}", std::process::id()));
+
+    fs::write(&todo_file, &todo_content)
+        .map_err(|e| format!("Failed to write rebase todo file: {}", e))?;
+
+    // Create a script that will replace the todo file
+    let script_file = temp_dir.join(format!("forky_rebase_editor_{}", std::process::id()));
+
+    #[cfg(unix)]
+    {
+        let script_content = format!(
+            "#!/bin/sh\ncp \"{}\" \"$1\"\n",
+            todo_file.to_string_lossy()
+        );
+        fs::write(&script_file, &script_content)
+            .map_err(|e| format!("Failed to write editor script: {}", e))?;
+
+        // Make script executable
+        Command::new("chmod")
+            .args(["+x", script_file.to_str().unwrap()])
+            .output()
+            .map_err(|e| format!("Failed to make script executable: {}", e))?;
+    }
+
+    #[cfg(windows)]
+    {
+        let script_file = temp_dir.join(format!("forky_rebase_editor_{}.cmd", std::process::id()));
+        let script_content = format!(
+            "@echo off\ncopy /Y \"{}\" \"%~1\"\n",
+            todo_file.to_string_lossy().replace("/", "\\")
+        );
+        fs::write(&script_file, &script_content)
+            .map_err(|e| format!("Failed to write editor script: {}", e))?;
+    }
+
+    // Build rebase command
+    let mut args = vec!["rebase", "-i"];
+    if autostash {
+        args.push("--autostash");
+    }
+    args.push(target_branch);
+
+    // Execute rebase with custom GIT_SEQUENCE_EDITOR
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(repo_path)
+        .env("GIT_SEQUENCE_EDITOR", script_file.to_str().unwrap())
+        .env("GIT_EDITOR", "true") // Skip editor for commit messages
+        .output()
+        .map_err(|e| format!("Failed to execute git rebase: {}", e))?;
+
+    // Cleanup temp files
+    let _ = fs::remove_file(&todo_file);
+    let _ = fs::remove_file(&script_file);
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check for conflicts
+        if stderr.contains("CONFLICT") || stderr.contains("conflict")
+            || stdout.contains("CONFLICT") || stdout.contains("conflict") {
+
+            // Get conflicting files
+            let status_output = Command::new("git")
+                .args(["diff", "--name-only", "--diff-filter=U"])
+                .current_dir(repo_path)
+                .output();
+
+            let conflicting_files = if let Ok(status) = status_output {
+                String::from_utf8_lossy(&status.stdout)
+                    .lines()
+                    .map(|s| s.to_string())
+                    .collect()
+            } else {
+                vec![]
+            };
+
+            return Ok(GitOperationResult {
+                success: false,
+                message: "Rebase conflicts detected. Please resolve conflicts and run 'git rebase --continue'.".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("rebase_conflicts".to_string()),
+                conflicting_files: Some(conflicting_files),
+            });
+        }
+
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    // Check if rebase resulted in "Already up to date" or similar
+    if stdout.contains("is up to date") || stdout.contains("Already applied") {
+        return Ok(GitOperationResult {
+            success: true,
+            message: "Already up to date, nothing to rebase.".to_string(),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        });
+    }
+
+    Ok(create_success_result(format!("Interactive rebase onto '{}' completed successfully.", target_branch)))
+}

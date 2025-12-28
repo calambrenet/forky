@@ -300,6 +300,31 @@
       "typeSquash": "Squash",
       "merge": "Merge",
       "merging": "Merging..."
+    },
+    "rebase": {
+      "title": "Rebase Branch",
+      "description": "Rebase current branch onto target branch",
+      "current": "Current Branch",
+      "onto": "Onto",
+      "commitsToRebase": "{{count}} commit(s) to rebase",
+      "noCommitsToRebase": "No commits to rebase (branches are identical)",
+      "preserveMerges": "Preserve merge commits",
+      "autostash": "Automatically stash and restore changes",
+      "rebase": "Rebase",
+      "rebasing": "Rebasing..."
+    },
+    "interactiveRebase": {
+      "title": "Interactive Rebase",
+      "description": "Reorder, edit, squash, or drop commits",
+      "rebasing": "Rebasing",
+      "onto": "Onto",
+      "action": "Action",
+      "commit": "Commit",
+      "message": "Message",
+      "author": "Author",
+      "autostash": "Automatically stash and restore changes",
+      "startRebase": "Start Rebase",
+      "noCommits": "No commits to rebase"
     }
   },
   "stashDropdown": {
@@ -337,7 +362,10 @@
     "gitError": "Git Error",
     "mergeSuccess": "Merge Successful",
     "mergeFailed": "Merge Failed",
-    "mergeConflicts": "Merge Conflicts"
+    "mergeConflicts": "Merge Conflicts",
+    "rebaseSuccess": "Rebase Successful",
+    "rebaseFailed": "Rebase Failed",
+    "rebaseConflicts": "Rebase Conflicts"
   },
   "welcome": {
     "title": "Forky",

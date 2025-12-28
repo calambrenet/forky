@@ -36,3 +36,7 @@ export { DiscardHunkModal } from './DiscardHunkModal';
 export { GitNotInstalledModal } from './GitNotInstalledModal';
 
 export { MergeModal } from './MergeModal';
+
+export { RebaseModal } from './RebaseModal';
+
+export { InteractiveRebaseModal } from './InteractiveRebaseModal';

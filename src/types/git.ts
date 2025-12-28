@@ -136,6 +136,32 @@ export interface MergePreview {
 // Merge type options
 export type MergeType = 'default' | 'no-ff' | 'squash';
 
+// Rebase preview for rebase modal
+export interface RebasePreview {
+  source_branch: string;
+  target_branch: string;
+  commits_to_rebase: number;
+}
+
+// Rebase options
+export interface RebaseOptions {
+  preserve_merges: boolean;
+  autostash: boolean;
+}
+
+// Interactive rebase action type
+export type RebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+
+// Interactive rebase entry
+export interface InteractiveRebaseEntry {
+  action: RebaseAction;
+  commit_id: string;
+  short_id: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
 // Git operation state for UI display
 export interface GitOperationState {
   isActive: boolean;

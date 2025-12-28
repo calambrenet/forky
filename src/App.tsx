@@ -66,6 +66,14 @@ const GitNotInstalledModal = lazy(() =>
 const MergeModal = lazy(() =>
   import('./components/git-modals/MergeModal').then((m) => ({ default: m.MergeModal }))
 );
+const RebaseModal = lazy(() =>
+  import('./components/git-modals/RebaseModal').then((m) => ({ default: m.RebaseModal }))
+);
+const InteractiveRebaseModal = lazy(() =>
+  import('./components/git-modals/InteractiveRebaseModal').then((m) => ({
+    default: m.InteractiveRebaseModal,
+  }))
+);
 
 // Zustand stores
 import {
@@ -101,6 +109,8 @@ import type {
   StashInfo,
   MergePreview,
   MergeType,
+  RebasePreview,
+  InteractiveRebaseEntry,
 } from './types/git';
 import './styles/global.css';
 import './App.css';
@@ -222,6 +232,18 @@ function App() {
   const [mergeBranch, setMergeBranch] = useState<BranchInfo | null>(null);
   const [mergePreview, setMergePreview] = useState<MergePreview | null>(null);
   const [isMergePreviewLoading, setIsMergePreviewLoading] = useState(false);
+
+  // Rebase modal state
+  const [rebaseModalOpen, setRebaseModalOpen] = useState(false);
+  const [rebaseBranch, setRebaseBranch] = useState<BranchInfo | null>(null);
+  const [rebasePreview, setRebasePreview] = useState<RebasePreview | null>(null);
+  const [isRebasePreviewLoading, setIsRebasePreviewLoading] = useState(false);
+
+  // Interactive rebase modal state
+  const [interactiveRebaseModalOpen, setInteractiveRebaseModalOpen] = useState(false);
+  const [interactiveRebaseBranch, setInteractiveRebaseBranch] = useState<BranchInfo | null>(null);
+  const [interactiveRebaseCommits, setInteractiveRebaseCommits] = useState<InteractiveRebaseEntry[]>([]);
+  const [isInteractiveRebaseLoading, setIsInteractiveRebaseLoading] = useState(false);
 
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
@@ -1157,6 +1179,172 @@ function App() {
     ]
   );
 
+  // Rebase handlers
+  const handleRebaseSelect = useCallback(
+    async (branch: BranchInfo) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      setRebaseBranch(branch);
+      setIsRebasePreviewLoading(true);
+      setRebaseModalOpen(true);
+
+      try {
+        const preview = await invoke<RebasePreview>('get_rebase_preview', {
+          targetBranch: branch.name,
+        });
+        setRebasePreview(preview);
+      } catch (error) {
+        console.error('Error getting rebase preview:', error);
+        addAlert('error', t('alerts.gitError'), String(error));
+        setRebaseModalOpen(false);
+      } finally {
+        setIsRebasePreviewLoading(false);
+      }
+    },
+    [activeTab?.path, isGitLoading, addAlert, t]
+  );
+
+  const handleCloseRebaseModal = useCallback(() => {
+    setRebaseModalOpen(false);
+    setRebaseBranch(null);
+    setRebasePreview(null);
+  }, []);
+
+  const handleRebase = useCallback(
+    async (preserveMerges: boolean, autostash: boolean) => {
+      if (!activeTab?.path || isGitLoading || !rebaseBranch) return;
+
+      const command = `git rebase${preserveMerges ? ' --rebase-merges' : ''}${autostash ? ' --autostash' : ''} ${rebaseBranch.name}`;
+
+      startOperation('Other', `Rebase onto ${rebaseBranch.name}`);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_rebase', {
+          targetBranch: rebaseBranch.name,
+          preserveMerges,
+          autostash,
+        });
+
+        completeOperation(result);
+        addLogEntry('Other', `Rebase onto '${rebaseBranch.name}'`, command, result.message, result.success);
+
+        if (result.success) {
+          await refreshActiveTab();
+          setLocalChangesRefreshKey((k) => k + 1);
+          handleCloseRebaseModal();
+          addAlert('success', t('alerts.rebaseSuccess'), result.message);
+        } else {
+          const errorTitle = result.error_type === 'rebase_conflicts'
+            ? t('alerts.rebaseConflicts')
+            : getErrorTitle(result.error_type, 'Rebase');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error rebasing:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Other', `Rebase onto '${rebaseBranch.name}'`, command, String(error), false);
+        addAlert('error', t('alerts.rebaseFailed'), String(error));
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      rebaseBranch,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+      handleCloseRebaseModal,
+      setLocalChangesRefreshKey,
+      t,
+    ]
+  );
+
+  // Interactive rebase handlers
+  const handleInteractiveRebaseSelect = useCallback(
+    async (branch: BranchInfo) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      setInteractiveRebaseBranch(branch);
+      setIsInteractiveRebaseLoading(true);
+      setInteractiveRebaseModalOpen(true);
+
+      try {
+        const commits = await invoke<InteractiveRebaseEntry[]>('get_interactive_rebase_commits', {
+          targetBranch: branch.name,
+        });
+        setInteractiveRebaseCommits(commits);
+      } catch (error) {
+        console.error('Error getting commits for interactive rebase:', error);
+        addAlert('error', t('alerts.gitError'), String(error));
+        setInteractiveRebaseModalOpen(false);
+      } finally {
+        setIsInteractiveRebaseLoading(false);
+      }
+    },
+    [activeTab?.path, isGitLoading, addAlert, t]
+  );
+
+  const handleCloseInteractiveRebaseModal = useCallback(() => {
+    setInteractiveRebaseModalOpen(false);
+    setInteractiveRebaseBranch(null);
+    setInteractiveRebaseCommits([]);
+  }, []);
+
+  const handleInteractiveRebase = useCallback(
+    async (entries: InteractiveRebaseEntry[], autostash: boolean) => {
+      if (!activeTab?.path || isGitLoading || !interactiveRebaseBranch) return;
+
+      const command = `git rebase -i${autostash ? ' --autostash' : ''} ${interactiveRebaseBranch.name}`;
+
+      startOperation('Other', `Interactive rebase onto ${interactiveRebaseBranch.name}`);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_interactive_rebase', {
+          targetBranch: interactiveRebaseBranch.name,
+          entries,
+          autostash,
+        });
+
+        completeOperation(result);
+        addLogEntry('Other', `Interactive rebase onto '${interactiveRebaseBranch.name}'`, command, result.message, result.success);
+
+        if (result.success) {
+          await refreshActiveTab();
+          setLocalChangesRefreshKey((k) => k + 1);
+          handleCloseInteractiveRebaseModal();
+          addAlert('success', t('alerts.rebaseSuccess'), result.message);
+        } else {
+          const errorTitle = result.error_type === 'rebase_conflicts'
+            ? t('alerts.rebaseConflicts')
+            : getErrorTitle(result.error_type, 'Rebase');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error during interactive rebase:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Other', `Interactive rebase onto '${interactiveRebaseBranch.name}'`, command, String(error), false);
+        addAlert('error', t('alerts.rebaseFailed'), String(error));
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      interactiveRebaseBranch,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+      handleCloseInteractiveRebaseModal,
+      setLocalChangesRefreshKey,
+      t,
+    ]
+  );
+
   // Execute fetch with options
   const handleFetchWithOptions = useCallback(
     async (options: FetchOptions) => {
@@ -1542,6 +1730,9 @@ function App() {
               onRenameBranch={handleRenameBranch}
               onDeleteBranch={handleDeleteBranch}
               onStashClick={handleStashSelect}
+              onMergeInto={handleMergeSelect}
+              onRebaseOn={handleRebaseSelect}
+              onInteractiveRebase={handleInteractiveRebaseSelect}
               expandTagsSection={expandTagsSection}
             />
           </div>
@@ -1701,6 +1892,32 @@ function App() {
             targetBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
             preview={mergePreview}
             isLoading={isMergePreviewLoading}
+          />
+        )}
+
+        {/* Rebase Modal */}
+        {rebaseModalOpen && (
+          <RebaseModal
+            isOpen={true}
+            onClose={handleCloseRebaseModal}
+            onRebase={handleRebase}
+            targetBranch={rebaseBranch}
+            currentBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
+            preview={rebasePreview}
+            isLoading={isRebasePreviewLoading}
+          />
+        )}
+
+        {/* Interactive Rebase Modal */}
+        {interactiveRebaseModalOpen && (
+          <InteractiveRebaseModal
+            isOpen={true}
+            onClose={handleCloseInteractiveRebaseModal}
+            onRebase={handleInteractiveRebase}
+            targetBranch={interactiveRebaseBranch}
+            currentBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
+            commits={interactiveRebaseCommits}
+            isLoading={isInteractiveRebaseLoading}
           />
         )}
 
