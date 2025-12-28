@@ -29,6 +29,7 @@ import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
 import type { GitOperationState } from '../repository-info-box';
 import { RepositoryInfoBox } from '../repository-info-box';
 import { StashDropdown } from './StashDropdown';
+import { MergeDropdown } from './MergeDropdown';
 import type { BranchInfo, StashInfo } from '../../types/git';
 import './Toolbar.css';
 
@@ -48,6 +49,7 @@ interface ToolbarProps {
   onStash?: () => void;
   onSaveSnapshot?: () => void;
   onStashSelect?: (stash: StashInfo) => void;
+  onMergeSelect?: (branch: BranchInfo) => void;
   isLoading?: boolean;
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
@@ -74,6 +76,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     onStash,
     onSaveSnapshot,
     onStashSelect,
+    onMergeSelect,
     isLoading = false,
     gitOperation,
     onDismissOperation,
@@ -83,6 +86,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     const { t } = useTranslation();
     const appWindow = getCurrentWindow();
     const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
+    const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false);
 
     const handleOpenInTerminal = async () => {
       if (!repoPath) {
@@ -203,10 +207,28 @@ export const Toolbar: FC<ToolbarProps> = memo(
             <GitBranch size={ICON_SIZE} />
             <span className="btn-label">{t('toolbar.branch')}</span>
           </button>
-          <button className="toolbar-btn" title={t('toolbar.merge')}>
-            <GitMerge size={ICON_SIZE} />
-            <span className="btn-label">{t('toolbar.merge')}</span>
-          </button>
+          <div className="toolbar-dropdown-container">
+            <button
+              className="toolbar-btn"
+              title={t('toolbar.merge')}
+              onClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
+              disabled={isLoading || !currentBranch}
+            >
+              <GitMerge size={ICON_SIZE} />
+              <span className="btn-label">{t('toolbar.merge')}</span>
+            </button>
+            {mergeDropdownOpen && (
+              <MergeDropdown
+                branches={branches}
+                currentBranch={currentBranch || null}
+                onBranchSelect={(branch) => {
+                  onMergeSelect?.(branch);
+                  setMergeDropdownOpen(false);
+                }}
+                onClose={() => setMergeDropdownOpen(false)}
+              />
+            )}
+          </div>
           <div className="toolbar-separator" />
           <button className="toolbar-icon-btn" title={t('feedback.title')} onClick={onFeedback}>
             <Smile size={18} />

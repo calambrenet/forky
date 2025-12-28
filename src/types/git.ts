@@ -123,6 +123,19 @@ export interface GitOperationResult {
   conflicting_files?: string[];
 }
 
+// Merge preview for merge modal
+export interface MergePreview {
+  source_branch: string;
+  target_branch: string;
+  commits_ahead: number;
+  can_fast_forward: boolean;
+  has_conflicts: boolean;
+  conflicting_files: string[];
+}
+
+// Merge type options
+export type MergeType = 'default' | 'no-ff' | 'squash';
+
 // Git operation state for UI display
 export interface GitOperationState {
   isActive: boolean;

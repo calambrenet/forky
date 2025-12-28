@@ -34,3 +34,5 @@ export { DiscardChangesModal } from './DiscardChangesModal';
 export { DiscardHunkModal } from './DiscardHunkModal';
 
 export { GitNotInstalledModal } from './GitNotInstalledModal';
+
+export { MergeModal } from './MergeModal';

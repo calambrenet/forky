@@ -2443,3 +2443,249 @@ pub fn get_image_from_index(repo: &Repository, file_path: &str) -> Result<ImageC
         file_size,
     })
 }
+
+// ============================================================================
+// Merge Functions
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MergePreview {
+    pub source_branch: String,
+    pub target_branch: String,
+    pub commits_ahead: usize,
+    pub can_fast_forward: bool,
+    pub has_conflicts: bool,
+    pub conflicting_files: Vec<String>,
+}
+
+/// Get a preview of what a merge would look like without actually performing it
+pub fn get_merge_preview(repo_path: &str, source_branch: &str) -> Result<MergePreview, String> {
+    use std::process::Command;
+
+    // Get current branch name
+    let head_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .map_err(|e| format!("Failed to get current branch: {}", e))?;
+
+    let target_branch = String::from_utf8_lossy(&head_output.stdout).trim().to_string();
+
+    // Get merge base (common ancestor)
+    let merge_base_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("merge-base")
+        .arg("HEAD")
+        .arg(source_branch)
+        .output()
+        .map_err(|e| format!("Failed to find merge base: {}", e))?;
+
+    if !merge_base_output.status.success() {
+        return Err(format!(
+            "Cannot find common ancestor between HEAD and '{}'. Are they related?",
+            source_branch
+        ));
+    }
+
+    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout).trim().to_string();
+
+    // Count commits ahead (commits in source_branch not in HEAD)
+    let ahead_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-list")
+        .arg("--count")
+        .arg(format!("{}..{}", merge_base, source_branch))
+        .output()
+        .map_err(|e| format!("Failed to count commits: {}", e))?;
+
+    let commits_ahead: usize = String::from_utf8_lossy(&ahead_output.stdout)
+        .trim()
+        .parse()
+        .unwrap_or(0);
+
+    // Check if can fast-forward (HEAD is at merge base)
+    let head_sha_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("HEAD")
+        .output()
+        .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+
+    let head_sha = String::from_utf8_lossy(&head_sha_output.stdout).trim().to_string();
+    let can_fast_forward = head_sha == merge_base;
+
+    // Check for conflicts using git merge-tree (doesn't modify working directory)
+    let source_sha_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg(source_branch)
+        .output()
+        .map_err(|e| format!("Failed to get source branch SHA: {}", e))?;
+
+    let source_sha = String::from_utf8_lossy(&source_sha_output.stdout).trim().to_string();
+
+    // Use git merge-tree to detect conflicts without modifying working tree
+    let merge_tree_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("merge-tree")
+        .arg(&merge_base)
+        .arg(&head_sha)
+        .arg(&source_sha)
+        .output()
+        .map_err(|e| format!("Failed to run merge-tree: {}", e))?;
+
+    let merge_tree_result = String::from_utf8_lossy(&merge_tree_output.stdout).to_string();
+
+    // Parse conflicts from merge-tree output
+    let mut conflicting_files = Vec::new();
+    let has_conflicts = merge_tree_result.contains("<<<<<<<")
+        || merge_tree_result.contains("changed in both")
+        || merge_tree_result.contains("added in both");
+
+    if has_conflicts {
+        // Extract file paths from merge-tree output
+        // When there's a conflict, merge-tree outputs markers followed by file info
+        let mut in_conflict_section = false;
+        for line in merge_tree_result.lines() {
+            if line.contains("changed in both") || line.contains("added in both") {
+                in_conflict_section = true;
+                continue;
+            }
+            if in_conflict_section && line.starts_with("  ") {
+                // Lines with file info have format: "  base   100644 <sha> <path>"
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 4 {
+                    let path = parts[3..].join(" ");
+                    if !path.is_empty() && !conflicting_files.contains(&path) {
+                        conflicting_files.push(path);
+                    }
+                }
+            }
+            if line.is_empty() {
+                in_conflict_section = false;
+            }
+        }
+    }
+
+    Ok(MergePreview {
+        source_branch: source_branch.to_string(),
+        target_branch,
+        commits_ahead,
+        can_fast_forward,
+        has_conflicts,
+        conflicting_files,
+    })
+}
+
+/// Perform a git merge operation
+pub fn git_merge(repo_path: &str, source_branch: &str, merge_type: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(repo_path).arg("merge");
+
+    match merge_type {
+        "no-ff" => {
+            cmd.arg("--no-ff");
+        }
+        "squash" => {
+            cmd.arg("--squash");
+        }
+        // "default" - no extra flags, allows fast-forward
+        _ => {}
+    }
+
+    cmd.arg(source_branch);
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute merge: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        // Check for conflicts
+        if stdout.contains("CONFLICT") || stderr.contains("CONFLICT")
+            || stdout.contains("Automatic merge failed") || stderr.contains("Automatic merge failed") {
+
+            // Extract conflicting files
+            let mut conflicting_files = extract_conflicting_files(&stdout);
+            conflicting_files.extend(extract_conflicting_files(&stderr));
+
+            return Ok(GitOperationResult {
+                success: false,
+                message: format!(
+                    "Merge conflicts detected. Resolve conflicts and commit.\n{}{}",
+                    stdout.trim(),
+                    if stderr.is_empty() { String::new() } else { format!("\n{}", stderr.trim()) }
+                ),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("merge_conflicts".to_string()),
+                conflicting_files: Some(conflicting_files),
+            });
+        }
+
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    // For squash merges, remind user to commit
+    if merge_type == "squash" {
+        return Ok(GitOperationResult {
+            success: true,
+            message: format!(
+                "Squash merge completed. Changes are staged but not committed.\n{}",
+                stdout.trim()
+            ),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: None,
+            conflicting_files: None,
+        });
+    }
+
+    Ok(create_success_result(format!(
+        "Merge completed successfully.\n{}",
+        stdout.trim()
+    )))
+}
+
+/// Abort an in-progress merge
+pub fn git_merge_abort(repo_path: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("merge")
+        .arg("--abort")
+        .output()
+        .map_err(|e| format!("Failed to abort merge: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        if stderr.contains("no merge to abort") || stderr.contains("There is no merge to abort") {
+            return Ok(GitOperationResult {
+                success: false,
+                message: "No merge in progress to abort.".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("no_merge_in_progress".to_string()),
+                conflicting_files: None,
+            });
+        }
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result("Merge aborted successfully.".to_string()))
+}

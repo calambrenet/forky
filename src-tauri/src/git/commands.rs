@@ -477,3 +477,35 @@ pub fn discard_hunk(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::discard_hunk(path, &file_path, hunk)
 }
+
+// ============================================================================
+// Merge Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_merge_preview(
+    source_branch: String,
+    state: State<AppState>,
+) -> Result<repository::MergePreview, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::get_merge_preview(path, &source_branch)
+}
+
+#[tauri::command]
+pub fn git_merge(
+    source_branch: String,
+    merge_type: String,
+    state: State<AppState>,
+) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_merge(path, &source_branch, &merge_type)
+}
+
+#[tauri::command]
+pub fn git_merge_abort(state: State<AppState>) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_merge_abort(path)
+}

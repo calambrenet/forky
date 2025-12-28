@@ -284,6 +284,22 @@
       "note": "Aún puedes explorar repositorios y ver el historial de commits, ya que estas funciones usan la librería Git integrada.",
       "downloadGit": "Descargar Git",
       "continueAnyway": "Continuar de Todos Modos"
+    },
+    "merge": {
+      "title": "Merge de Rama",
+      "description": "Fusionar cambios en la rama actual",
+      "from": "Desde",
+      "into": "Hacia",
+      "commitsToMerge": "{{count}} commit(s) a fusionar",
+      "noCommitsToMerge": "No hay commits para fusionar (las ramas son idénticas)",
+      "canFastForward": "Permite fast-forward",
+      "hasConflicts": "Conflictos detectados en {{count}} archivo(s)",
+      "mergeType": "Tipo de Merge",
+      "typeDefault": "Por defecto (fast-forward si es posible)",
+      "typeNoFf": "Sin Fast-forward",
+      "typeSquash": "Squash",
+      "merge": "Fusionar",
+      "merging": "Fusionando..."
     }
   },
   "stashDropdown": {
@@ -318,7 +334,10 @@
     "connectionRefused": "Conexión Rechazada",
     "connectionTimeout": "Tiempo de Conexión Agotado",
     "hostNotFound": "Host No Encontrado",
-    "gitError": "Error de Git"
+    "gitError": "Error de Git",
+    "mergeSuccess": "Merge Exitoso",
+    "mergeFailed": "Merge Fallido",
+    "mergeConflicts": "Conflictos de Merge"
   },
   "welcome": {
     "title": "Forky",
@@ -394,5 +413,11 @@
     "closeAll": "Cerrar todos",
     "closeToRight": "Cerrar pestañas a la derecha",
     "closeToLeft": "Cerrar pestañas a la izquierda"
+  },
+  "mergeDropdown": {
+    "title": "Seleccionar Rama para Merge",
+    "localBranches": "Ramas Locales",
+    "remoteBranches": "Ramas Remotas",
+    "noBranches": "No hay ramas disponibles"
   }
 }

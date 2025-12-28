@@ -284,6 +284,22 @@
       "note": "Vous pouvez toujours parcourir les dépôts et consulter l'historique des commits, car ces fonctionnalités utilisent la bibliothèque Git intégrée.",
       "downloadGit": "Télécharger Git",
       "continueAnyway": "Continuer Quand Même"
+    },
+    "merge": {
+      "title": "Fusionner une Branche",
+      "description": "Fusionner les modifications dans la branche actuelle",
+      "from": "Depuis",
+      "into": "Vers",
+      "commitsToMerge": "{{count}} commit(s) à fusionner",
+      "noCommitsToMerge": "Aucun commit à fusionner (les branches sont identiques)",
+      "canFastForward": "Fast-forward possible",
+      "hasConflicts": "Conflits détectés dans {{count}} fichier(s)",
+      "mergeType": "Type de Merge",
+      "typeDefault": "Par défaut (fast-forward si possible)",
+      "typeNoFf": "Sans Fast-forward",
+      "typeSquash": "Squash",
+      "merge": "Fusionner",
+      "merging": "Fusion en cours..."
     }
   },
   "stashDropdown": {
@@ -318,7 +334,10 @@
     "connectionRefused": "Connexion Refusée",
     "connectionTimeout": "Délai de Connexion Dépassé",
     "hostNotFound": "Hôte Non Trouvé",
-    "gitError": "Erreur Git"
+    "gitError": "Erreur Git",
+    "mergeSuccess": "Merge Réussi",
+    "mergeFailed": "Merge Échoué",
+    "mergeConflicts": "Conflits de Merge"
   },
   "welcome": {
     "title": "Forky",
@@ -394,5 +413,11 @@
     "closeAll": "Fermer tout",
     "closeToRight": "Fermer les onglets à droite",
     "closeToLeft": "Fermer les onglets à gauche"
+  },
+  "mergeDropdown": {
+    "title": "Sélectionner une Branche à Fusionner",
+    "localBranches": "Branches Locales",
+    "remoteBranches": "Branches Distantes",
+    "noBranches": "Aucune branche disponible"
   }
 }

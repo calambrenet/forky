@@ -35,7 +35,7 @@ export const StashDropdown: FC<StashDropdownProps> = memo(
       const timeoutId = setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('keydown', handleEscape);
-      }, 0);
+      }, 50);
 
       return () => {
         clearTimeout(timeoutId);
@@ -94,7 +94,10 @@ export const StashDropdown: FC<StashDropdownProps> = memo(
               <div
                 key={stash.id}
                 className="stash-dropdown-item"
-                onClick={() => handleStashClick(stash)}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  handleStashClick(stash);
+                }}
               >
                 <span className="stash-dropdown-message">{getDisplayMessage(stash.message)}</span>
                 <span className="stash-dropdown-date">{formatDate(stash.timestamp)}</span>
@@ -107,7 +110,13 @@ export const StashDropdown: FC<StashDropdownProps> = memo(
 
         <div className="stash-dropdown-separator" />
 
-        <div className="stash-dropdown-item stash-dropdown-action" onClick={handleSaveSnapshot}>
+        <div
+          className="stash-dropdown-item stash-dropdown-action"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            handleSaveSnapshot();
+          }}
+        >
           <Camera size={14} />
           <span>{t('stashDropdown.saveSnapshot')}</span>
         </div>

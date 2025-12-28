@@ -284,6 +284,22 @@
       "note": "Puoi comunque esplorare i repository e visualizzare la cronologia dei commit, poiché queste funzionalità utilizzano la libreria Git integrata.",
       "downloadGit": "Scarica Git",
       "continueAnyway": "Continua Comunque"
+    },
+    "merge": {
+      "title": "Merge Branch",
+      "description": "Unisci le modifiche nel branch attuale",
+      "from": "Da",
+      "into": "In",
+      "commitsToMerge": "{{count}} commit da unire",
+      "noCommitsToMerge": "Nessun commit da unire (i branch sono identici)",
+      "canFastForward": "Può fare fast-forward",
+      "hasConflicts": "Conflitti rilevati in {{count}} file",
+      "mergeType": "Tipo di Merge",
+      "typeDefault": "Default (fast-forward se possibile)",
+      "typeNoFf": "No Fast-forward",
+      "typeSquash": "Squash",
+      "merge": "Merge",
+      "merging": "Merge in corso..."
     }
   },
   "stashDropdown": {
@@ -318,7 +334,10 @@
     "connectionRefused": "Connessione Rifiutata",
     "connectionTimeout": "Timeout Connessione",
     "hostNotFound": "Host Non Trovato",
-    "gitError": "Errore Git"
+    "gitError": "Errore Git",
+    "mergeSuccess": "Merge Riuscito",
+    "mergeFailed": "Merge Fallito",
+    "mergeConflicts": "Conflitti di Merge"
   },
   "welcome": {
     "title": "Forky",
@@ -394,5 +413,11 @@
     "closeAll": "Chiudi tutti",
     "closeToRight": "Chiudi schede a destra",
     "closeToLeft": "Chiudi schede a sinistra"
+  },
+  "mergeDropdown": {
+    "title": "Seleziona Branch da Unire",
+    "localBranches": "Branch Locali",
+    "remoteBranches": "Branch Remoti",
+    "noBranches": "Nessun branch disponibile"
   }
 }

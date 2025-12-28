@@ -518,3 +518,93 @@
 .btn-primary:hover {
   background-color: var(--accent-blue-hover, #1a7fd4);
 }
+
+/* Merge Modal Styles */
+.merge-branch-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.merge-branch-display.current {
+  background-color: var(--bg-secondary);
+  border-color: var(--accent-blue);
+}
+
+.merge-branch-display.current .branch-name-display {
+  color: var(--accent-blue);
+  font-weight: 500;
+}
+
+.merge-arrow-container {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.merge-arrow {
+  color: var(--text-secondary);
+  transform: rotate(90deg);
+}
+
+.merge-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-top: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.merge-commits-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.merge-commits-count .commits-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background-color: var(--accent-blue);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+.merge-commits-count .commits-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.merge-no-commits {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--accent-green);
+}
+
+.merge-ff-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--accent-green);
+}
+
+.merge-ff-indicator svg {
+  color: var(--accent-green);
+}

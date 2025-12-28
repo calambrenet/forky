@@ -63,6 +63,9 @@ const GitNotInstalledModal = lazy(() =>
     default: m.GitNotInstalledModal,
   }))
 );
+const MergeModal = lazy(() =>
+  import('./components/git-modals/MergeModal').then((m) => ({ default: m.MergeModal }))
+);
 
 // Zustand stores
 import {
@@ -96,6 +99,8 @@ import type {
   GitOperationResult,
   GitOptionsStorage,
   StashInfo,
+  MergePreview,
+  MergeType,
 } from './types/git';
 import './styles/global.css';
 import './App.css';
@@ -211,6 +216,12 @@ function App() {
 
   // Git not installed modal state
   const [gitNotInstalledModalOpen, setGitNotInstalledModalOpen] = useState(false);
+
+  // Merge modal state
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergeBranch, setMergeBranch] = useState<BranchInfo | null>(null);
+  const [mergePreview, setMergePreview] = useState<MergePreview | null>(null);
+  const [isMergePreviewLoading, setIsMergePreviewLoading] = useState(false);
 
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
@@ -1060,6 +1071,92 @@ function App() {
     handleCloseApplyStashModal,
   ]);
 
+  // Merge handlers
+  const handleMergeSelect = useCallback(
+    async (branch: BranchInfo) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      setMergeBranch(branch);
+      setIsMergePreviewLoading(true);
+      setMergeModalOpen(true);
+
+      try {
+        const preview = await invoke<MergePreview>('get_merge_preview', {
+          sourceBranch: branch.name,
+        });
+        setMergePreview(preview);
+      } catch (error) {
+        console.error('Error getting merge preview:', error);
+        addAlert('error', t('alerts.gitError'), String(error));
+        setMergeModalOpen(false);
+      } finally {
+        setIsMergePreviewLoading(false);
+      }
+    },
+    [activeTab?.path, isGitLoading, addAlert, t]
+  );
+
+  const handleCloseMergeModal = useCallback(() => {
+    setMergeModalOpen(false);
+    setMergeBranch(null);
+    setMergePreview(null);
+  }, []);
+
+  const handleMerge = useCallback(
+    async (mergeType: MergeType) => {
+      if (!activeTab?.path || isGitLoading || !mergeBranch) return;
+
+      const command = mergeType === 'squash'
+        ? `git merge --squash ${mergeBranch.name}`
+        : mergeType === 'no-ff'
+        ? `git merge --no-ff ${mergeBranch.name}`
+        : `git merge ${mergeBranch.name}`;
+
+      startOperation('Other', `Merge ${mergeBranch.name}`);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_merge', {
+          sourceBranch: mergeBranch.name,
+          mergeType,
+        });
+
+        completeOperation(result);
+        addLogEntry('Merge', `Merge '${mergeBranch.name}'`, command, result.message, result.success);
+
+        if (result.success) {
+          await refreshActiveTab();
+          setLocalChangesRefreshKey((k) => k + 1);
+          handleCloseMergeModal();
+          addAlert('success', t('alerts.mergeSuccess'), result.message);
+        } else {
+          const errorTitle = result.error_type === 'merge_conflicts'
+            ? t('alerts.mergeConflicts')
+            : getErrorTitle(result.error_type, 'Merge');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error merging:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Merge', `Merge '${mergeBranch.name}'`, command, String(error), false);
+        addAlert('error', t('alerts.mergeFailed'), String(error));
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      mergeBranch,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      addAlert,
+      getErrorTitle,
+      handleCloseMergeModal,
+      setLocalChangesRefreshKey,
+      t,
+    ]
+  );
+
   // Execute fetch with options
   const handleFetchWithOptions = useCallback(
     async (options: FetchOptions) => {
@@ -1358,6 +1455,7 @@ function App() {
             onStash={handleOpenSaveStashModal}
             onSaveSnapshot={handleOpenSaveSnapshotModal}
             onStashSelect={handleStashSelect}
+            onMergeSelect={handleMergeSelect}
             stashes={[]}
             isLoading={isGitLoading}
             branches={[]}
@@ -1397,6 +1495,7 @@ function App() {
           onStash={handleOpenSaveStashModal}
           onSaveSnapshot={handleOpenSaveSnapshotModal}
           onStashSelect={handleStashSelect}
+          onMergeSelect={handleMergeSelect}
           isLoading={isGitLoading}
           gitOperation={currentOperation}
           onDismissOperation={clearOperation}
@@ -1589,6 +1688,19 @@ function App() {
             onPop={handlePopStash}
             onDrop={handleDropStash}
             stash={selectedStash}
+          />
+        )}
+
+        {/* Merge Modal */}
+        {mergeModalOpen && (
+          <MergeModal
+            isOpen={true}
+            onClose={handleCloseMergeModal}
+            onMerge={handleMerge}
+            sourceBranch={mergeBranch}
+            targetBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
+            preview={mergePreview}
+            isLoading={isMergePreviewLoading}
           />
         )}
 

@@ -284,6 +284,22 @@
       "note": "You can still browse repositories and view commit history, as these features use the built-in Git library.",
       "downloadGit": "Download Git",
       "continueAnyway": "Continue Anyway"
+    },
+    "merge": {
+      "title": "Merge Branch",
+      "description": "Merge changes into current branch",
+      "from": "From",
+      "into": "Into",
+      "commitsToMerge": "{{count}} commit(s) to merge",
+      "noCommitsToMerge": "No commits to merge (branches are identical)",
+      "canFastForward": "Can fast-forward",
+      "hasConflicts": "Conflicts detected in {{count}} file(s)",
+      "mergeType": "Merge Type",
+      "typeDefault": "Default (fast-forward if possible)",
+      "typeNoFf": "No Fast-forward",
+      "typeSquash": "Squash",
+      "merge": "Merge",
+      "merging": "Merging..."
     }
   },
   "stashDropdown": {
@@ -318,7 +334,10 @@
     "connectionRefused": "Connection Refused",
     "connectionTimeout": "Connection Timeout",
     "hostNotFound": "Host Not Found",
-    "gitError": "Git Error"
+    "gitError": "Git Error",
+    "mergeSuccess": "Merge Successful",
+    "mergeFailed": "Merge Failed",
+    "mergeConflicts": "Merge Conflicts"
   },
   "welcome": {
     "title": "Forky",
@@ -394,5 +413,11 @@
     "closeAll": "Close All",
     "closeToRight": "Close Tabs to the Right",
     "closeToLeft": "Close Tabs to the Left"
+  },
+  "mergeDropdown": {
+    "title": "Select Branch to Merge",
+    "localBranches": "Local Branches",
+    "remoteBranches": "Remote Branches",
+    "noBranches": "No branches available"
   }
 }

@@ -136,3 +136,8 @@
 .toolbar-split-btn .split-dropdown-trigger:hover {
   background: var(--bg-hover);
 }
+
+/* Simple dropdown container (no split button) */
+.toolbar-dropdown-container {
+  position: relative;
+}
