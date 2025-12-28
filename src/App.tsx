@@ -1602,6 +1602,36 @@ function App() {
     };
   }, [setTabHasPendingChanges]);
 
+  // Branch watcher: listen for branch change events (when .git/HEAD changes)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen<{ repo_path: string; timestamp: number }>(
+        'repo-branch-changed',
+        async (event) => {
+          const state = useRepositoryStore.getState();
+          const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
+
+          if (matchingTab && matchingTab.id === state.activeTabId) {
+            // Refresh the entire repository data when branch changes
+            await refreshActiveTab();
+            // Also refresh local changes view
+            setLocalChangesRefreshKey((k) => k + 1);
+          }
+        }
+      );
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [refreshActiveTab]);
+
   // Check if Git is installed on startup
   useEffect(() => {
     const checkGitInstallation = async () => {
