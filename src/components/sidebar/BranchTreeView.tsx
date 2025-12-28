@@ -1,10 +1,45 @@
 import type { FC } from 'react';
 import { memo, useCallback } from 'react';
-import { GitBranch, Folder, FolderOpen, Tag, Check, Server } from 'lucide-react';
+import { GitBranch, Folder, FolderOpen, Tag, Check, Server, ArrowUp, ArrowDown } from 'lucide-react';
 import type { TreeNode } from './branchTree';
 import type { BranchInfo, TagInfo } from '../../types/git';
 
 const ICON_SIZE = 14;
+
+interface BranchCounterProps {
+  branch: BranchInfo;
+}
+
+const BranchCounter: FC<BranchCounterProps> = memo(({ branch }) => {
+  const { ahead, behind } = branch;
+
+  // Don't show if no upstream or both are 0 (synchronized)
+  if (ahead === null || behind === null) return null;
+  if (ahead === 0 && behind === 0) return null;
+
+  return (
+    <span className="branch-counters">
+      {ahead > 0 && (
+        <span
+          className="branch-counter ahead"
+          title={`${ahead} commit${ahead !== 1 ? 's' : ''} ahead of upstream`}
+        >
+          {ahead}
+          <ArrowUp size={10} />
+        </span>
+      )}
+      {behind > 0 && (
+        <span
+          className="branch-counter behind"
+          title={`${behind} commit${behind !== 1 ? 's' : ''} behind upstream`}
+        >
+          {behind}
+          <ArrowDown size={10} />
+        </span>
+      )}
+    </span>
+  );
+});
 
 interface BranchTreeProps {
   nodes: TreeNode[];
@@ -125,6 +160,9 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(
           <span className="tree-node-label" title={node.fullPath}>
             {node.name}
           </span>
+          {node.type === 'branch' && node.branch && !node.branch.is_remote && (
+            <BranchCounter branch={node.branch} />
+          )}
         </div>
         {isExpanded && hasChildren && renderChildren(node.children, depth + 1, isRemote || node.type === 'remote')}
       </>

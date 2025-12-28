@@ -442,6 +442,32 @@
   white-space: nowrap;
 }
 
+/* Branch ahead/behind counters */
+.branch-counters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+}
+
+.branch-counter {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.branch-counter.ahead {
+  color: var(--accent-green);
+}
+
+.branch-counter.behind {
+  color: var(--accent-orange);
+}
+
 /* Stash List Styles */
 .stash-list {
   display: flex;

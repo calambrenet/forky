@@ -19,6 +19,8 @@ pub struct BranchInfo {
     pub is_head: bool,
     pub is_remote: bool,
     pub upstream: Option<String>,
+    pub ahead: Option<u32>,
+    pub behind: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -111,6 +113,28 @@ pub fn get_repository_info(repo: &Repository) -> Result<RepositoryInfo, String> 
     })
 }
 
+/// Helper function to calculate ahead/behind counts for a branch relative to its upstream
+fn calculate_ahead_behind(
+    repo: &Repository,
+    local_branch: &git2::Branch,
+    upstream_branch: &git2::Branch,
+) -> (Option<u32>, Option<u32>) {
+    let local_oid = match local_branch.get().peel_to_commit() {
+        Ok(commit) => commit.id(),
+        Err(_) => return (None, None),
+    };
+
+    let upstream_oid = match upstream_branch.get().peel_to_commit() {
+        Ok(commit) => commit.id(),
+        Err(_) => return (None, None),
+    };
+
+    match repo.graph_ahead_behind(local_oid, upstream_oid) {
+        Ok((ahead, behind)) => (Some(ahead as u32), Some(behind as u32)),
+        Err(_) => (None, None),
+    }
+}
+
 pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
     let mut branches = Vec::new();
 
@@ -121,21 +145,35 @@ pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
             if let Ok(name) = branch.name() {
                 let name = name.unwrap_or("").to_string();
                 let is_head = branch.is_head();
-                let upstream = branch.upstream().ok().and_then(|u| {
-                    u.name().ok().flatten().map(|s| s.to_string())
-                });
+
+                // Get upstream and calculate ahead/behind
+                let (upstream, ahead, behind) = match branch.upstream() {
+                    Ok(upstream_branch) => {
+                        let upstream_name = upstream_branch
+                            .name()
+                            .ok()
+                            .flatten()
+                            .map(|s| s.to_string());
+
+                        let (ahead, behind) = calculate_ahead_behind(repo, &branch, &upstream_branch);
+                        (upstream_name, ahead, behind)
+                    }
+                    Err(_) => (None, None, None),
+                };
 
                 branches.push(BranchInfo {
                     name,
                     is_head,
                     is_remote: false,
                     upstream,
+                    ahead,
+                    behind,
                 });
             }
         }
     }
 
-    // Remote branches
+    // Remote branches (no ahead/behind needed)
     if let Ok(remote_branches) = repo.branches(Some(BranchType::Remote)) {
         for branch in remote_branches.flatten() {
             let (branch, _) = branch;
@@ -146,6 +184,8 @@ pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
                     is_head: false,
                     is_remote: true,
                     upstream: None,
+                    ahead: None,
+                    behind: None,
                 });
             }
         }

@@ -13,6 +13,8 @@ export interface BranchInfo {
   is_head: boolean;
   is_remote: boolean;
   upstream: string | null;
+  ahead: number | null;
+  behind: number | null;
 }
 
 export interface BranchHead {
