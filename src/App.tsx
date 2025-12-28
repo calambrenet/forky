@@ -1632,6 +1632,25 @@ function App() {
     };
   }, [refreshActiveTab]);
 
+  // Menu event: listen for "Open Repository" from native menu
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen('menu-open-repository', () => {
+        handleOpenRepo();
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [handleOpenRepo]);
+
   // Check if Git is installed on startup
   useEffect(() => {
     const checkGitInstallation = async () => {

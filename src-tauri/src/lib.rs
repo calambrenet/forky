@@ -7,7 +7,8 @@ use system::commands as system_commands;
 use watcher::commands as watcher_commands;
 use watcher::WatcherState;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
+use tauri::menu::{Menu, Submenu, MenuItem, PredefinedMenuItem};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,12 +18,93 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_decorum::init())
         .setup(|app| {
+            // Create custom menu
+            let open_repo = MenuItem::with_id(app, "open_repository", "Open Repository...", true, Some("CmdOrCtrl+O"))?;
+
+            // macOS app menu (required as first menu on macOS)
+            #[cfg(target_os = "macos")]
+            let app_menu = Submenu::with_items(
+                app,
+                "Forky",
+                true,
+                &[
+                    &PredefinedMenuItem::about(app, Some("About Forky"), None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::services(app, Some("Services"))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::hide(app, Some("Hide Forky"))?,
+                    &PredefinedMenuItem::hide_others(app, Some("Hide Others"))?,
+                    &PredefinedMenuItem::show_all(app, Some("Show All"))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::quit(app, Some("Quit Forky"))?,
+                ],
+            )?;
+
+            let file_menu = Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[
+                    &open_repo,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
+                ],
+            )?;
+
+            let edit_menu = Submenu::with_items(
+                app,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(app, Some("Undo"))?,
+                    &PredefinedMenuItem::redo(app, Some("Redo"))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::cut(app, Some("Cut"))?,
+                    &PredefinedMenuItem::copy(app, Some("Copy"))?,
+                    &PredefinedMenuItem::paste(app, Some("Paste"))?,
+                    &PredefinedMenuItem::select_all(app, Some("Select All"))?,
+                ],
+            )?;
+
+            let window_menu = Submenu::with_items(
+                app,
+                "Window",
+                true,
+                &[
+                    &PredefinedMenuItem::minimize(app, Some("Minimize"))?,
+                    &PredefinedMenuItem::maximize(app, Some("Zoom"))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen"))?,
+                ],
+            )?;
+
+            #[cfg(target_os = "macos")]
+            let menu = Menu::with_items(
+                app,
+                &[&app_menu, &file_menu, &edit_menu, &window_menu],
+            )?;
+
+            #[cfg(not(target_os = "macos"))]
+            let menu = Menu::with_items(
+                app,
+                &[&file_menu, &edit_menu, &window_menu],
+            )?;
+
+            app.set_menu(menu)?;
             // Set traffic light position on macOS
             #[cfg(target_os = "macos")]
             {
                 use tauri_plugin_decorum::WebviewWindowExt;
                 let main_window = app.get_webview_window("main").unwrap();
                 main_window.set_traffic_lights_inset(12.0, 50.0).unwrap();
+
+                // Reposition traffic lights on window resize
+                let window_clone = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Resized(_) = event {
+                        let _ = window_clone.set_traffic_lights_inset(12.0, 50.0);
+                    }
+                });
             }
 
             // On Linux, use frameless window with custom titlebar
@@ -102,6 +184,14 @@ pub fn run() {
             watcher_commands::stop_file_watcher,
             watcher_commands::get_watched_repo_path,
         ])
+        .on_menu_event(|app, event| {
+            if event.id() == "open_repository" {
+                // Emit event to frontend to open the folder picker
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("menu-open-repository", ());
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
