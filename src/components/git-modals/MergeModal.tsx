@@ -60,7 +60,8 @@ export const MergeModal: FC<MergeModalProps> = memo(
     ];
 
     const sourceBranchName = sourceBranch?.name || '';
-    const isMergeDisabled = isLoading || !preview || preview.has_conflicts || preview.commits_ahead === 0;
+    const isMergeDisabled =
+      isLoading || !preview || preview.has_conflicts || preview.commits_ahead === 0;
 
     return (
       <Modal isOpen={isOpen} onClose={onClose}>
@@ -144,11 +145,7 @@ export const MergeModal: FC<MergeModalProps> = memo(
           <button className="btn-cancel" onClick={onClose}>
             {t('common.cancel')}
           </button>
-          <button
-            className="btn-primary"
-            onClick={handleMerge}
-            disabled={isMergeDisabled}
-          >
+          <button className="btn-primary" onClick={handleMerge} disabled={isMergeDisabled}>
             {isLoading ? t('modals.merge.merging') : t('modals.merge.merge')}
           </button>
         </ModalFooter>

@@ -325,6 +325,29 @@
       "autostash": "Guardar y restaurar cambios automáticamente",
       "startRebase": "Iniciar Rebase",
       "noCommits": "No hay commits para rebase"
+    },
+    "gitFlowStart": {
+      "titleFeature": "Iniciar Feature",
+      "titleRelease": "Iniciar Release",
+      "titleHotfix": "Iniciar Hotfix",
+      "description": "Crear una nueva rama de {{type}}",
+      "name": "Nombre",
+      "namePlaceholder": "Nombre del {{type}}",
+      "baseBranch": "Rama base",
+      "willCreate": "Se creará: {{branch}}",
+      "start": "Iniciar"
+    },
+    "gitFlowFinish": {
+      "titleFeature": "Finalizar Feature",
+      "titleRelease": "Finalizar Release",
+      "titleHotfix": "Finalizar Hotfix",
+      "description": "Completar {{type}} '{{name}}'",
+      "branch": "Rama",
+      "mergeInto": "Se fusionará en {{branch}}",
+      "mergeIntoBoth": "Se fusionará en {{master}} y {{develop}}",
+      "createTag": "Se creará la etiqueta '{{tag}}'",
+      "deleteBranch": "Eliminar rama después del merge",
+      "finish": "Finalizar"
     }
   },
   "stashDropdown": {
@@ -365,7 +388,8 @@
     "mergeConflicts": "Conflictos de Merge",
     "rebaseSuccess": "Rebase Exitoso",
     "rebaseFailed": "Rebase Fallido",
-    "rebaseConflicts": "Conflictos de Rebase"
+    "rebaseConflicts": "Conflictos de Rebase",
+    "gitFlowFinishSuccess": "Git Flow Completado"
   },
   "welcome": {
     "title": "Forky",
@@ -447,5 +471,13 @@
     "localBranches": "Ramas Locales",
     "remoteBranches": "Ramas Remotas",
     "noBranches": "No hay ramas disponibles"
+  },
+  "branchDropdown": {
+    "newBranch": "Nueva Rama...",
+    "gitFlow": "Git Flow",
+    "startFeature": "Iniciar Feature...",
+    "startRelease": "Iniciar Release...",
+    "startHotfix": "Iniciar Hotfix...",
+    "finishBranch": "Finalizar '{{name}}'..."
   }
 }

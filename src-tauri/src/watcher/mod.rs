@@ -1,6 +1,8 @@
 pub mod commands;
 
-use notify_debouncer_mini::{new_debouncer, DebouncedEventKind, Debouncer, notify::RecommendedWatcher};
+use notify_debouncer_mini::{
+    new_debouncer, notify::RecommendedWatcher, DebouncedEventKind, Debouncer,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
@@ -54,7 +56,9 @@ const IGNORED_PATHS: &[&str] = &[
 /// Check if a path should be ignored
 fn should_ignore_path(path: &Path) -> bool {
     let path_str = path.to_string_lossy();
-    IGNORED_PATHS.iter().any(|ignored| path_str.contains(ignored))
+    IGNORED_PATHS
+        .iter()
+        .any(|ignored| path_str.contains(ignored))
 }
 
 /// Check if a path is the .git/HEAD file (indicates branch change)
@@ -103,9 +107,9 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                     let relevant_events: Vec<_> = events
                         .iter()
                         .filter(|e| {
-                            e.kind == DebouncedEventKind::Any &&
-                            !should_ignore_path(&e.path) &&
-                            !is_git_head_file(&e.path)
+                            e.kind == DebouncedEventKind::Any
+                                && !should_ignore_path(&e.path)
+                                && !is_git_head_file(&e.path)
                         })
                         .collect();
 
@@ -126,31 +130,38 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                 }
             }
         },
-    ).map_err(|e| format!("Failed to create debouncer: {}", e))?;
+    )
+    .map_err(|e| format!("Failed to create debouncer: {}", e))?;
 
     // Store the debouncer and path
     {
-        let mut debouncer_guard = watcher_state.debouncer.lock()
+        let mut debouncer_guard = watcher_state
+            .debouncer
+            .lock()
             .map_err(|e| format!("Failed to lock debouncer: {}", e))?;
         *debouncer_guard = Some(debouncer);
     }
 
     {
-        let mut path_guard = watcher_state.watched_path.lock()
+        let mut path_guard = watcher_state
+            .watched_path
+            .lock()
             .map_err(|e| format!("Failed to lock watched_path: {}", e))?;
         *path_guard = Some(repo_path.clone());
     }
 
     // Start watching the repository path
     {
-        let mut debouncer_guard = watcher_state.debouncer.lock()
+        let mut debouncer_guard = watcher_state
+            .debouncer
+            .lock()
             .map_err(|e| format!("Failed to lock debouncer: {}", e))?;
 
         if let Some(ref mut debouncer) = *debouncer_guard {
-            debouncer.watcher().watch(
-                Path::new(&repo_path),
-                notify::RecursiveMode::Recursive,
-            ).map_err(|e| format!("Failed to watch path: {}", e))?;
+            debouncer
+                .watcher()
+                .watch(Path::new(&repo_path), notify::RecursiveMode::Recursive)
+                .map_err(|e| format!("Failed to watch path: {}", e))?;
         }
     }
 
@@ -164,13 +175,17 @@ pub fn stop_watching(app_handle: &AppHandle) -> Result<(), String> {
 }
 
 fn stop_watching_internal(watcher_state: &WatcherState) -> Result<(), String> {
-    let mut debouncer_guard = watcher_state.debouncer.lock()
+    let mut debouncer_guard = watcher_state
+        .debouncer
+        .lock()
         .map_err(|e| format!("Failed to lock debouncer: {}", e))?;
 
     // Drop the debouncer to stop watching
     *debouncer_guard = None;
 
-    let mut path_guard = watcher_state.watched_path.lock()
+    let mut path_guard = watcher_state
+        .watched_path
+        .lock()
         .map_err(|e| format!("Failed to lock watched_path: {}", e))?;
     *path_guard = None;
 

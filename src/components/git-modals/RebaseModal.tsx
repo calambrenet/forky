@@ -122,11 +122,7 @@ export const RebaseModal: FC<RebaseModalProps> = memo(
           <button className="btn-cancel" onClick={onClose}>
             {t('common.cancel')}
           </button>
-          <button
-            className="btn-primary"
-            onClick={handleRebase}
-            disabled={isRebaseDisabled}
-          >
+          <button className="btn-primary" onClick={handleRebase} disabled={isRebaseDisabled}>
             {isLoading ? t('modals.rebase.rebasing') : t('modals.rebase.rebase')}
           </button>
         </ModalFooter>

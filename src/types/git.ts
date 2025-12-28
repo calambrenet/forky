@@ -268,3 +268,22 @@ export interface TabState {
   selectedFile: FileStatus | null;
   viewMode: ViewMode;
 }
+
+// Git Flow types
+export interface GitFlowConfig {
+  initialized: boolean;
+  master_branch: string;
+  develop_branch: string;
+  feature_prefix: string;
+  release_prefix: string;
+  hotfix_prefix: string;
+}
+
+export type GitFlowBranchType = 'Feature' | 'Release' | 'Hotfix' | 'Master' | 'Develop' | 'Other';
+
+export interface CurrentBranchFlowInfo {
+  branch_type: GitFlowBranchType;
+  name: string;
+}
+
+export type GitFlowType = 'feature' | 'release' | 'hotfix';

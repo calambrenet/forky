@@ -73,6 +73,21 @@ const InteractiveRebaseModal = lazy(() =>
     default: m.InteractiveRebaseModal,
   }))
 );
+const GitFlowStartModal = lazy(() =>
+  import('./components/git-modals/GitFlowStartModal').then((m) => ({
+    default: m.GitFlowStartModal,
+  }))
+);
+const GitFlowFinishModal = lazy(() =>
+  import('./components/git-modals/GitFlowFinishModal').then((m) => ({
+    default: m.GitFlowFinishModal,
+  }))
+);
+const CreateBranchModal = lazy(() =>
+  import('./components/git-modals/CreateBranchModal').then((m) => ({
+    default: m.CreateBranchModal,
+  }))
+);
 
 // Zustand stores
 import {
@@ -110,6 +125,9 @@ import type {
   MergeType,
   RebasePreview,
   InteractiveRebaseEntry,
+  GitFlowConfig,
+  CurrentBranchFlowInfo,
+  GitFlowType,
 } from './types/git';
 import './styles/global.css';
 import './App.css';
@@ -241,8 +259,23 @@ function App() {
   // Interactive rebase modal state
   const [interactiveRebaseModalOpen, setInteractiveRebaseModalOpen] = useState(false);
   const [interactiveRebaseBranch, setInteractiveRebaseBranch] = useState<BranchInfo | null>(null);
-  const [interactiveRebaseCommits, setInteractiveRebaseCommits] = useState<InteractiveRebaseEntry[]>([]);
+  const [interactiveRebaseCommits, setInteractiveRebaseCommits] = useState<
+    InteractiveRebaseEntry[]
+  >([]);
   const [isInteractiveRebaseLoading, setIsInteractiveRebaseLoading] = useState(false);
+
+  // Git Flow state
+  const [gitFlowConfig, setGitFlowConfig] = useState<GitFlowConfig | null>(null);
+  const [currentBranchFlowInfo, setCurrentBranchFlowInfo] = useState<CurrentBranchFlowInfo | null>(
+    null
+  );
+  const [gitFlowStartModalOpen, setGitFlowStartModalOpen] = useState(false);
+  const [gitFlowStartType, setGitFlowStartType] = useState<GitFlowType>('feature');
+  const [gitFlowFinishModalOpen, setGitFlowFinishModalOpen] = useState(false);
+  const [isGitFlowLoading, setIsGitFlowLoading] = useState(false);
+
+  // Create Branch modal state (from Branch dropdown)
+  const [createBranchModalOpen, setCreateBranchModalOpen] = useState(false);
 
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
@@ -1124,11 +1157,12 @@ function App() {
     async (mergeType: MergeType) => {
       if (!activeTab?.path || isGitLoading || !mergeBranch) return;
 
-      const command = mergeType === 'squash'
-        ? `git merge --squash ${mergeBranch.name}`
-        : mergeType === 'no-ff'
-        ? `git merge --no-ff ${mergeBranch.name}`
-        : `git merge ${mergeBranch.name}`;
+      const command =
+        mergeType === 'squash'
+          ? `git merge --squash ${mergeBranch.name}`
+          : mergeType === 'no-ff'
+            ? `git merge --no-ff ${mergeBranch.name}`
+            : `git merge ${mergeBranch.name}`;
 
       startOperation('Other', `Merge ${mergeBranch.name}`);
 
@@ -1139,7 +1173,13 @@ function App() {
         });
 
         completeOperation(result);
-        addLogEntry('Merge', `Merge '${mergeBranch.name}'`, command, result.message, result.success);
+        addLogEntry(
+          'Merge',
+          `Merge '${mergeBranch.name}'`,
+          command,
+          result.message,
+          result.success
+        );
 
         if (result.success) {
           await refreshActiveTab();
@@ -1147,9 +1187,10 @@ function App() {
           handleCloseMergeModal();
           addAlert('success', t('alerts.mergeSuccess'), result.message);
         } else {
-          const errorTitle = result.error_type === 'merge_conflicts'
-            ? t('alerts.mergeConflicts')
-            : getErrorTitle(result.error_type, 'Merge');
+          const errorTitle =
+            result.error_type === 'merge_conflicts'
+              ? t('alerts.mergeConflicts')
+              : getErrorTitle(result.error_type, 'Merge');
           addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
@@ -1222,7 +1263,13 @@ function App() {
         });
 
         completeOperation(result);
-        addLogEntry('Other', `Rebase onto '${rebaseBranch.name}'`, command, result.message, result.success);
+        addLogEntry(
+          'Other',
+          `Rebase onto '${rebaseBranch.name}'`,
+          command,
+          result.message,
+          result.success
+        );
 
         if (result.success) {
           await refreshActiveTab();
@@ -1230,9 +1277,10 @@ function App() {
           handleCloseRebaseModal();
           addAlert('success', t('alerts.rebaseSuccess'), result.message);
         } else {
-          const errorTitle = result.error_type === 'rebase_conflicts'
-            ? t('alerts.rebaseConflicts')
-            : getErrorTitle(result.error_type, 'Rebase');
+          const errorTitle =
+            result.error_type === 'rebase_conflicts'
+              ? t('alerts.rebaseConflicts')
+              : getErrorTitle(result.error_type, 'Rebase');
           addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
@@ -1305,7 +1353,13 @@ function App() {
         });
 
         completeOperation(result);
-        addLogEntry('Other', `Interactive rebase onto '${interactiveRebaseBranch.name}'`, command, result.message, result.success);
+        addLogEntry(
+          'Other',
+          `Interactive rebase onto '${interactiveRebaseBranch.name}'`,
+          command,
+          result.message,
+          result.success
+        );
 
         if (result.success) {
           await refreshActiveTab();
@@ -1313,15 +1367,22 @@ function App() {
           handleCloseInteractiveRebaseModal();
           addAlert('success', t('alerts.rebaseSuccess'), result.message);
         } else {
-          const errorTitle = result.error_type === 'rebase_conflicts'
-            ? t('alerts.rebaseConflicts')
-            : getErrorTitle(result.error_type, 'Rebase');
+          const errorTitle =
+            result.error_type === 'rebase_conflicts'
+              ? t('alerts.rebaseConflicts')
+              : getErrorTitle(result.error_type, 'Rebase');
           addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
         console.error('Error during interactive rebase:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Other', `Interactive rebase onto '${interactiveRebaseBranch.name}'`, command, String(error), false);
+        addLogEntry(
+          'Other',
+          `Interactive rebase onto '${interactiveRebaseBranch.name}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', t('alerts.rebaseFailed'), String(error));
       }
     },
@@ -1339,6 +1400,210 @@ function App() {
       setLocalChangesRefreshKey,
       t,
     ]
+  );
+
+  // Load Git Flow configuration
+  const loadGitFlowConfig = useCallback(async () => {
+    if (!activeTab?.path) return;
+
+    try {
+      const config = await invoke<GitFlowConfig>('get_gitflow_config');
+      setGitFlowConfig(config);
+
+      if (config.initialized) {
+        const flowInfo = await invoke<CurrentBranchFlowInfo>('get_current_branch_flow_info');
+        setCurrentBranchFlowInfo(flowInfo);
+      } else {
+        setCurrentBranchFlowInfo(null);
+      }
+    } catch (error) {
+      console.error('Error loading git flow config:', error);
+      setGitFlowConfig(null);
+      setCurrentBranchFlowInfo(null);
+    }
+  }, [activeTab?.path]);
+
+  // Load git flow config when active tab changes
+  useEffect(() => {
+    if (activeTab?.path) {
+      loadGitFlowConfig();
+    }
+  }, [activeTab?.path, loadGitFlowConfig]);
+
+  // Git Flow handlers for BranchDropdown
+  const handleNewBranch = useCallback(() => {
+    setCreateBranchModalOpen(true);
+  }, []);
+
+  const handleStartFeature = useCallback(() => {
+    setGitFlowStartType('feature');
+    setGitFlowStartModalOpen(true);
+  }, []);
+
+  const handleStartRelease = useCallback(() => {
+    setGitFlowStartType('release');
+    setGitFlowStartModalOpen(true);
+  }, []);
+
+  const handleStartHotfix = useCallback(() => {
+    setGitFlowStartType('hotfix');
+    setGitFlowStartModalOpen(true);
+  }, []);
+
+  const handleFinishBranch = useCallback(() => {
+    if (
+      currentBranchFlowInfo &&
+      currentBranchFlowInfo.branch_type !== 'Other' &&
+      currentBranchFlowInfo.branch_type !== 'Master' &&
+      currentBranchFlowInfo.branch_type !== 'Develop'
+    ) {
+      setGitFlowFinishModalOpen(true);
+    }
+  }, [currentBranchFlowInfo]);
+
+  // Handle Git Flow Start
+  const handleGitFlowStart = useCallback(
+    async (name: string) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      const flowType = gitFlowStartType;
+      const prefix = gitFlowConfig
+        ? flowType === 'feature'
+          ? gitFlowConfig.feature_prefix
+          : flowType === 'release'
+            ? gitFlowConfig.release_prefix
+            : gitFlowConfig.hotfix_prefix
+        : `${flowType}/`;
+      const fullBranchName = `${prefix}${name}`;
+      const command = `git checkout -b ${fullBranchName}`;
+
+      setIsGitFlowLoading(true);
+      startOperation('Branch', fullBranchName);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_flow_start', {
+          flowType,
+          name,
+        });
+
+        completeOperation(result);
+        addLogEntry(
+          'Branch',
+          `Start ${flowType} '${name}'`,
+          command,
+          result.message,
+          result.success
+        );
+
+        if (result.success) {
+          // Update current branch
+          const activeTabId = useRepositoryStore.getState().activeTabId;
+          if (activeTabId) {
+            setTabCurrentBranch(activeTabId, fullBranchName);
+          }
+          await refreshActiveTab();
+          await loadGitFlowConfig();
+          setGitFlowStartModalOpen(false);
+        } else {
+          const errorTitle = getErrorTitle(result.error_type, 'Git Flow');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error starting git flow:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Branch', `Start ${flowType} '${name}'`, command, String(error), false);
+        addAlert('error', 'Git Flow Error', String(error));
+      } finally {
+        setIsGitFlowLoading(false);
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      gitFlowStartType,
+      gitFlowConfig,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      setTabCurrentBranch,
+      refreshActiveTab,
+      loadGitFlowConfig,
+      addAlert,
+      getErrorTitle,
+    ]
+  );
+
+  // Handle Git Flow Finish
+  const handleGitFlowFinish = useCallback(
+    async (deleteBranch: boolean) => {
+      if (!activeTab?.path || isGitLoading || !currentBranchFlowInfo) return;
+
+      const flowType = currentBranchFlowInfo.branch_type.toLowerCase();
+      const name = currentBranchFlowInfo.name;
+      const command = `git flow ${flowType} finish ${name}`;
+
+      setIsGitFlowLoading(true);
+      startOperation('Merge', `Finish ${flowType} '${name}'`);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_flow_finish', {
+          flowType,
+          name,
+          deleteBranch,
+        });
+
+        completeOperation(result);
+        addLogEntry(
+          'Merge',
+          `Finish ${flowType} '${name}'`,
+          command,
+          result.message,
+          result.success
+        );
+
+        if (result.success) {
+          await refreshActiveTab();
+          await loadGitFlowConfig();
+          setGitFlowFinishModalOpen(false);
+          addAlert('success', t('alerts.gitFlowFinishSuccess'), result.message);
+        } else {
+          const errorTitle =
+            result.error_type === 'merge_conflicts'
+              ? t('alerts.mergeConflicts')
+              : getErrorTitle(result.error_type, 'Git Flow');
+          addAlert('error', errorTitle, result.message);
+        }
+      } catch (error) {
+        console.error('Error finishing git flow:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry('Merge', `Finish ${flowType} '${name}'`, command, String(error), false);
+        addAlert('error', 'Git Flow Error', String(error));
+      } finally {
+        setIsGitFlowLoading(false);
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      currentBranchFlowInfo,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      refreshActiveTab,
+      loadGitFlowConfig,
+      addAlert,
+      getErrorTitle,
+      t,
+    ]
+  );
+
+  // Handle creating branch from dropdown (wrapper for handleCreateBranch)
+  const handleCreateBranchFromModal = useCallback(
+    async (branchName: string, startPoint: string, checkout: boolean) => {
+      await handleCreateBranch(branchName, startPoint, checkout);
+      setCreateBranchModalOpen(false);
+    },
+    [handleCreateBranch]
   );
 
   // Execute fetch with options
@@ -1697,6 +1962,13 @@ function App() {
             onDismissOperation={clearOperation}
             onOpenActivityLog={openActivityLog}
             onFeedback={() => setFeedbackModalOpen(true)}
+            gitFlowConfig={null}
+            currentBranchFlowInfo={null}
+            onNewBranch={handleNewBranch}
+            onStartFeature={handleStartFeature}
+            onStartRelease={handleStartRelease}
+            onStartHotfix={handleStartHotfix}
+            onFinishBranch={handleFinishBranch}
           />
         </TitleBar>
         <div className="loading-overlay">
@@ -1734,6 +2006,13 @@ function App() {
           onDismissOperation={clearOperation}
           onOpenActivityLog={openActivityLog}
           onFeedback={() => setFeedbackModalOpen(true)}
+          gitFlowConfig={gitFlowConfig}
+          currentBranchFlowInfo={currentBranchFlowInfo}
+          onNewBranch={handleNewBranch}
+          onStartFeature={handleStartFeature}
+          onStartRelease={handleStartRelease}
+          onStartHotfix={handleStartHotfix}
+          onFinishBranch={handleFinishBranch}
         />
       </TitleBar>
 
@@ -1990,6 +2269,55 @@ function App() {
         {/* Git Not Installed Modal */}
         {gitNotInstalledModalOpen && (
           <GitNotInstalledModal isOpen={true} onClose={() => setGitNotInstalledModalOpen(false)} />
+        )}
+
+        {/* Create Branch Modal (from Branch dropdown) */}
+        {createBranchModalOpen && (
+          <CreateBranchModal
+            isOpen={true}
+            onClose={() => setCreateBranchModalOpen(false)}
+            onCreate={handleCreateBranchFromModal}
+            sourceBranch={activeTabState?.branches.find((b) => b.is_head) || null}
+            localBranches={activeTabState?.branches.filter((b) => !b.is_remote) ?? []}
+          />
+        )}
+
+        {/* Git Flow Start Modal */}
+        {gitFlowStartModalOpen && gitFlowConfig && (
+          <GitFlowStartModal
+            isOpen={true}
+            onClose={() => setGitFlowStartModalOpen(false)}
+            onStart={handleGitFlowStart}
+            flowType={gitFlowStartType}
+            baseBranch={
+              gitFlowStartType === 'hotfix'
+                ? gitFlowConfig.master_branch
+                : gitFlowConfig.develop_branch
+            }
+            prefix={
+              gitFlowStartType === 'feature'
+                ? gitFlowConfig.feature_prefix
+                : gitFlowStartType === 'release'
+                  ? gitFlowConfig.release_prefix
+                  : gitFlowConfig.hotfix_prefix
+            }
+            isLoading={isGitFlowLoading}
+          />
+        )}
+
+        {/* Git Flow Finish Modal */}
+        {gitFlowFinishModalOpen && currentBranchFlowInfo && gitFlowConfig && (
+          <GitFlowFinishModal
+            isOpen={true}
+            onClose={() => setGitFlowFinishModalOpen(false)}
+            onFinish={handleGitFlowFinish}
+            flowType={currentBranchFlowInfo.branch_type.toLowerCase() as GitFlowType}
+            branchName={activeTab?.currentBranch || ''}
+            featureName={currentBranchFlowInfo.name}
+            masterBranch={gitFlowConfig.master_branch}
+            developBranch={gitFlowConfig.develop_branch}
+            isLoading={isGitFlowLoading}
+          />
         )}
       </Suspense>
 

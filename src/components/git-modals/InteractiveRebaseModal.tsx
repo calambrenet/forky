@@ -47,73 +47,75 @@ interface CommitRowProps {
   isDragOver: boolean;
 }
 
-const CommitRow: FC<CommitRowProps> = memo(({
-  entry,
-  index,
-  onActionChange,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  isDragging,
-  isDragOver,
-}) => {
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+const CommitRow: FC<CommitRowProps> = memo(
+  ({
+    entry,
+    index,
+    onActionChange,
+    onDragStart,
+    onDragOver,
+    onDragEnd,
+    isDragging,
+    isDragOver,
+  }) => {
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const handleActionSelect = (action: RebaseAction) => {
-    onActionChange(index, action);
-    setIsDropdownOpen(false);
-  };
+    const handleActionSelect = (action: RebaseAction) => {
+      onActionChange(index, action);
+      setIsDropdownOpen(false);
+    };
 
-  const currentAction = ACTION_OPTIONS.find((a) => a.value === entry.action);
+    const currentAction = ACTION_OPTIONS.find((a) => a.value === entry.action);
 
-  return (
-    <div
-      className={`interactive-rebase-row ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${entry.action === 'drop' ? 'dropped' : ''}`}
-      draggable
-      onDragStart={() => onDragStart(index)}
-      onDragOver={(e) => {
-        e.preventDefault();
-        onDragOver(index);
-      }}
-      onDragEnd={onDragEnd}
-    >
-      <div className="row-drag-handle">
-        <GripVertical size={14} />
+    return (
+      <div
+        className={`interactive-rebase-row ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${entry.action === 'drop' ? 'dropped' : ''}`}
+        draggable
+        onDragStart={() => onDragStart(index)}
+        onDragOver={(e) => {
+          e.preventDefault();
+          onDragOver(index);
+        }}
+        onDragEnd={onDragEnd}
+      >
+        <div className="row-drag-handle">
+          <GripVertical size={14} />
+        </div>
+
+        <div className="row-action-dropdown">
+          <button
+            className={`action-button action-${entry.action}`}
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          >
+            {currentAction?.icon}
+            <span>{currentAction?.label}</span>
+            <ChevronDown size={12} />
+          </button>
+          {isDropdownOpen && (
+            <div className="action-dropdown-menu">
+              {ACTION_OPTIONS.map((option) => (
+                <div
+                  key={option.value}
+                  className={`action-option ${entry.action === option.value ? 'selected' : ''}`}
+                  onClick={() => handleActionSelect(option.value)}
+                >
+                  {option.icon}
+                  <span>{option.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="row-commit-id">{entry.short_id}</div>
+        <div className="row-commit-message" title={entry.message}>
+          {entry.message}
+        </div>
+        <div className="row-author">{entry.author}</div>
       </div>
-
-      <div className="row-action-dropdown">
-        <button
-          className={`action-button action-${entry.action}`}
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        >
-          {currentAction?.icon}
-          <span>{currentAction?.label}</span>
-          <ChevronDown size={12} />
-        </button>
-        {isDropdownOpen && (
-          <div className="action-dropdown-menu">
-            {ACTION_OPTIONS.map((option) => (
-              <div
-                key={option.value}
-                className={`action-option ${entry.action === option.value ? 'selected' : ''}`}
-                onClick={() => handleActionSelect(option.value)}
-              >
-                {option.icon}
-                <span>{option.label}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="row-commit-id">{entry.short_id}</div>
-      <div className="row-commit-message" title={entry.message}>
-        {entry.message}
-      </div>
-      <div className="row-author">{entry.author}</div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
   ({ isOpen, onClose, onRebase, targetBranch, currentBranch, commits, isLoading }) => {
@@ -262,12 +264,10 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
           <button className="btn-cancel" onClick={onClose}>
             {t('common.cancel')}
           </button>
-          <button
-            className="btn-primary"
-            onClick={handleRebase}
-            disabled={isRebaseDisabled}
-          >
-            {isLoading ? t('modals.interactiveRebase.rebasing') : t('modals.interactiveRebase.startRebase')}
+          <button className="btn-primary" onClick={handleRebase} disabled={isRebaseDisabled}>
+            {isLoading
+              ? t('modals.interactiveRebase.rebasing')
+              : t('modals.interactiveRebase.startRebase')}
           </button>
         </ModalFooter>
       </Modal>

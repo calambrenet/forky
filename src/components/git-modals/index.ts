@@ -40,3 +40,7 @@ export { MergeModal } from './MergeModal';
 export { RebaseModal } from './RebaseModal';
 
 export { InteractiveRebaseModal } from './InteractiveRebaseModal';
+
+export { GitFlowStartModal } from './GitFlowStartModal';
+
+export { GitFlowFinishModal } from './GitFlowFinishModal';

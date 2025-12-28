@@ -325,6 +325,29 @@
       "autostash": "Automatically stash and restore changes",
       "startRebase": "Start Rebase",
       "noCommits": "No commits to rebase"
+    },
+    "gitFlowStart": {
+      "titleFeature": "Start Feature",
+      "titleRelease": "Start Release",
+      "titleHotfix": "Start Hotfix",
+      "description": "Create a new {{type}} branch",
+      "name": "Name",
+      "namePlaceholder": "Enter {{type}} name",
+      "baseBranch": "Base branch",
+      "willCreate": "Will create: {{branch}}",
+      "start": "Start"
+    },
+    "gitFlowFinish": {
+      "titleFeature": "Finish Feature",
+      "titleRelease": "Finish Release",
+      "titleHotfix": "Finish Hotfix",
+      "description": "Complete {{type}} '{{name}}'",
+      "branch": "Branch",
+      "mergeInto": "Will merge into {{branch}}",
+      "mergeIntoBoth": "Will merge into {{master}} and {{develop}}",
+      "createTag": "Will create tag '{{tag}}'",
+      "deleteBranch": "Delete branch after merge",
+      "finish": "Finish"
     }
   },
   "stashDropdown": {
@@ -365,7 +388,8 @@
     "mergeConflicts": "Merge Conflicts",
     "rebaseSuccess": "Rebase Successful",
     "rebaseFailed": "Rebase Failed",
-    "rebaseConflicts": "Rebase Conflicts"
+    "rebaseConflicts": "Rebase Conflicts",
+    "gitFlowFinishSuccess": "Git Flow Completed"
   },
   "welcome": {
     "title": "Forky",
@@ -447,5 +471,13 @@
     "localBranches": "Local Branches",
     "remoteBranches": "Remote Branches",
     "noBranches": "No branches available"
+  },
+  "branchDropdown": {
+    "newBranch": "New Branch...",
+    "gitFlow": "Git Flow",
+    "startFeature": "Start Feature...",
+    "startRelease": "Start Release...",
+    "startHotfix": "Start Hotfix...",
+    "finishBranch": "Finish '{{name}}'..."
   }
 }

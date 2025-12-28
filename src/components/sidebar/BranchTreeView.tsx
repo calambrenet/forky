@@ -1,6 +1,15 @@
 import type { FC } from 'react';
 import { memo, useCallback } from 'react';
-import { GitBranch, Folder, FolderOpen, Tag, Check, Server, ArrowUp, ArrowDown } from 'lucide-react';
+import {
+  GitBranch,
+  Folder,
+  FolderOpen,
+  Tag,
+  Check,
+  Server,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
 import type { TreeNode } from './branchTree';
 import type { BranchInfo, TagInfo } from '../../types/git';
 
@@ -164,7 +173,9 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(
             <BranchCounter branch={node.branch} />
           )}
         </div>
-        {isExpanded && hasChildren && renderChildren(node.children, depth + 1, isRemote || node.type === 'remote')}
+        {isExpanded &&
+          hasChildren &&
+          renderChildren(node.children, depth + 1, isRemote || node.type === 'remote')}
       </>
     );
   }
@@ -205,7 +216,14 @@ export const BranchTree: FC<BranchTreeProps> = memo(
           </div>
         );
       },
-      [expandedPaths, onToggleExpand, onBranchClick, onBranchDoubleClick, onBranchContextMenu, onTagClick]
+      [
+        expandedPaths,
+        onToggleExpand,
+        onBranchClick,
+        onBranchDoubleClick,
+        onBranchContextMenu,
+        onTagClick,
+      ]
     );
 
     if (nodes.length === 0) return null;

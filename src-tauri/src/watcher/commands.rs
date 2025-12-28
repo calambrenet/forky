@@ -1,6 +1,6 @@
 use tauri::AppHandle;
 
-use super::{start_watching, stop_watching, get_watched_path};
+use super::{get_watched_path, start_watching, stop_watching};
 
 /// Start watching a repository for file changes
 #[tauri::command]

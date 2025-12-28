@@ -30,7 +30,8 @@ import type { GitOperationState } from '../repository-info-box';
 import { RepositoryInfoBox } from '../repository-info-box';
 import { StashDropdown } from './StashDropdown';
 import { MergeDropdown } from './MergeDropdown';
-import type { BranchInfo, StashInfo } from '../../types/git';
+import { BranchDropdown } from './BranchDropdown';
+import type { BranchInfo, StashInfo, GitFlowConfig, CurrentBranchFlowInfo } from '../../types/git';
 import './Toolbar.css';
 
 interface ToolbarProps {
@@ -50,6 +51,14 @@ interface ToolbarProps {
   onSaveSnapshot?: () => void;
   onStashSelect?: (stash: StashInfo) => void;
   onMergeSelect?: (branch: BranchInfo) => void;
+  // Branch dropdown props
+  gitFlowConfig?: GitFlowConfig | null;
+  currentBranchFlowInfo?: CurrentBranchFlowInfo | null;
+  onNewBranch?: () => void;
+  onStartFeature?: () => void;
+  onStartRelease?: () => void;
+  onStartHotfix?: () => void;
+  onFinishBranch?: () => void;
   isLoading?: boolean;
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
@@ -77,6 +86,13 @@ export const Toolbar: FC<ToolbarProps> = memo(
     onSaveSnapshot,
     onStashSelect,
     onMergeSelect,
+    gitFlowConfig,
+    currentBranchFlowInfo,
+    onNewBranch,
+    onStartFeature,
+    onStartRelease,
+    onStartHotfix,
+    onFinishBranch,
     isLoading = false,
     gitOperation,
     onDismissOperation,
@@ -87,6 +103,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     const appWindow = getCurrentWindow();
     const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
     const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false);
+    const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
 
     const handleOpenInTerminal = async () => {
       if (!repoPath) {
@@ -203,10 +220,44 @@ export const Toolbar: FC<ToolbarProps> = memo(
 
         {/* Right section: Branch, Merge, Menu */}
         <div className="toolbar-right">
-          <button className="toolbar-btn" title={t('toolbar.branch')}>
-            <GitBranch size={ICON_SIZE} />
-            <span className="btn-label">{t('toolbar.branch')}</span>
-          </button>
+          <div className="toolbar-dropdown-container">
+            <button
+              className="toolbar-btn"
+              title={t('toolbar.branch')}
+              onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
+              disabled={isLoading || !currentBranch}
+            >
+              <GitBranch size={ICON_SIZE} />
+              <span className="btn-label">{t('toolbar.branch')}</span>
+            </button>
+            {branchDropdownOpen && (
+              <BranchDropdown
+                gitFlowConfig={gitFlowConfig ?? null}
+                currentBranchFlowInfo={currentBranchFlowInfo ?? null}
+                onNewBranch={() => {
+                  onNewBranch?.();
+                  setBranchDropdownOpen(false);
+                }}
+                onStartFeature={() => {
+                  onStartFeature?.();
+                  setBranchDropdownOpen(false);
+                }}
+                onStartRelease={() => {
+                  onStartRelease?.();
+                  setBranchDropdownOpen(false);
+                }}
+                onStartHotfix={() => {
+                  onStartHotfix?.();
+                  setBranchDropdownOpen(false);
+                }}
+                onFinishBranch={() => {
+                  onFinishBranch?.();
+                  setBranchDropdownOpen(false);
+                }}
+                onClose={() => setBranchDropdownOpen(false)}
+              />
+            )}
+          </div>
           <div className="toolbar-dropdown-container">
             <button
               className="toolbar-btn"

@@ -3,7 +3,7 @@ use tauri_plugin_dialog::DialogExt;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SystemTheme {
-    pub theme: String, // "light" or "dark"
+    pub theme: String,  // "light" or "dark"
     pub source: String, // where we got the theme from
 }
 
@@ -78,10 +78,7 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
         if let Ok(output) = Command::new("which").arg(terminal).output() {
             if output.status.success() {
                 // Terminal found, try to spawn it
-                match Command::new(terminal)
-                    .args(args.clone())
-                    .spawn()
-                {
+                match Command::new(terminal).args(args.clone()).spawn() {
                     Ok(_) => return Ok(()),
                     Err(e) => {
                         // Log error but continue to next terminal

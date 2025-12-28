@@ -3,12 +3,12 @@ mod system;
 mod watcher;
 
 use git::commands::{self as git_commands, AppState};
+use std::sync::Mutex;
 use system::commands as system_commands;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{Emitter, Manager};
 use watcher::commands as watcher_commands;
 use watcher::WatcherState;
-use std::sync::Mutex;
-use tauri::{Manager, Emitter};
-use tauri::menu::{Menu, Submenu, MenuItem, PredefinedMenuItem};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,7 +19,13 @@ pub fn run() {
         .plugin(tauri_plugin_decorum::init())
         .setup(|app| {
             // Create custom menu
-            let open_repo = MenuItem::with_id(app, "open_repository", "Open Repository...", true, Some("CmdOrCtrl+O"))?;
+            let open_repo = MenuItem::with_id(
+                app,
+                "open_repository",
+                "Open Repository...",
+                true,
+                Some("CmdOrCtrl+O"),
+            )?;
 
             // macOS app menu (required as first menu on macOS)
             #[cfg(target_os = "macos")]
@@ -79,16 +85,10 @@ pub fn run() {
             )?;
 
             #[cfg(target_os = "macos")]
-            let menu = Menu::with_items(
-                app,
-                &[&app_menu, &file_menu, &edit_menu, &window_menu],
-            )?;
+            let menu = Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu])?;
 
             #[cfg(not(target_os = "macos"))]
-            let menu = Menu::with_items(
-                app,
-                &[&file_menu, &edit_menu, &window_menu],
-            )?;
+            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu])?;
 
             app.set_menu(menu)?;
             // Set traffic light position on macOS
@@ -176,6 +176,10 @@ pub fn run() {
             git_commands::git_rebase_continue,
             git_commands::get_interactive_rebase_commits,
             git_commands::git_interactive_rebase,
+            git_commands::get_gitflow_config,
+            git_commands::get_current_branch_flow_info,
+            git_commands::git_flow_start,
+            git_commands::git_flow_finish,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
             system_commands::check_git_installed,
