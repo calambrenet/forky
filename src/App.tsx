@@ -1368,7 +1368,10 @@ function App() {
           completeOperation(result);
           addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
 
-          if (!result.success) {
+          if (result.success) {
+            // Refresh to update branch ahead/behind counts
+            await refreshActiveTab();
+          } else {
             const errorTitle = getErrorTitle(result.error_type, 'Fetch');
             addAlert('error', errorTitle, result.message);
           }
@@ -1387,6 +1390,7 @@ function App() {
       isGitLoading,
       saveOptions,
       startOperation,
+      refreshActiveTab,
       completeOperation,
       addLogEntry,
       addAlert,
@@ -1423,7 +1427,11 @@ function App() {
           completeOperation(result);
           addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
 
-          if (!result.success) {
+          if (result.success) {
+            // Refresh to update branch ahead/behind counts
+            await refreshActiveTab();
+            setLocalChangesRefreshKey((k) => k + 1);
+          } else {
             const errorTitle = getErrorTitle(result.error_type, 'Pull');
             addAlert('error', errorTitle, result.message);
           }
@@ -1446,6 +1454,8 @@ function App() {
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
+      refreshActiveTab,
+      setLocalChangesRefreshKey,
     ]
   );
 
@@ -1485,7 +1495,10 @@ function App() {
           completeOperation(result);
           addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
 
-          if (!result.success) {
+          if (result.success) {
+            // Refresh to update branch ahead/behind counts
+            await refreshActiveTab();
+          } else {
             const errorTitle = getErrorTitle(result.error_type, 'Push');
             addAlert('error', errorTitle, result.message);
           }
@@ -1508,6 +1521,7 @@ function App() {
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
+      refreshActiveTab,
     ]
   );
 
