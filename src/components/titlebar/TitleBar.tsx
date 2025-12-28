@@ -4,6 +4,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { X, Minus, Square, Copy } from 'lucide-react';
 import './TitleBar.css';
 
+// Detect macOS using navigator
+const isMacOS = navigator.platform.toLowerCase().includes('mac');
+
 interface TitleBarProps {
   children?: React.ReactNode;
 }
@@ -95,26 +98,29 @@ export const TitleBar: FC<TitleBarProps> = ({ children }) => {
   );
 
   return (
-    <div className="titlebar" onMouseDown={handleMouseDown}>
-      <div className="titlebar-controls">
-        <button className="titlebar-btn close" onClick={handleClose} title="Close">
-          <X size={10} strokeWidth={2} />
-        </button>
-        <button className="titlebar-btn minimize" onClick={handleMinimize} title="Minimize">
-          <Minus size={10} strokeWidth={2} />
-        </button>
-        <button
-          className="titlebar-btn maximize"
-          onClick={handleMaximize}
-          title={isMaximized ? 'Restore' : 'Maximize'}
-        >
-          {isMaximized ? (
-            <Copy size={10} strokeWidth={1.5} />
-          ) : (
-            <Square size={10} strokeWidth={1.5} />
-          )}
-        </button>
-      </div>
+    <div className={`titlebar ${isMacOS ? 'macos' : ''}`} onMouseDown={handleMouseDown}>
+      {/* On macOS, native window controls are used via titleBarStyle: overlay */}
+      {!isMacOS && (
+        <div className="titlebar-controls">
+          <button className="titlebar-btn close" onClick={handleClose} title="Close">
+            <X size={10} strokeWidth={2} />
+          </button>
+          <button className="titlebar-btn minimize" onClick={handleMinimize} title="Minimize">
+            <Minus size={10} strokeWidth={2} />
+          </button>
+          <button
+            className="titlebar-btn maximize"
+            onClick={handleMaximize}
+            title={isMaximized ? 'Restore' : 'Maximize'}
+          >
+            {isMaximized ? (
+              <Copy size={10} strokeWidth={1.5} />
+            ) : (
+              <Square size={10} strokeWidth={1.5} />
+            )}
+          </button>
+        </div>
+      )}
       <div className="titlebar-content">{children}</div>
     </div>
   );

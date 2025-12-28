@@ -28,6 +28,7 @@ interface TreeNodeItemProps {
   onTagClick?: (tag: TagInfo) => void;
   depth: number;
   isRemote?: boolean;
+  renderChildren: (nodes: TreeNode[], depth: number, isRemote: boolean) => React.ReactNode;
 }
 
 const TreeNodeItem: FC<TreeNodeItemProps> = memo(
@@ -41,6 +42,7 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(
     onTagClick,
     depth,
     isRemote,
+    renderChildren,
   }) => {
     const isExpanded = expandedPaths.has(node.fullPath);
     const hasChildren = node.children.length > 0;
@@ -124,19 +126,7 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(
             {node.name}
           </span>
         </div>
-        {isExpanded && hasChildren && (
-          <BranchTree
-            nodes={node.children}
-            expandedPaths={expandedPaths}
-            onToggleExpand={onToggleExpand}
-            onBranchClick={onBranchClick}
-            onBranchDoubleClick={onBranchDoubleClick}
-            onBranchContextMenu={onBranchContextMenu}
-            onTagClick={onTagClick}
-            depth={depth + 1}
-            isRemote={isRemote || node.type === 'remote'}
-          />
-        )}
+        {isExpanded && hasChildren && renderChildren(node.children, depth + 1, isRemote || node.type === 'remote')}
       </>
     );
   }
@@ -154,6 +144,32 @@ export const BranchTree: FC<BranchTreeProps> = memo(
     depth = 0,
     isRemote = false,
   }) => {
+    const renderChildren = useCallback(
+      (childNodes: TreeNode[], childDepth: number, childIsRemote: boolean): React.ReactNode => {
+        if (childNodes.length === 0) return null;
+        return (
+          <div className="branch-tree">
+            {childNodes.map((node) => (
+              <TreeNodeItem
+                key={node.fullPath}
+                node={node}
+                expandedPaths={expandedPaths}
+                onToggleExpand={onToggleExpand}
+                onBranchClick={onBranchClick}
+                onBranchDoubleClick={onBranchDoubleClick}
+                onBranchContextMenu={onBranchContextMenu}
+                onTagClick={onTagClick}
+                depth={childDepth}
+                isRemote={childIsRemote}
+                renderChildren={renderChildren}
+              />
+            ))}
+          </div>
+        );
+      },
+      [expandedPaths, onToggleExpand, onBranchClick, onBranchDoubleClick, onBranchContextMenu, onTagClick]
+    );
+
     if (nodes.length === 0) return null;
 
     return (
@@ -170,6 +186,7 @@ export const BranchTree: FC<BranchTreeProps> = memo(
             onTagClick={onTagClick}
             depth={depth}
             isRemote={isRemote}
+            renderChildren={renderChildren}
           />
         ))}
       </div>

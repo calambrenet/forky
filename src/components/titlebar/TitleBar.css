@@ -9,6 +9,13 @@
   user-select: none;
 }
 
+/* macOS: Add padding for native traffic light buttons */
+.titlebar.macos {
+  padding-left: 78px; /* Space for close, minimize, maximize buttons */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 .titlebar-controls {
   display: flex;
   align-items: center;

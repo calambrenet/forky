@@ -1,4 +1,5 @@
 use std::process::Command;
+use tauri_plugin_dialog::DialogExt;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SystemTheme {
@@ -182,4 +183,24 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
         theme: "light".to_string(),
         source: "default".to_string(),
     })
+}
+
+/// Opens a folder picker dialog with proper parent window on macOS
+#[tauri::command]
+pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    app.dialog()
+        .file()
+        .set_title("Select Git Repository")
+        .pick_folder(move |folder_path| {
+            let result = folder_path.map(|p| p.to_string());
+            let _ = tx.send(result);
+        });
+
+    match rx.recv() {
+        Ok(Some(path)) => Ok(Some(path)),
+        Ok(None) => Ok(None),
+        Err(_) => Err("Dialog was cancelled or failed".to_string()),
+    }
 }

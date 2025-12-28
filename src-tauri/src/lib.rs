@@ -7,6 +7,7 @@ use system::commands as system_commands;
 use watcher::commands as watcher_commands;
 use watcher::WatcherState;
 use std::sync::Mutex;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,6 +15,26 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_decorum::init())
+        .setup(|app| {
+            // Set traffic light position on macOS
+            #[cfg(target_os = "macos")]
+            {
+                use tauri_plugin_decorum::WebviewWindowExt;
+                let main_window = app.get_webview_window("main").unwrap();
+                main_window.set_traffic_lights_inset(12.0, 50.0).unwrap();
+            }
+
+            // On Linux, use frameless window with custom titlebar
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::WebviewWindow;
+                let main_window: WebviewWindow = app.get_webview_window("main").unwrap();
+                main_window.set_decorations(false).unwrap();
+            }
+
+            Ok(())
+        })
         .manage(AppState {
             current_repo_path: Mutex::new(None),
         })
@@ -76,6 +97,7 @@ pub fn run() {
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
             system_commands::check_git_installed,
+            system_commands::pick_folder,
             watcher_commands::start_file_watcher,
             watcher_commands::stop_file_watcher,
             watcher_commands::get_watched_repo_path,

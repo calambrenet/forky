@@ -10,17 +10,21 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "Forky - Git Client",
         "width": 1400,
         "height": 900,
         "minWidth": 1000,
         "minHeight": 600,
         "center": true,
-        "decorations": false,
+        "decorations": true,
         "resizable": true,
-        "transparent": true
+        "transparent": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

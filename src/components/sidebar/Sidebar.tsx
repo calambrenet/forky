@@ -11,7 +11,7 @@ import type {
   RemoteSortOrder,
 } from '../../types/git';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import { BranchTree } from './BranchTree';
+import { BranchTree } from './BranchTreeView';
 import { BranchContextMenu } from './BranchContextMenu';
 import {
   CreateBranchModal,

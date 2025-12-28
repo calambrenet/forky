@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { TitleBar } from './components/titlebar/TitleBar';
@@ -609,11 +608,8 @@ function App() {
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Git Repository',
-      });
+      // Use Rust command with proper parent window for macOS compatibility
+      const selected = await invoke<string | null>('pick_folder');
 
       if (selected) {
         await openRepository(selected);
