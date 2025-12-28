@@ -348,6 +348,15 @@
       "createTag": "Se creará la etiqueta '{{tag}}'",
       "deleteBranch": "Eliminar rama después del merge",
       "finish": "Finalizar"
+    },
+    "divergentBranches": {
+      "title": "Ramas Divergentes",
+      "description": "Tus ramas local y remota han divergido",
+      "explanation": "La rama remota tiene commits que no tienes localmente, y tienes commits locales que no están en la remota. Elige cómo reconciliar:",
+      "merge": "Merge",
+      "mergeDescription": "Crear un commit de merge combinando ambos historiales",
+      "rebase": "Rebase",
+      "rebaseDescription": "Reaplicar tus commits sobre la rama remota"
     }
   },
   "stashDropdown": {

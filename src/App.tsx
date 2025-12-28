@@ -42,6 +42,11 @@ const CheckoutConflictModal = lazy(() =>
     default: m.CheckoutConflictModal,
   }))
 );
+const DivergentBranchesModal = lazy(() =>
+  import('./components/git-modals/DivergentBranchesModal').then((m) => ({
+    default: m.DivergentBranchesModal,
+  }))
+);
 const GitActivityLog = lazy(() =>
   import('./components/git-activity-log').then((m) => ({ default: m.GitActivityLog }))
 );
@@ -279,6 +284,10 @@ function App() {
 
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
+
+  // Divergent branches modal state
+  const [divergentBranchesModalOpen, setDivergentBranchesModalOpen] = useState(false);
+  const [pendingPullOptions, setPendingPullOptions] = useState<PullOptions | null>(null);
 
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
@@ -1633,7 +1642,10 @@ function App() {
           completeOperation(result);
           addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
 
-          if (!result.success) {
+          if (result.success) {
+            // Refresh to update branch ahead/behind counts
+            await refreshActiveTab();
+          } else {
             const errorTitle = getErrorTitle(result.error_type, 'Fetch');
             addAlert('error', errorTitle, result.message);
           }
@@ -1652,6 +1664,7 @@ function App() {
       isGitLoading,
       saveOptions,
       startOperation,
+      refreshActiveTab,
       completeOperation,
       addLogEntry,
       addAlert,
@@ -1688,7 +1701,16 @@ function App() {
           completeOperation(result);
           addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
 
-          if (!result.success) {
+          if (result.success) {
+            // Refresh to update branch ahead/behind counts
+            await refreshActiveTab();
+            setLocalChangesRefreshKey((k) => k + 1);
+          } else if (result.error_type === 'divergent_branches') {
+            // Close the pull modal and show divergent branches modal
+            closeModal();
+            setPendingPullOptions(options);
+            setDivergentBranchesModalOpen(true);
+          } else {
             const errorTitle = getErrorTitle(result.error_type, 'Pull');
             addAlert('error', errorTitle, result.message);
           }
@@ -1711,6 +1733,9 @@ function App() {
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
+      refreshActiveTab,
+      setLocalChangesRefreshKey,
+      closeModal,
     ]
   );
 
@@ -1750,7 +1775,10 @@ function App() {
           completeOperation(result);
           addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
 
-          if (!result.success) {
+          if (result.success) {
+            // Refresh to update branch ahead/behind counts
+            await refreshActiveTab();
+          } else {
             const errorTitle = getErrorTitle(result.error_type, 'Push');
             addAlert('error', errorTitle, result.message);
           }
@@ -1773,8 +1801,43 @@ function App() {
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
+      refreshActiveTab,
     ]
   );
+
+  // Handle divergent branches - merge option
+  const handleDivergentMerge = useCallback(async () => {
+    if (!pendingPullOptions) return;
+
+    setDivergentBranchesModalOpen(false);
+    // Retry pull with rebase: false (merge)
+    const mergeOptions: PullOptions = {
+      ...pendingPullOptions,
+      rebase: false,
+    };
+    setPendingPullOptions(null);
+    await handlePullWithOptions(mergeOptions);
+  }, [pendingPullOptions, handlePullWithOptions]);
+
+  // Handle divergent branches - rebase option
+  const handleDivergentRebase = useCallback(async () => {
+    if (!pendingPullOptions) return;
+
+    setDivergentBranchesModalOpen(false);
+    // Retry pull with rebase: true
+    const rebaseOptions: PullOptions = {
+      ...pendingPullOptions,
+      rebase: true,
+    };
+    setPendingPullOptions(null);
+    await handlePullWithOptions(rebaseOptions);
+  }, [pendingPullOptions, handlePullWithOptions]);
+
+  // Close divergent branches modal
+  const handleCloseDivergentModal = useCallback(() => {
+    setDivergentBranchesModalOpen(false);
+    setPendingPullOptions(null);
+  }, []);
 
   // Panel resize handlers
   const startResize = useCallback(
@@ -2264,6 +2327,17 @@ function App() {
         {/* Git Activity Log */}
         {isActivityLogOpen && (
           <GitActivityLog entries={activityLog} isOpen={true} onClose={closeActivityLog} />
+        )}
+
+        {/* Divergent Branches Modal */}
+        {divergentBranchesModalOpen && (
+          <DivergentBranchesModal
+            isOpen={true}
+            onClose={handleCloseDivergentModal}
+            onMerge={handleDivergentMerge}
+            onRebase={handleDivergentRebase}
+            isLoading={isGitLoading}
+          />
         )}
 
         {/* Git Not Installed Modal */}

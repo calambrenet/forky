@@ -348,6 +348,15 @@
       "createTag": "Will create tag '{{tag}}'",
       "deleteBranch": "Delete branch after merge",
       "finish": "Finish"
+    },
+    "divergentBranches": {
+      "title": "Divergent Branches",
+      "description": "Your local and remote branches have diverged",
+      "explanation": "The remote branch has commits that you don't have locally, and you have local commits that aren't on the remote. Choose how to reconcile:",
+      "merge": "Merge",
+      "mergeDescription": "Create a merge commit combining both histories",
+      "rebase": "Rebase",
+      "rebaseDescription": "Reapply your commits on top of the remote branch"
     }
   },
   "stashDropdown": {
