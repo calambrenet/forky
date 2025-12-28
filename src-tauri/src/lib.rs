@@ -25,14 +25,12 @@ pub fn run() {
                 main_window.set_traffic_lights_inset(12.0, 50.0).unwrap();
             }
 
-            // On Linux, use frameless window with custom titlebar and transparency for rounded corners
+            // On Linux, use frameless window with custom titlebar
             #[cfg(target_os = "linux")]
             {
                 use tauri::WebviewWindow;
                 let main_window: WebviewWindow = app.get_webview_window("main").unwrap();
                 main_window.set_decorations(false).unwrap();
-                // Enable transparency for rounded corners to work properly
-                let _ = main_window.set_background_color(Some(tauri::Color::TRANSPARENT));
             }
 
             Ok(())

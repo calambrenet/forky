@@ -22,7 +22,7 @@
         "center": true,
         "decorations": true,
         "resizable": true,
-        "transparent": false,
+        "transparent": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
       }
