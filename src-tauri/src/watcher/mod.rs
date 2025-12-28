@@ -14,6 +14,13 @@ pub struct FileChangeEvent {
     pub timestamp: u64,
 }
 
+/// Event payload sent to frontend when branch changes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BranchChangeEvent {
+    pub repo_path: String,
+    pub timestamp: u64,
+}
+
 /// State for the file watcher
 pub struct WatcherState {
     pub debouncer: Mutex<Option<Debouncer<RecommendedWatcher>>>,
@@ -50,6 +57,11 @@ fn should_ignore_path(path: &Path) -> bool {
     IGNORED_PATHS.iter().any(|ignored| path_str.contains(ignored))
 }
 
+/// Check if a path is the .git/HEAD file (indicates branch change)
+fn is_git_head_file(path: &Path) -> bool {
+    path.ends_with(".git/HEAD") || path.ends_with(".git\\HEAD")
+}
+
 /// Start watching a repository path for file changes
 pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), String> {
     let watcher_state = app_handle.state::<WatcherState>();
@@ -66,21 +78,38 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
         move |result: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             match result {
                 Ok(events) => {
-                    // Filter out ignored paths
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    // Check for branch changes (.git/HEAD)
+                    let has_branch_change = events
+                        .iter()
+                        .any(|e| e.kind == DebouncedEventKind::Any && is_git_head_file(&e.path));
+
+                    if has_branch_change {
+                        let branch_event = BranchChangeEvent {
+                            repo_path: repo_path_clone.clone(),
+                            timestamp,
+                        };
+
+                        if let Err(e) = app_handle_clone.emit("repo-branch-changed", branch_event) {
+                            eprintln!("Failed to emit branch change event: {}", e);
+                        }
+                    }
+
+                    // Filter out ignored paths for file changes
                     let relevant_events: Vec<_> = events
                         .iter()
                         .filter(|e| {
                             e.kind == DebouncedEventKind::Any &&
-                            !should_ignore_path(&e.path)
+                            !should_ignore_path(&e.path) &&
+                            !is_git_head_file(&e.path)
                         })
                         .collect();
 
                     if !relevant_events.is_empty() {
-                        let timestamp = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
-
                         let event = FileChangeEvent {
                             repo_path: repo_path_clone.clone(),
                             timestamp,
