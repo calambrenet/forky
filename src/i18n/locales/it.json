@@ -337,7 +337,15 @@
     "gitError": "Errore Git",
     "mergeSuccess": "Merge Riuscito",
     "mergeFailed": "Merge Fallito",
-    "mergeConflicts": "Conflitti di Merge"
+    "mergeConflicts": "Conflitti di Merge",
+    "rebaseSuccess": "Rebase Riuscito",
+    "rebaseFailed": "Rebase Fallito",
+    "rebaseConflicts": "Conflitti di Rebase",
+    "gitFlowFinishSuccess": "Git Flow Completato",
+    "gitFlowInitSuccess": "Git Flow inizializzato con successo",
+    "gitFlowInitFailed": "Inizializzazione Git Flow fallita",
+    "fastForwardSuccess": "Fast-forward riuscito",
+    "fastForwardFailed": "Fast-forward fallito"
   },
   "welcome": {
     "title": "Forky",

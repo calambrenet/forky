@@ -310,6 +310,16 @@ function App() {
   const [divergentBranchesModalOpen, setDivergentBranchesModalOpen] = useState(false);
   const [pendingPullOptions, setPendingPullOptions] = useState<PullOptions | null>(null);
 
+  // Branch context menu modal presets
+  const [pullModalPreset, setPullModalPreset] = useState<{
+    remote: string;
+    branch: string;
+  } | null>(null);
+  const [pushModalPreset, setPushModalPreset] = useState<{
+    branch: string;
+    remote: string;
+  } | null>(null);
+
   // Get stored git options for current repo
   const getStoredOptions = useCallback((): GitOptionsStorage => {
     if (!activeTab?.path) return {};
@@ -2095,6 +2105,94 @@ function App() {
     setPendingPullOptions(null);
   }, []);
 
+  // Branch context menu handlers
+
+  // Fast-forward a branch to its remote tracking branch
+  const handleBranchFastForward = useCallback(
+    async (branch: BranchInfo) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      const remoteName = branch.upstream?.split('/')[0] || 'origin';
+      const branchName = branch.name;
+      const command = `git fetch ${remoteName} ${branchName}:${branchName}`;
+
+      startOperation('Pull', `Fast-forward ${branchName}`);
+
+      try {
+        const result = await invoke<GitOperationResult>('git_fast_forward', {
+          branch: branchName,
+          remote: remoteName,
+        });
+
+        completeOperation(result);
+        addLogEntry(
+          activeTab?.path || '',
+          'Pull',
+          `Fast-forward '${branchName}' from '${remoteName}'`,
+          command,
+          result.message,
+          result.success
+        );
+
+        if (result.success) {
+          await refreshActiveTab();
+          addAlert('success', t('alerts.fastForwardSuccess'), result.message);
+        } else {
+          addAlert('error', t('alerts.fastForwardFailed'), result.message);
+        }
+      } catch (error) {
+        console.error('Error fast-forwarding branch:', error);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry(
+          activeTab?.path || '',
+          'Pull',
+          `Fast-forward '${branchName}' from '${remoteName}'`,
+          command,
+          String(error),
+          false
+        );
+        addAlert('error', t('alerts.fastForwardFailed'), String(error));
+      }
+    },
+    [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, t]
+  );
+
+  // Open Pull modal pre-configured for a specific branch
+  const handleBranchPull = useCallback(
+    (branch: BranchInfo) => {
+      const remoteName = branch.upstream?.split('/')[0] || 'origin';
+      const branchName = branch.name;
+
+      setPullModalPreset({ remote: remoteName, branch: branchName });
+      openPullModal();
+    },
+    [openPullModal]
+  );
+
+  // Open Push modal pre-configured for a specific branch
+  const handleBranchPush = useCallback(
+    (branch: BranchInfo) => {
+      const remoteName = branch.upstream?.split('/')[0] || 'origin';
+      const branchName = branch.name;
+
+      setPushModalPreset({ branch: branchName, remote: remoteName });
+      openPushModal();
+    },
+    [openPushModal]
+  );
+
+  // Close Pull modal and clear preset
+  const handleClosePullModal = useCallback(() => {
+    closeModal();
+    setPullModalPreset(null);
+  }, [closeModal]);
+
+  // Close Push modal and clear preset
+  const handleClosePushModal = useCallback(() => {
+    closeModal();
+    setPushModalPreset(null);
+  }, [closeModal]);
+
   // Panel resize handlers
   const startResize = useCallback(
     (panel: string) => {
@@ -2383,6 +2481,9 @@ function App() {
               onMergeInto={handleMergeSelect}
               onRebaseOn={handleRebaseSelect}
               onInteractiveRebase={handleInteractiveRebaseSelect}
+              onFastForward={handleBranchFastForward}
+              onBranchPull={handleBranchPull}
+              onBranchPush={handleBranchPush}
               expandTagsSection={expandTagsSection}
             />
           </div>
@@ -2431,32 +2532,49 @@ function App() {
         {activeModal === 'pull' && (
           <PullModal
             isOpen={true}
-            onClose={closeModal}
+            onClose={handleClosePullModal}
             onPull={handlePullWithOptions}
             remotes={activeTabState?.remotes ?? []}
             branches={activeTabState?.branches ?? []}
             currentBranch={activeTab?.currentBranch ?? null}
-            savedOptions={getStoredOptions().pull}
+            savedOptions={
+              pullModalPreset
+                ? {
+                    remote: pullModalPreset.remote,
+                    branch: pullModalPreset.branch,
+                    rebase: false,
+                    autostash: false,
+                  }
+                : getStoredOptions().pull
+            }
           />
         )}
         {activeModal === 'push' && (
           <PushModal
             isOpen={true}
-            onClose={closeModal}
+            onClose={handleClosePushModal}
             onPush={handlePushWithOptions}
             remotes={activeTabState?.remotes ?? []}
             branches={activeTabState?.branches ?? []}
             currentBranch={activeTab?.currentBranch ?? null}
             savedOptions={
-              getStoredOptions().push
+              pushModalPreset
                 ? {
-                    branch: activeTab?.currentBranch ?? 'main',
-                    remote: getStoredOptions().push!.remote,
-                    remoteBranch: activeTab?.currentBranch ?? 'main',
-                    pushTags: getStoredOptions().push!.pushTags,
-                    forceWithLease: getStoredOptions().push!.forceWithLease,
+                    branch: pushModalPreset.branch,
+                    remote: pushModalPreset.remote,
+                    remoteBranch: pushModalPreset.branch,
+                    pushTags: false,
+                    forceWithLease: false,
                   }
-                : undefined
+                : getStoredOptions().push
+                  ? {
+                      branch: activeTab?.currentBranch ?? 'main',
+                      remote: getStoredOptions().push!.remote,
+                      remoteBranch: activeTab?.currentBranch ?? 'main',
+                      pushTags: getStoredOptions().push!.pushTags,
+                      forceWithLease: getStoredOptions().push!.forceWithLease,
+                    }
+                  : undefined
             }
           />
         )}

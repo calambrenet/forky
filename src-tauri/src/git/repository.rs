@@ -3791,3 +3791,108 @@ pub fn git_flow_finish(
 
     Ok(create_success_result(messages.join(". ")))
 }
+
+/// Fast-forward a local branch to match its remote tracking branch
+/// Uses `git fetch remote branch:branch` for non-checked-out branches
+/// Uses `git merge --ff-only` for the currently checked-out branch
+pub fn git_fast_forward(
+    repo_path: &str,
+    branch: &str,
+    remote: &str,
+) -> Result<GitOperationResult, String> {
+    let repo = open_repository(repo_path)?;
+
+    // Check if the branch is currently checked out
+    let head = repo.head().map_err(|e| e.to_string())?;
+    let current_branch = head
+        .shorthand()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    let is_current_branch = current_branch == branch;
+
+    if is_current_branch {
+        // For the current branch, use git merge --ff-only
+        let remote_ref = format!("{}/{}", remote, branch);
+
+        // First fetch the remote branch
+        let fetch_output = std::process::Command::new("git")
+            .args(["fetch", remote, branch])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
+
+        if !fetch_output.status.success() {
+            let stderr = String::from_utf8_lossy(&fetch_output.stderr).to_string();
+            return Ok(create_error_result(&stderr, ""));
+        }
+
+        // Then merge with --ff-only
+        let merge_output = std::process::Command::new("git")
+            .args(["merge", "--ff-only", &remote_ref])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git merge: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&merge_output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&merge_output.stderr).to_string();
+
+        if !merge_output.status.success() {
+            // Check if it's because it can't be fast-forwarded
+            if stderr.contains("Not possible to fast-forward") || stderr.contains("fatal") {
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!(
+                        "Cannot fast-forward '{}': branches have diverged or are up to date",
+                        branch
+                    ),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("fast_forward_failed".to_string()),
+                    conflicting_files: None,
+                });
+            }
+            return Ok(create_error_result(&stderr, &stdout));
+        }
+
+        Ok(create_success_result(format!(
+            "Fast-forwarded '{}' from '{}/{}'",
+            branch, remote, branch
+        )))
+    } else {
+        // For non-current branches, use git fetch remote branch:branch
+        let refspec = format!("{}:{}", branch, branch);
+
+        let output = std::process::Command::new("git")
+            .args(["fetch", remote, &refspec])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if !output.status.success() {
+            // Check for non-fast-forward error
+            if stderr.contains("non-fast-forward") {
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!(
+                        "Cannot fast-forward '{}': local branch has commits not in remote",
+                        branch
+                    ),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("fast_forward_failed".to_string()),
+                    conflicting_files: None,
+                });
+            }
+            return Ok(create_error_result(&stderr, &stdout));
+        }
+
+        Ok(create_success_result(format!(
+            "Fast-forwarded '{}' from '{}/{}'",
+            branch, remote, branch
+        )))
+    }
+}

@@ -686,3 +686,14 @@ pub fn git_flow_finish(
     let path = repo_path.as_ref().ok_or("No repository opened")?;
     repository::git_flow_finish(path, &flow_type, &name, delete_branch)
 }
+
+#[tauri::command]
+pub fn git_fast_forward(
+    branch: String,
+    remote: String,
+    state: State<AppState>,
+) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_fast_forward(path, &branch, &remote)
+}

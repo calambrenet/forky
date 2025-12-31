@@ -438,7 +438,9 @@
     "rebaseConflicts": "Rebase Conflicts",
     "gitFlowFinishSuccess": "Git Flow Completed",
     "gitFlowInitSuccess": "Git Flow initialized successfully",
-    "gitFlowInitFailed": "Failed to initialize Git Flow"
+    "gitFlowInitFailed": "Failed to initialize Git Flow",
+    "fastForwardSuccess": "Fast-forward successful",
+    "fastForwardFailed": "Fast-forward failed"
   },
   "welcome": {
     "title": "Forky",

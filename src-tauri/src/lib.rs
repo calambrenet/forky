@@ -181,6 +181,7 @@ pub fn run() {
             git_commands::git_flow_init,
             git_commands::git_flow_start,
             git_commands::git_flow_finish,
+            git_commands::git_fast_forward,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,
             system_commands::check_git_installed,
