@@ -1,8 +1,9 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GitBranch, Play, Flag, AlertTriangle } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
+import { ModalLoadingIndicator } from './ModalLoadingIndicator';
 import type { GitFlowType } from '../../types/git';
 import './GitModals.css';
 
@@ -13,18 +14,19 @@ interface GitFlowStartModalProps {
   flowType: GitFlowType;
   baseBranch: string;
   prefix: string;
-  isLoading: boolean;
 }
 
 export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
-  ({ isOpen, onClose, onStart, flowType, baseBranch, prefix, isLoading }) => {
+  ({ isOpen, onClose, onStart, flowType, baseBranch, prefix }) => {
     const { t } = useTranslation();
     const [name, setName] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     // Reset when modal opens
     useEffect(() => {
       if (isOpen) {
         setName('');
+        setIsLoading(false);
       }
     }, [isOpen]);
 
@@ -38,11 +40,20 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
       return true;
     }, [name]);
 
-    const handleStart = () => {
-      if (isValidName && !isLoading) {
-        onStart(name.trim());
-      }
-    };
+    const handleStart = useCallback(() => {
+      if (!isValidName || isLoading) return;
+
+      // Set loading state immediately
+      setIsLoading(true);
+
+      // Use requestAnimationFrame to allow React to render the loading state
+      // before the blocking git operation starts
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          onStart(name.trim());
+        });
+      });
+    }, [isValidName, isLoading, onStart, name]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && isValidName && !isLoading) {
@@ -76,54 +87,70 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
       }
     };
 
+    const getLoadingText = () => {
+      switch (flowType) {
+        case 'feature':
+          return t('modals.gitFlowStart.loadingFeature');
+        case 'release':
+          return t('modals.gitFlowStart.loadingRelease');
+        case 'hotfix':
+          return t('modals.gitFlowStart.loadingHotfix');
+        default:
+          return '';
+      }
+    };
+
     const fullBranchName = `${prefix}${name.trim()}`;
     const isStartDisabled = !isValidName || isLoading;
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
         <ModalHeader
           icon={getIcon()}
           title={getTitle()}
           description={t('modals.gitFlowStart.description', { type: flowType })}
         />
-        <ModalBody>
-          <ModalRow label={t('modals.gitFlowStart.baseBranch')}>
-            <div className="track-branch-value">
-              <GitBranch size={14} />
-              <span className="branch-name-display">{baseBranch}</span>
-            </div>
-          </ModalRow>
+        <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
+          <div className={isLoading ? 'modal-content-loading' : undefined}>
+            <ModalRow label={t('modals.gitFlowStart.baseBranch')}>
+              <div className="track-branch-value">
+                <GitBranch size={14} />
+                <span className="branch-name-display">{baseBranch}</span>
+              </div>
+            </ModalRow>
 
-          <ModalRow label={t('modals.gitFlowStart.name')}>
-            <div className="track-branch-input-container">
-              <GitBranch size={14} className="input-icon" />
-              <input
-                type="text"
-                className="track-branch-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t('modals.gitFlowStart.namePlaceholder', { type: flowType })}
-                autoFocus
-                disabled={isLoading}
-              />
-            </div>
-          </ModalRow>
+            <ModalRow label={t('modals.gitFlowStart.name')}>
+              <div className="track-branch-input-container">
+                <GitBranch size={14} className="input-icon" />
+                <input
+                  type="text"
+                  className="track-branch-input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={t('modals.gitFlowStart.namePlaceholder', { type: flowType })}
+                  autoFocus
+                  disabled={isLoading}
+                />
+              </div>
+            </ModalRow>
 
-          {name.trim() && (
-            <div className="modal-info">
-              <GitBranch size={14} />
-              <span>{t('modals.gitFlowStart.willCreate', { branch: fullBranchName })}</span>
-            </div>
-          )}
+            {name.trim() && (
+              <div className="modal-info">
+                <GitBranch size={14} />
+                <span>{t('modals.gitFlowStart.willCreate', { branch: fullBranchName })}</span>
+              </div>
+            )}
+          </div>
         </ModalBody>
 
-        <ModalFooter>
+        <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>
+          <ModalLoadingIndicator isLoading={isLoading} loadingText={getLoadingText()} />
           <button className="btn-cancel" onClick={onClose} disabled={isLoading}>
             {t('common.cancel')}
           </button>
           <button className="btn-primary" onClick={handleStart} disabled={isStartDisabled}>
-            {isLoading ? t('common.loading') : t('modals.gitFlowStart.start')}
+            {t('modals.gitFlowStart.start')}
           </button>
         </ModalFooter>
       </Modal>

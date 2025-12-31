@@ -121,7 +121,8 @@
       "title": "Fetch",
       "description": "Fetch changes from remote repository",
       "remote": "Remote",
-      "fetchAllRemotes": "Fetch all remotes"
+      "fetchAllRemotes": "Fetch all remotes",
+      "loading": "Fetching..."
     },
     "pull": {
       "title": "Pull",
@@ -131,7 +132,8 @@
       "into": "Into",
       "noBranch": "No branch",
       "rebaseInsteadOfMerge": "Rebase instead of merge",
-      "stashAndReapply": "Stash and reapply local changes"
+      "stashAndReapply": "Stash and reapply local changes",
+      "loading": "Pulling..."
     },
     "push": {
       "title": "Push",
@@ -139,7 +141,8 @@
       "branch": "Branch",
       "to": "To",
       "pushAllTags": "Push all tags",
-      "forcePush": "Force push"
+      "forcePush": "Force push",
+      "loading": "Pushing..."
     },
     "credential": {
       "usernameRequired": "Username Required",
@@ -299,7 +302,8 @@
       "typeNoFf": "No Fast-forward",
       "typeSquash": "Squash",
       "merge": "Merge",
-      "merging": "Merging..."
+      "merging": "Merging...",
+      "loading": "Merging..."
     },
     "rebase": {
       "title": "Rebase Branch",
@@ -311,7 +315,8 @@
       "preserveMerges": "Preserve merge commits",
       "autostash": "Automatically stash and restore changes",
       "rebase": "Rebase",
-      "rebasing": "Rebasing..."
+      "rebasing": "Rebasing...",
+      "loading": "Rebasing..."
     },
     "interactiveRebase": {
       "title": "Interactive Rebase",
@@ -324,7 +329,8 @@
       "author": "Author",
       "autostash": "Automatically stash and restore changes",
       "startRebase": "Start Rebase",
-      "noCommits": "No commits to rebase"
+      "noCommits": "No commits to rebase",
+      "loading": "Rebasing..."
     },
     "gitFlowStart": {
       "titleFeature": "Start Feature",
@@ -335,7 +341,10 @@
       "namePlaceholder": "Enter {{type}} name",
       "baseBranch": "Base branch",
       "willCreate": "Will create: {{branch}}",
-      "start": "Start"
+      "start": "Start",
+      "loadingFeature": "Starting feature...",
+      "loadingRelease": "Starting release...",
+      "loadingHotfix": "Starting hotfix..."
     },
     "gitFlowFinish": {
       "titleFeature": "Finish Feature",
@@ -347,7 +356,10 @@
       "mergeIntoBoth": "Will merge into {{master}} and {{develop}}",
       "createTag": "Will create tag '{{tag}}'",
       "deleteBranch": "Delete branch after merge",
-      "finish": "Finish"
+      "finish": "Finish",
+      "loadingFeature": "Finishing feature...",
+      "loadingRelease": "Finishing release...",
+      "loadingHotfix": "Finishing hotfix..."
     },
     "divergentBranches": {
       "title": "Divergent Branches",
@@ -356,7 +368,9 @@
       "merge": "Merge",
       "mergeDescription": "Create a merge commit combining both histories",
       "rebase": "Rebase",
-      "rebaseDescription": "Reapply your commits on top of the remote branch"
+      "rebaseDescription": "Reapply your commits on top of the remote branch",
+      "loadingMerge": "Merging...",
+      "loadingRebase": "Rebasing..."
     }
   },
   "stashDropdown": {

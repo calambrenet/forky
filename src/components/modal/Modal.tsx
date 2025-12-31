@@ -4,7 +4,7 @@ import './Modal.css';
 
 interface ModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   children: ReactNode;
 }
 
@@ -16,10 +16,12 @@ interface ModalHeaderProps {
 
 interface ModalBodyProps {
   children: ReactNode;
+  className?: string;
 }
 
 interface ModalFooterProps {
   children: ReactNode;
+  className?: string;
 }
 
 interface ModalRowProps {
@@ -33,7 +35,7 @@ export const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
 
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && onClose) {
         onClose();
       }
     },
@@ -42,7 +44,7 @@ export const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
-      if (e.target === overlayRef.current) {
+      if (e.target === overlayRef.current && onClose) {
         onClose();
       }
     },
@@ -83,12 +85,12 @@ export const ModalHeader: FC<ModalHeaderProps> = ({ icon, title, description }) 
   );
 };
 
-export const ModalBody: FC<ModalBodyProps> = ({ children }) => {
-  return <div className="modal-body">{children}</div>;
+export const ModalBody: FC<ModalBodyProps> = ({ children, className }) => {
+  return <div className={`modal-body ${className || ''}`}>{children}</div>;
 };
 
-export const ModalFooter: FC<ModalFooterProps> = ({ children }) => {
-  return <div className="modal-footer">{children}</div>;
+export const ModalFooter: FC<ModalFooterProps> = ({ children, className }) => {
+  return <div className={`modal-footer ${className || ''}`}>{children}</div>;
 };
 
 export const ModalRow: FC<ModalRowProps> = ({ label, children }) => {

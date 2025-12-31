@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import { Checkbox } from '../form';
+import { ModalLoadingIndicator } from './ModalLoadingIndicator';
 import type { BranchInfo, InteractiveRebaseEntry, RebaseAction } from '../../types/git';
 import './InteractiveRebaseModal.css';
 import './GitModals.css';
@@ -24,7 +25,7 @@ interface InteractiveRebaseModalProps {
   targetBranch: BranchInfo | null;
   currentBranch: string;
   commits: InteractiveRebaseEntry[];
-  isLoading: boolean;
+  isLoadingCommits: boolean;
 }
 
 const ACTION_OPTIONS: { value: RebaseAction; label: string; icon: React.ReactNode }[] = [
@@ -118,18 +119,20 @@ const CommitRow: FC<CommitRowProps> = memo(
 );
 
 export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
-  ({ isOpen, onClose, onRebase, targetBranch, currentBranch, commits, isLoading }) => {
+  ({ isOpen, onClose, onRebase, targetBranch, currentBranch, commits, isLoadingCommits }) => {
     const { t } = useTranslation();
     const [entries, setEntries] = useState<InteractiveRebaseEntry[]>([]);
     const [autostash, setAutostash] = useState(true);
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Update entries when commits change
     useEffect(() => {
       if (isOpen) {
         setEntries([...commits]);
         setAutostash(true);
+        setIsLoading(false);
       }
     }, [isOpen, commits]);
 
@@ -137,6 +140,7 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
     useEffect(() => {
       if (!isOpen) {
         setEntries([]);
+        setIsLoading(false);
       }
     }, [isOpen]);
 
@@ -169,105 +173,118 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
       setDragOverIndex(null);
     }, [dragIndex, dragOverIndex]);
 
-    const handleRebase = () => {
-      if (!isLoading && entries.length > 0) {
-        onRebase(entries, autostash);
-      }
-    };
+    const handleRebase = useCallback(() => {
+      if (isLoading || isLoadingCommits || entries.length === 0) return;
+
+      // Set loading state immediately
+      setIsLoading(true);
+
+      // Use requestAnimationFrame to allow React to render the loading state
+      // before the blocking git operation starts
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          onRebase(entries, autostash);
+        });
+      });
+    }, [isLoading, isLoadingCommits, entries, autostash, onRebase]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !isLoading && entries.length > 0) {
+      if (e.key === 'Enter' && !isLoading && !isLoadingCommits && entries.length > 0) {
         handleRebase();
       }
     };
 
     const targetBranchName = targetBranch?.name || '';
-    const isRebaseDisabled = isLoading || entries.length === 0;
+    const isRebaseDisabled = isLoading || isLoadingCommits || entries.length === 0;
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
         <ModalHeader
           icon={<RotateCcw size={24} />}
           title={t('modals.interactiveRebase.title')}
           description={t('modals.interactiveRebase.description')}
         />
-        <ModalBody>
-          {/* Branch info */}
-          <div className="interactive-rebase-branches">
-            <div className="branch-info">
-              <span className="branch-label">{t('modals.interactiveRebase.rebasing')}</span>
-              <div className="branch-name">
-                <GitBranch size={14} />
-                <span>{currentBranch}</span>
+        <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
+          <div className={isLoading ? 'modal-content-loading' : undefined}>
+            {/* Branch info */}
+            <div className="interactive-rebase-branches">
+              <div className="branch-info">
+                <span className="branch-label">{t('modals.interactiveRebase.rebasing')}</span>
+                <div className="branch-name">
+                  <GitBranch size={14} />
+                  <span>{currentBranch}</span>
+                </div>
+              </div>
+              <div className="branch-arrow">→</div>
+              <div className="branch-info">
+                <span className="branch-label">{t('modals.interactiveRebase.onto')}</span>
+                <div className="branch-name">
+                  <GitBranch size={14} />
+                  <span>{targetBranchName}</span>
+                </div>
               </div>
             </div>
-            <div className="branch-arrow">→</div>
-            <div className="branch-info">
-              <span className="branch-label">{t('modals.interactiveRebase.onto')}</span>
-              <div className="branch-name">
-                <GitBranch size={14} />
-                <span>{targetBranchName}</span>
+
+            {/* Commits list */}
+            <div className="interactive-rebase-commits" onKeyDown={handleKeyDown}>
+              <div className="commits-header">
+                <span className="header-drag"></span>
+                <span className="header-action">{t('modals.interactiveRebase.action')}</span>
+                <span className="header-commit">{t('modals.interactiveRebase.commit')}</span>
+                <span className="header-message">{t('modals.interactiveRebase.message')}</span>
+                <span className="header-author">{t('modals.interactiveRebase.author')}</span>
+              </div>
+              <div className="commits-list">
+                {isLoadingCommits ? (
+                  <div className="commits-loading">
+                    <RotateCcw size={20} className="spinning" />
+                    <span>{t('common.loading')}</span>
+                  </div>
+                ) : entries.length === 0 ? (
+                  <div className="commits-empty">
+                    <RotateCcw size={20} />
+                    <span>{t('modals.interactiveRebase.noCommits')}</span>
+                  </div>
+                ) : (
+                  entries.map((entry, index) => (
+                    <CommitRow
+                      key={entry.commit_id}
+                      entry={entry}
+                      index={index}
+                      onActionChange={handleActionChange}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragEnd={handleDragEnd}
+                      isDragging={dragIndex === index}
+                      isDragOver={dragOverIndex === index}
+                    />
+                  ))
+                )}
               </div>
             </div>
-          </div>
 
-          {/* Commits list */}
-          <div className="interactive-rebase-commits" onKeyDown={handleKeyDown}>
-            <div className="commits-header">
-              <span className="header-drag"></span>
-              <span className="header-action">{t('modals.interactiveRebase.action')}</span>
-              <span className="header-commit">{t('modals.interactiveRebase.commit')}</span>
-              <span className="header-message">{t('modals.interactiveRebase.message')}</span>
-              <span className="header-author">{t('modals.interactiveRebase.author')}</span>
+            {/* Options */}
+            <div className="interactive-rebase-options">
+              <Checkbox
+                checked={autostash}
+                onChange={setAutostash}
+                label={t('modals.interactiveRebase.autostash')}
+                disabled={isLoading || isLoadingCommits}
+              />
             </div>
-            <div className="commits-list">
-              {isLoading ? (
-                <div className="commits-loading">
-                  <RotateCcw size={20} className="spinning" />
-                  <span>{t('common.loading')}</span>
-                </div>
-              ) : entries.length === 0 ? (
-                <div className="commits-empty">
-                  <RotateCcw size={20} />
-                  <span>{t('modals.interactiveRebase.noCommits')}</span>
-                </div>
-              ) : (
-                entries.map((entry, index) => (
-                  <CommitRow
-                    key={entry.commit_id}
-                    entry={entry}
-                    index={index}
-                    onActionChange={handleActionChange}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                    isDragging={dragIndex === index}
-                    isDragOver={dragOverIndex === index}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Options */}
-          <div className="interactive-rebase-options">
-            <Checkbox
-              checked={autostash}
-              onChange={setAutostash}
-              label={t('modals.interactiveRebase.autostash')}
-              disabled={isLoading}
-            />
           </div>
         </ModalBody>
 
-        <ModalFooter>
-          <button className="btn-cancel" onClick={onClose}>
+        <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>
+          <ModalLoadingIndicator
+            isLoading={isLoading}
+            loadingText={t('modals.interactiveRebase.loading')}
+          />
+          <button className="btn-cancel" onClick={onClose} disabled={isLoading}>
             {t('common.cancel')}
           </button>
           <button className="btn-primary" onClick={handleRebase} disabled={isRebaseDisabled}>
-            {isLoading
-              ? t('modals.interactiveRebase.rebasing')
-              : t('modals.interactiveRebase.startRebase')}
+            {t('modals.interactiveRebase.startRebase')}
           </button>
         </ModalFooter>
       </Modal>

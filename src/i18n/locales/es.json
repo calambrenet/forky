@@ -121,7 +121,8 @@
       "title": "Fetch",
       "description": "Obtener cambios del repositorio remoto",
       "remote": "Remoto",
-      "fetchAllRemotes": "Obtener de todos los remotos"
+      "fetchAllRemotes": "Obtener de todos los remotos",
+      "loading": "Obteniendo..."
     },
     "pull": {
       "title": "Pull",
@@ -131,7 +132,8 @@
       "into": "Hacia",
       "noBranch": "Sin rama",
       "rebaseInsteadOfMerge": "Hacer rebase en lugar de merge",
-      "stashAndReapply": "Guardar y reaplicar cambios locales"
+      "stashAndReapply": "Guardar y reaplicar cambios locales",
+      "loading": "Descargando..."
     },
     "push": {
       "title": "Push",
@@ -139,7 +141,8 @@
       "branch": "Rama",
       "to": "Hacia",
       "pushAllTags": "Enviar todas las etiquetas",
-      "forcePush": "Forzar push"
+      "forcePush": "Forzar push",
+      "loading": "Enviando..."
     },
     "credential": {
       "usernameRequired": "Usuario Requerido",
@@ -299,7 +302,8 @@
       "typeNoFf": "Sin Fast-forward",
       "typeSquash": "Squash",
       "merge": "Fusionar",
-      "merging": "Fusionando..."
+      "merging": "Fusionando...",
+      "loading": "Fusionando..."
     },
     "rebase": {
       "title": "Rebase de Rama",
@@ -311,7 +315,8 @@
       "preserveMerges": "Preservar commits de merge",
       "autostash": "Guardar y restaurar cambios automáticamente",
       "rebase": "Rebase",
-      "rebasing": "Rebaseando..."
+      "rebasing": "Rebaseando...",
+      "loading": "Rebaseando..."
     },
     "interactiveRebase": {
       "title": "Rebase Interactivo",
@@ -324,7 +329,8 @@
       "author": "Autor",
       "autostash": "Guardar y restaurar cambios automáticamente",
       "startRebase": "Iniciar Rebase",
-      "noCommits": "No hay commits para rebase"
+      "noCommits": "No hay commits para rebase",
+      "loading": "Rebaseando..."
     },
     "gitFlowStart": {
       "titleFeature": "Iniciar Feature",
@@ -335,7 +341,10 @@
       "namePlaceholder": "Nombre del {{type}}",
       "baseBranch": "Rama base",
       "willCreate": "Se creará: {{branch}}",
-      "start": "Iniciar"
+      "start": "Iniciar",
+      "loadingFeature": "Iniciando feature...",
+      "loadingRelease": "Iniciando release...",
+      "loadingHotfix": "Iniciando hotfix..."
     },
     "gitFlowFinish": {
       "titleFeature": "Finalizar Feature",
@@ -347,7 +356,10 @@
       "mergeIntoBoth": "Se fusionará en {{master}} y {{develop}}",
       "createTag": "Se creará la etiqueta '{{tag}}'",
       "deleteBranch": "Eliminar rama después del merge",
-      "finish": "Finalizar"
+      "finish": "Finalizar",
+      "loadingFeature": "Finalizando feature...",
+      "loadingRelease": "Finalizando release...",
+      "loadingHotfix": "Finalizando hotfix..."
     },
     "divergentBranches": {
       "title": "Ramas Divergentes",
@@ -356,7 +368,9 @@
       "merge": "Merge",
       "mergeDescription": "Crear un commit de merge combinando ambos historiales",
       "rebase": "Rebase",
-      "rebaseDescription": "Reaplicar tus commits sobre la rama remota"
+      "rebaseDescription": "Reaplicar tus commits sobre la rama remota",
+      "loadingMerge": "Fusionando...",
+      "loadingRebase": "Rebaseando..."
     }
   },
   "stashDropdown": {

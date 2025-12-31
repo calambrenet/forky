@@ -1,9 +1,10 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUp, GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
+import { ModalLoadingIndicator } from './ModalLoadingIndicator';
 import type { BranchInfo } from '../../types/git';
 import './GitModals.css';
 
@@ -36,6 +37,7 @@ export const PushModal: FC<PushModalProps> = memo(
     );
     const [pushTags, setPushTags] = useState(savedOptions?.pushTags ?? false);
     const [forceWithLease, setForceWithLease] = useState(savedOptions?.forceWithLease ?? false);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Get local branches
     const localBranches = useMemo(() => {
@@ -69,75 +71,95 @@ export const PushModal: FC<PushModalProps> = memo(
 
     // Reset to defaults when modal opens
     useEffect(() => {
-      if (isOpen && !savedOptions) {
-        setSelectedBranch(currentBranch || 'main');
-        setSelectedRemote(remotes[0] || 'origin');
-        setPushTags(false);
-        setForceWithLease(false);
+      if (isOpen) {
+        setIsLoading(false);
+        if (!savedOptions) {
+          setSelectedBranch(currentBranch || 'main');
+          setSelectedRemote(remotes[0] || 'origin');
+          setPushTags(false);
+          setForceWithLease(false);
+        }
       }
     }, [isOpen, remotes, currentBranch, savedOptions]);
 
-    const handlePush = () => {
-      onPush({
-        branch: selectedBranch,
-        remote: selectedRemote,
-        remoteBranch: selectedBranch, // Same as local branch by default
-        pushTags,
-        forceWithLease,
+    const handlePush = useCallback(() => {
+      if (isLoading) return;
+
+      // Set loading state immediately
+      setIsLoading(true);
+
+      // Use requestAnimationFrame to allow React to render the loading state
+      // before the blocking git operation starts
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          onPush({
+            branch: selectedBranch,
+            remote: selectedRemote,
+            remoteBranch: selectedBranch, // Same as local branch by default
+            pushTags,
+            forceWithLease,
+          });
+        });
       });
-      onClose();
-    };
+    }, [isLoading, onPush, selectedBranch, selectedRemote, pushTags, forceWithLease]);
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
         <ModalHeader
           icon={<ArrowUp size={24} />}
           title={t('modals.push.title')}
           description={t('modals.push.description')}
         />
-        <ModalBody>
-          <ModalRow label={t('modals.push.branch')}>
-            <Select
-              value={selectedBranch}
-              options={
-                localBranches.length > 0
-                  ? localBranches
-                  : [
-                      {
-                        value: selectedBranch,
-                        label: selectedBranch,
-                        icon: <GitBranch size={14} />,
-                      },
-                    ]
-              }
-              onChange={setSelectedBranch}
-            />
-          </ModalRow>
-          <ModalRow label={t('modals.push.to')}>
-            <Select
-              value={selectedRemote}
-              options={remoteDestinations}
-              onChange={setSelectedRemote}
-            />
-          </ModalRow>
+        <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
+          <div className={isLoading ? 'modal-content-loading' : undefined}>
+            <ModalRow label={t('modals.push.branch')}>
+              <Select
+                value={selectedBranch}
+                options={
+                  localBranches.length > 0
+                    ? localBranches
+                    : [
+                        {
+                          value: selectedBranch,
+                          label: selectedBranch,
+                          icon: <GitBranch size={14} />,
+                        },
+                      ]
+                }
+                onChange={setSelectedBranch}
+                disabled={isLoading}
+              />
+            </ModalRow>
+            <ModalRow label={t('modals.push.to')}>
+              <Select
+                value={selectedRemote}
+                options={remoteDestinations}
+                onChange={setSelectedRemote}
+                disabled={isLoading}
+              />
+            </ModalRow>
+          </div>
         </ModalBody>
-        <div className="modal-checkboxes">
+        <div className={`modal-checkboxes ${isLoading ? 'modal-content-loading' : ''}`}>
           <Checkbox
             checked={pushTags}
             onChange={setPushTags}
             label={t('modals.push.pushAllTags')}
+            disabled={isLoading}
           />
           <Checkbox
             checked={forceWithLease}
             onChange={setForceWithLease}
             label={t('modals.push.forcePush')}
+            disabled={isLoading}
           />
         </div>
-        <ModalFooter>
-          <button className="btn-cancel" onClick={onClose}>
+        <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>
+          <ModalLoadingIndicator isLoading={isLoading} loadingText={t('modals.push.loading')} />
+          <button className="btn-cancel" onClick={onClose} disabled={isLoading}>
             {t('common.cancel')}
           </button>
-          <button className="btn-primary" onClick={handlePush}>
+          <button className="btn-primary" onClick={handlePush} disabled={isLoading}>
             {t('toolbar.push')}
           </button>
         </ModalFooter>

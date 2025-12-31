@@ -253,13 +253,13 @@ function App() {
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [mergeBranch, setMergeBranch] = useState<BranchInfo | null>(null);
   const [mergePreview, setMergePreview] = useState<MergePreview | null>(null);
-  const [isMergePreviewLoading, setIsMergePreviewLoading] = useState(false);
+  const [_isMergePreviewLoading, setIsMergePreviewLoading] = useState(false);
 
   // Rebase modal state
   const [rebaseModalOpen, setRebaseModalOpen] = useState(false);
   const [rebaseBranch, setRebaseBranch] = useState<BranchInfo | null>(null);
   const [rebasePreview, setRebasePreview] = useState<RebasePreview | null>(null);
-  const [isRebasePreviewLoading, setIsRebasePreviewLoading] = useState(false);
+  const [_isRebasePreviewLoading, setIsRebasePreviewLoading] = useState(false);
 
   // Interactive rebase modal state
   const [interactiveRebaseModalOpen, setInteractiveRebaseModalOpen] = useState(false);
@@ -277,7 +277,6 @@ function App() {
   const [gitFlowStartModalOpen, setGitFlowStartModalOpen] = useState(false);
   const [gitFlowStartType, setGitFlowStartType] = useState<GitFlowType>('feature');
   const [gitFlowFinishModalOpen, setGitFlowFinishModalOpen] = useState(false);
-  const [isGitFlowLoading, setIsGitFlowLoading] = useState(false);
 
   // Create Branch modal state (from Branch dropdown)
   const [createBranchModalOpen, setCreateBranchModalOpen] = useState(false);
@@ -1486,7 +1485,6 @@ function App() {
       const fullBranchName = `${prefix}${name}`;
       const command = `git checkout -b ${fullBranchName}`;
 
-      setIsGitFlowLoading(true);
       startOperation('Branch', fullBranchName);
 
       try {
@@ -1522,8 +1520,6 @@ function App() {
         completeOperation({ success: false, message: String(error) });
         addLogEntry('Branch', `Start ${flowType} '${name}'`, command, String(error), false);
         addAlert('error', 'Git Flow Error', String(error));
-      } finally {
-        setIsGitFlowLoading(false);
       }
     },
     [
@@ -1551,7 +1547,6 @@ function App() {
       const name = currentBranchFlowInfo.name;
       const command = `git flow ${flowType} finish ${name}`;
 
-      setIsGitFlowLoading(true);
       startOperation('Merge', `Finish ${flowType} '${name}'`);
 
       try {
@@ -1587,8 +1582,6 @@ function App() {
         completeOperation({ success: false, message: String(error) });
         addLogEntry('Merge', `Finish ${flowType} '${name}'`, command, String(error), false);
         addAlert('error', 'Git Flow Error', String(error));
-      } finally {
-        setIsGitFlowLoading(false);
       }
     },
     [
@@ -1641,6 +1634,7 @@ function App() {
 
           completeOperation(result);
           addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
+          closeModal();
 
           if (result.success) {
             // Refresh to update branch ahead/behind counts
@@ -1654,6 +1648,7 @@ function App() {
           completeOperation({ success: false, message: String(error) });
           addLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
           addAlert('error', 'Fetch Error', String(error));
+          closeModal();
         }
       };
 
@@ -1664,6 +1659,7 @@ function App() {
       isGitLoading,
       saveOptions,
       startOperation,
+      closeModal,
       refreshActiveTab,
       completeOperation,
       addLogEntry,
@@ -1702,6 +1698,7 @@ function App() {
           addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
 
           if (result.success) {
+            closeModal();
             // Refresh to update branch ahead/behind counts
             await refreshActiveTab();
             setLocalChangesRefreshKey((k) => k + 1);
@@ -1711,6 +1708,7 @@ function App() {
             setPendingPullOptions(options);
             setDivergentBranchesModalOpen(true);
           } else {
+            closeModal();
             const errorTitle = getErrorTitle(result.error_type, 'Pull');
             addAlert('error', errorTitle, result.message);
           }
@@ -1719,6 +1717,7 @@ function App() {
           completeOperation({ success: false, message: String(error) });
           addLogEntry('Pull', `Pull ${target}`, command, String(error), false);
           addAlert('error', 'Pull Error', String(error));
+          closeModal();
         }
       };
 
@@ -1731,6 +1730,7 @@ function App() {
       startOperation,
       completeOperation,
       addLogEntry,
+      closeModal,
       addAlert,
       handleSshVerificationRequired,
       refreshActiveTab,
@@ -1774,6 +1774,7 @@ function App() {
 
           completeOperation(result);
           addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
+          closeModal();
 
           if (result.success) {
             // Refresh to update branch ahead/behind counts
@@ -1787,6 +1788,7 @@ function App() {
           completeOperation({ success: false, message: String(error) });
           addLogEntry('Push', `Push to ${target}`, command, String(error), false);
           addAlert('error', 'Push Error', String(error));
+          closeModal();
         }
       };
 
@@ -1798,6 +1800,7 @@ function App() {
       saveOptions,
       startOperation,
       completeOperation,
+      closeModal,
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
@@ -2278,7 +2281,6 @@ function App() {
             sourceBranch={mergeBranch}
             targetBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
             preview={mergePreview}
-            isLoading={isMergePreviewLoading}
           />
         )}
 
@@ -2291,7 +2293,6 @@ function App() {
             targetBranch={rebaseBranch}
             currentBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
             preview={rebasePreview}
-            isLoading={isRebasePreviewLoading}
           />
         )}
 
@@ -2304,7 +2305,7 @@ function App() {
             targetBranch={interactiveRebaseBranch}
             currentBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
             commits={interactiveRebaseCommits}
-            isLoading={isInteractiveRebaseLoading}
+            isLoadingCommits={isInteractiveRebaseLoading}
           />
         )}
 
@@ -2336,7 +2337,6 @@ function App() {
             onClose={handleCloseDivergentModal}
             onMerge={handleDivergentMerge}
             onRebase={handleDivergentRebase}
-            isLoading={isGitLoading}
           />
         )}
 
@@ -2375,7 +2375,6 @@ function App() {
                   ? gitFlowConfig.release_prefix
                   : gitFlowConfig.hotfix_prefix
             }
-            isLoading={isGitFlowLoading}
           />
         )}
 
@@ -2390,7 +2389,6 @@ function App() {
             featureName={currentBranchFlowInfo.name}
             masterBranch={gitFlowConfig.master_branch}
             developBranch={gitFlowConfig.develop_branch}
-            isLoading={isGitFlowLoading}
           />
         )}
       </Suspense>

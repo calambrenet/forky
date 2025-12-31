@@ -1,9 +1,10 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Globe, GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
+import { ModalLoadingIndicator } from './ModalLoadingIndicator';
 import type { BranchInfo } from '../../types/git';
 import './GitModals.css';
 
@@ -35,6 +36,7 @@ export const PullModal: FC<PullModalProps> = memo(
     );
     const [rebase, setRebase] = useState(savedOptions?.rebase ?? false);
     const [autostash, setAutostash] = useState(savedOptions?.autostash ?? false);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Get remote branches for selected remote
     const remoteBranches = useMemo(() => {
@@ -71,23 +73,36 @@ export const PullModal: FC<PullModalProps> = memo(
 
     // Reset to defaults when modal opens
     useEffect(() => {
-      if (isOpen && !savedOptions) {
-        setSelectedRemote(remotes[0] || 'origin');
-        setSelectedBranch(currentBranch || 'main');
-        setRebase(false);
-        setAutostash(false);
+      if (isOpen) {
+        setIsLoading(false);
+        if (!savedOptions) {
+          setSelectedRemote(remotes[0] || 'origin');
+          setSelectedBranch(currentBranch || 'main');
+          setRebase(false);
+          setAutostash(false);
+        }
       }
     }, [isOpen, remotes, currentBranch, savedOptions]);
 
-    const handlePull = () => {
-      onPull({
-        remote: selectedRemote,
-        branch: selectedBranch,
-        rebase,
-        autostash,
+    const handlePull = useCallback(() => {
+      if (isLoading) return;
+
+      // Set loading state immediately
+      setIsLoading(true);
+
+      // Use requestAnimationFrame to allow React to render the loading state
+      // before the blocking git operation starts
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          onPull({
+            remote: selectedRemote,
+            branch: selectedBranch,
+            rebase,
+            autostash,
+          });
+        });
       });
-      onClose();
-    };
+    }, [isLoading, onPull, selectedRemote, selectedBranch, rebase, autostash]);
 
     const remoteOptions = remotes.map((remote) => ({
       value: remote,
@@ -96,57 +111,68 @@ export const PullModal: FC<PullModalProps> = memo(
     }));
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
         <ModalHeader
           icon={<ArrowDown size={24} />}
           title={t('modals.pull.title')}
           description={t('modals.pull.description')}
         />
-        <ModalBody>
-          <ModalRow label={t('modals.pull.remote')}>
-            <Select value={selectedRemote} options={remoteOptions} onChange={setSelectedRemote} />
-          </ModalRow>
-          <ModalRow label={t('modals.pull.branch')}>
-            <Select
-              value={selectedBranch}
-              options={
-                remoteBranches.length > 0
-                  ? remoteBranches
-                  : [
-                      {
-                        value: selectedBranch,
-                        label: selectedBranch,
-                        icon: <GitBranch size={14} />,
-                      },
-                    ]
-              }
-              onChange={setSelectedBranch}
-            />
-          </ModalRow>
-          <ModalRow label={t('modals.pull.into')}>
-            <div className="modal-row-info">
-              <GitBranch size={14} />
-              <span>{currentBranch || t('modals.pull.noBranch')}</span>
-            </div>
-          </ModalRow>
+        <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
+          <div className={isLoading ? 'modal-content-loading' : undefined}>
+            <ModalRow label={t('modals.pull.remote')}>
+              <Select
+                value={selectedRemote}
+                options={remoteOptions}
+                onChange={setSelectedRemote}
+                disabled={isLoading}
+              />
+            </ModalRow>
+            <ModalRow label={t('modals.pull.branch')}>
+              <Select
+                value={selectedBranch}
+                options={
+                  remoteBranches.length > 0
+                    ? remoteBranches
+                    : [
+                        {
+                          value: selectedBranch,
+                          label: selectedBranch,
+                          icon: <GitBranch size={14} />,
+                        },
+                      ]
+                }
+                onChange={setSelectedBranch}
+                disabled={isLoading}
+              />
+            </ModalRow>
+            <ModalRow label={t('modals.pull.into')}>
+              <div className="modal-row-info">
+                <GitBranch size={14} />
+                <span>{currentBranch || t('modals.pull.noBranch')}</span>
+              </div>
+            </ModalRow>
+          </div>
         </ModalBody>
-        <div className="modal-checkboxes">
+        <div className={`modal-checkboxes ${isLoading ? 'modal-content-loading' : ''}`}>
           <Checkbox
             checked={rebase}
             onChange={setRebase}
             label={t('modals.pull.rebaseInsteadOfMerge')}
+            disabled={isLoading}
           />
           <Checkbox
             checked={autostash}
             onChange={setAutostash}
             label={t('modals.pull.stashAndReapply')}
+            disabled={isLoading}
           />
         </div>
-        <ModalFooter>
-          <button className="btn-cancel" onClick={onClose}>
+        <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>
+          <ModalLoadingIndicator isLoading={isLoading} loadingText={t('modals.pull.loading')} />
+          <button className="btn-cancel" onClick={onClose} disabled={isLoading}>
             {t('common.cancel')}
           </button>
-          <button className="btn-primary" onClick={handlePull}>
+          <button className="btn-primary" onClick={handlePull} disabled={isLoading}>
             {t('toolbar.pull')}
           </button>
         </ModalFooter>

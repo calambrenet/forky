@@ -1,9 +1,10 @@
 import type { FC } from 'react';
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Globe } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { Select, Checkbox } from '../form';
+import { ModalLoadingIndicator } from './ModalLoadingIndicator';
 import './GitModals.css';
 
 interface FetchModalProps {
@@ -26,6 +27,7 @@ export const FetchModal: FC<FetchModalProps> = memo(
       savedOptions?.remote || remotes[0] || 'origin'
     );
     const [fetchAll, setFetchAll] = useState(savedOptions?.all ?? true);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Update state when savedOptions change
     useEffect(() => {
@@ -37,19 +39,32 @@ export const FetchModal: FC<FetchModalProps> = memo(
 
     // Reset to defaults when modal opens
     useEffect(() => {
-      if (isOpen && !savedOptions) {
-        setSelectedRemote(remotes[0] || 'origin');
-        setFetchAll(true);
+      if (isOpen) {
+        setIsLoading(false);
+        if (!savedOptions) {
+          setSelectedRemote(remotes[0] || 'origin');
+          setFetchAll(true);
+        }
       }
     }, [isOpen, remotes, savedOptions]);
 
-    const handleFetch = () => {
-      onFetch({
-        remote: selectedRemote,
-        all: fetchAll,
+    const handleFetch = useCallback(() => {
+      if (isLoading) return;
+
+      // Set loading state immediately
+      setIsLoading(true);
+
+      // Use requestAnimationFrame to allow React to render the loading state
+      // before the blocking git operation starts
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          onFetch({
+            remote: selectedRemote,
+            all: fetchAll,
+          });
+        });
       });
-      onClose();
-    };
+    }, [isLoading, onFetch, selectedRemote, fetchAll]);
 
     const remoteOptions = remotes.map((remote) => ({
       value: remote,
@@ -58,34 +73,38 @@ export const FetchModal: FC<FetchModalProps> = memo(
     }));
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
         <ModalHeader
           icon={<Download size={24} />}
           title={t('modals.fetch.title')}
           description={t('modals.fetch.description')}
         />
-        <ModalBody>
-          <ModalRow label={t('modals.fetch.remote')}>
-            <Select
-              value={selectedRemote}
-              options={remoteOptions}
-              onChange={setSelectedRemote}
-              disabled={fetchAll}
-            />
-          </ModalRow>
+        <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
+          <div className={isLoading ? 'modal-content-loading' : undefined}>
+            <ModalRow label={t('modals.fetch.remote')}>
+              <Select
+                value={selectedRemote}
+                options={remoteOptions}
+                onChange={setSelectedRemote}
+                disabled={fetchAll || isLoading}
+              />
+            </ModalRow>
+          </div>
         </ModalBody>
-        <div className="modal-checkboxes">
+        <div className={`modal-checkboxes ${isLoading ? 'modal-content-loading' : ''}`}>
           <Checkbox
             checked={fetchAll}
             onChange={setFetchAll}
             label={t('modals.fetch.fetchAllRemotes')}
+            disabled={isLoading}
           />
         </div>
-        <ModalFooter>
-          <button className="btn-cancel" onClick={onClose}>
+        <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>
+          <ModalLoadingIndicator isLoading={isLoading} loadingText={t('modals.fetch.loading')} />
+          <button className="btn-cancel" onClick={onClose} disabled={isLoading}>
             {t('common.cancel')}
           </button>
-          <button className="btn-primary" onClick={handleFetch}>
+          <button className="btn-primary" onClick={handleFetch} disabled={isLoading}>
             {t('toolbar.fetch')}
           </button>
         </ModalFooter>
