@@ -2075,14 +2075,21 @@ function App() {
     const setupListener = async () => {
       unlisten = await listen<{ repo_path: string; timestamp: number }>(
         'repo-files-changed',
-        (event) => {
+        async (event) => {
           const state = useRepositoryStore.getState();
           const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
 
           if (matchingTab) {
-            // Mark tab as having pending changes
-            if (!matchingTab.hasPendingChanges) {
-              setTabHasPendingChanges(matchingTab.id, true);
+            // Check actual file status to determine if there are pending changes
+            // This avoids false positives from .git directory changes (e.g., after fetch)
+            try {
+              const result = await invoke<{ unstaged: unknown[]; staged: unknown[] }>(
+                'get_file_status_separated'
+              );
+              const hasChanges = result.unstaged.length > 0 || result.staged.length > 0;
+              setTabHasPendingChanges(matchingTab.id, hasChanges);
+            } catch (error) {
+              console.error('Error checking file status:', error);
             }
 
             // If this is the active tab, also refresh the local changes view
