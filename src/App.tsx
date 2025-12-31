@@ -124,6 +124,8 @@ import {
 } from './stores';
 
 import { useTheme } from './hooks/useTheme';
+import { useGitOperation } from './hooks/useGitOperation';
+import { getBranchRemote } from './utils/branchUtils';
 import type {
   BranchInfo,
   ViewMode,
@@ -240,6 +242,9 @@ function App() {
 
   // Theme hook (for system theme detection)
   const { theme, setTheme } = useTheme();
+
+  // Git operation hook (unified operation handling)
+  const { executeOperation } = useGitOperation();
 
   // Panel resize logic
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -2110,72 +2115,56 @@ function App() {
   // Fast-forward a branch to its remote tracking branch
   const handleBranchFastForward = useCallback(
     async (branch: BranchInfo) => {
-      if (!activeTab?.path || isGitLoading) return;
-
-      const remoteName = branch.upstream?.split('/')[0] || 'origin';
+      const remoteName = getBranchRemote(branch);
       const branchName = branch.name;
-      const command = `git fetch ${remoteName} ${branchName}:${branchName}`;
 
-      startOperation('Pull', `Fast-forward ${branchName}`);
-
-      try {
-        const result = await invoke<GitOperationResult>('git_fast_forward', {
-          branch: branchName,
-          remote: remoteName,
-        });
-
-        completeOperation(result);
-        addLogEntry(
-          activeTab?.path || '',
-          'Pull',
-          `Fast-forward '${branchName}' from '${remoteName}'`,
-          command,
-          result.message,
-          result.success
-        );
-
-        if (result.success) {
-          await refreshActiveTab();
-          addAlert('success', t('alerts.fastForwardSuccess'), result.message);
-        } else {
-          addAlert('error', t('alerts.fastForwardFailed'), result.message);
+      await executeOperation(
+        'git_fast_forward',
+        { branch: branchName, remote: remoteName },
+        {
+          operationType: 'Pull',
+          operationTarget: `Fast-forward ${branchName}`,
+          logDescription: `Fast-forward '${branchName}' from '${remoteName}'`,
+          command: `git fetch ${remoteName} ${branchName}:${branchName}`,
+          successAlertKey: 'alerts.fastForwardSuccess',
+          errorAlertKey: 'alerts.fastForwardFailed',
         }
-      } catch (error) {
-        console.error('Error fast-forwarding branch:', error);
-        completeOperation({ success: false, message: String(error) });
-        addLogEntry(
-          activeTab?.path || '',
-          'Pull',
-          `Fast-forward '${branchName}' from '${remoteName}'`,
-          command,
-          String(error),
-          false
-        );
-        addAlert('error', t('alerts.fastForwardFailed'), String(error));
-      }
+      );
     },
-    [activeTab?.path, isGitLoading, startOperation, completeOperation, addLogEntry, refreshActiveTab, addAlert, t]
+    [executeOperation]
   );
 
-  // Open Pull modal pre-configured for a specific branch
-  const handleBranchPull = useCallback(
-    (branch: BranchInfo) => {
-      const remoteName = branch.upstream?.split('/')[0] || 'origin';
-      const branchName = branch.name;
-
-      setPullModalPreset({ remote: remoteName, branch: branchName });
+  /**
+   * Opens Pull modal with optional branch preset
+   * - Without branch: uses current branch (from toolbar)
+   * - With branch: preselects specified branch (from context menu)
+   */
+  const handleOpenPullModal = useCallback(
+    (branch?: BranchInfo) => {
+      if (branch) {
+        const remoteName = getBranchRemote(branch);
+        setPullModalPreset({ remote: remoteName, branch: branch.name });
+      } else {
+        setPullModalPreset(null);
+      }
       openPullModal();
     },
     [openPullModal]
   );
 
-  // Open Push modal pre-configured for a specific branch
-  const handleBranchPush = useCallback(
-    (branch: BranchInfo) => {
-      const remoteName = branch.upstream?.split('/')[0] || 'origin';
-      const branchName = branch.name;
-
-      setPushModalPreset({ branch: branchName, remote: remoteName });
+  /**
+   * Opens Push modal with optional branch preset
+   * - Without branch: uses current branch (from toolbar)
+   * - With branch: preselects specified branch (from context menu)
+   */
+  const handleOpenPushModal = useCallback(
+    (branch?: BranchInfo) => {
+      if (branch) {
+        const remoteName = getBranchRemote(branch);
+        setPushModalPreset({ branch: branch.name, remote: remoteName });
+      } else {
+        setPushModalPreset(null);
+      }
       openPushModal();
     },
     [openPushModal]
@@ -2372,8 +2361,8 @@ function App() {
             onThemeChange={setTheme}
             currentTheme={theme}
             onFetch={openFetchModal}
-            onPull={openPullModal}
-            onPush={openPushModal}
+            onPull={() => handleOpenPullModal()}
+            onPush={() => handleOpenPushModal()}
             onStash={handleOpenSaveStashModal}
             onSaveSnapshot={handleOpenSaveSnapshotModal}
             onStashSelect={handleStashSelect}
@@ -2419,8 +2408,8 @@ function App() {
           onThemeChange={setTheme}
           currentTheme={theme}
           onFetch={openFetchModal}
-          onPull={openPullModal}
-          onPush={openPushModal}
+          onPull={() => handleOpenPullModal()}
+          onPush={() => handleOpenPushModal()}
           onStash={handleOpenSaveStashModal}
           onSaveSnapshot={handleOpenSaveSnapshotModal}
           onStashSelect={handleStashSelect}
@@ -2482,8 +2471,8 @@ function App() {
               onRebaseOn={handleRebaseSelect}
               onInteractiveRebase={handleInteractiveRebaseSelect}
               onFastForward={handleBranchFastForward}
-              onBranchPull={handleBranchPull}
-              onBranchPush={handleBranchPush}
+              onBranchPull={handleOpenPullModal}
+              onBranchPush={handleOpenPushModal}
               expandTagsSection={expandTagsSection}
             />
           </div>

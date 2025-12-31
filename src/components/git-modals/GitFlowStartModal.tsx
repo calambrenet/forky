@@ -34,10 +34,7 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
     }, [isOpen, defaultBaseBranch]);
 
     // Get local branches for selection
-    const localBranches = useMemo(
-      () => branches.filter((b) => !b.is_remote),
-      [branches]
-    );
+    const localBranches = useMemo(() => branches.filter((b) => !b.is_remote), [branches]);
 
     // Validate name (no spaces, no special characters)
     const isValidName = useMemo(() => {
