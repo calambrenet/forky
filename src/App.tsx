@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useRef, useState, lazy, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -10,6 +10,8 @@ import { LocalChangesView } from './components/local-changes';
 import { AllCommitsView } from './components/all-commits/AllCommitsView';
 import { Resizer } from './components/resizer/Resizer';
 import { AlertContainer } from './components/alert';
+import { StatusBar } from './components/status-bar';
+import { ActivityLogPanel } from './components/activity-log-panel';
 import type { FetchOptions, PullOptions, PushOptions } from './components/git-modals';
 
 // Lazy load modals for code splitting
@@ -46,9 +48,6 @@ const DivergentBranchesModal = lazy(() =>
   import('./components/git-modals/DivergentBranchesModal').then((m) => ({
     default: m.DivergentBranchesModal,
   }))
-);
-const GitActivityLog = lazy(() =>
-  import('./components/git-activity-log').then((m) => ({ default: m.GitActivityLog }))
 );
 const AddRemoteModal = lazy(() =>
   import('./components/add-remote-modal').then((m) => ({ default: m.AddRemoteModal }))
@@ -106,17 +105,17 @@ import {
   useGitOperationStore,
   useIsGitLoading,
   useCurrentOperation,
-  useActivityLog,
+  useActivityLogForRepo,
   useModalStore,
   useActiveModal,
   useIsAddRemoteModalOpen,
-  useIsActivityLogOpen,
   useSshVerification,
   useCredentialModal,
   useUIStore,
   useAlerts,
   usePanelSizes,
   useIsResizing,
+  useActivityLogPanelOpen,
 } from './stores';
 
 import { useTheme } from './hooks/useTheme';
@@ -188,13 +187,12 @@ function App() {
   // Git operation store
   const isGitLoading = useIsGitLoading();
   const currentOperation = useCurrentOperation();
-  const activityLog = useActivityLog();
+  const activityLog = useActivityLogForRepo(activeTab?.path);
   const { startOperation, completeOperation, clearOperation, addLogEntry } = useGitOperationStore();
 
   // Modal store
   const activeModal = useActiveModal();
   const isAddRemoteModalOpen = useIsAddRemoteModalOpen();
-  const isActivityLogOpen = useIsActivityLogOpen();
   const sshVerification = useSshVerification();
   const credentialModal = useCredentialModal();
   const {
@@ -204,12 +202,30 @@ function App() {
     closeModal,
     openAddRemoteModal,
     closeAddRemoteModal,
-    openActivityLog,
-    closeActivityLog,
     showSshVerification,
     closeSshVerification,
     closeCredentialModal,
   } = useModalStore();
+
+  // Activity Log Panel (from uiStore)
+  const isActivityLogPanelOpen = useActivityLogPanelOpen();
+  const clearActivityLog = useGitOperationStore((state) => state.clearActivityLog);
+
+  // Memoized activity log stats to avoid recalculating on every render
+  const activityLogStats = useMemo(
+    () => ({
+      total: activityLog.length,
+      errors: activityLog.filter((e) => !e.success).length,
+    }),
+    [activityLog]
+  );
+
+  // Stable callback for clearing activity log
+  const handleClearActivityLog = useCallback(() => {
+    if (activeTab?.path) {
+      clearActivityLog(activeTab.path);
+    }
+  }, [activeTab?.path, clearActivityLog]);
 
   // UI store
   const alerts = useAlerts();
@@ -374,6 +390,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Checkout',
           `Checkout '${branchName}'`,
           command,
@@ -409,7 +426,14 @@ function App() {
       } catch (error) {
         console.error('Error checking out branch:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Checkout', `Checkout '${branchName}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Checkout',
+          `Checkout '${branchName}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', 'Checkout Error', String(error));
       }
     },
@@ -447,6 +471,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Checkout',
           `Checkout '${checkoutConflictBranch}' with stash`,
           command,
@@ -479,6 +504,7 @@ function App() {
         console.error('Error checking out with stash:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
+          activeTab?.path || '',
           'Checkout',
           `Checkout '${checkoutConflictBranch}' with stash`,
           command,
@@ -535,6 +561,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Checkout',
           `Track '${remoteBranchName}' as '${localBranchName}'`,
           command,
@@ -558,6 +585,7 @@ function App() {
         console.error('Error tracking remote branch:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
+          activeTab?.path || '',
           'Checkout',
           `Track '${remoteBranchName}' as '${localBranchName}'`,
           command,
@@ -599,6 +627,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Branch',
           `Create '${branchName}' from '${startPoint}'`,
           command,
@@ -624,6 +653,7 @@ function App() {
         console.error('Error creating branch:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
+          activeTab?.path || '',
           'Branch',
           `Create '${branchName}' from '${startPoint}'`,
           command,
@@ -708,6 +738,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Create tag '${tagName}' at '${startPoint}'`,
           command,
@@ -742,6 +773,7 @@ function App() {
         console.error('Error creating tag:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Create tag '${tagName}' at '${startPoint}'`,
           command,
@@ -787,6 +819,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Rename '${oldName}' to '${newName}'`,
           command,
@@ -809,7 +842,14 @@ function App() {
       } catch (error) {
         console.error('Error renaming branch:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Other', `Rename '${oldName}' to '${newName}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          `Rename '${oldName}' to '${newName}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', 'Rename Error', String(error));
       }
     },
@@ -854,6 +894,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Delete branch '${branchName}'`,
           command,
@@ -871,7 +912,14 @@ function App() {
       } catch (error) {
         console.error('Error deleting branch:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Other', `Delete branch '${branchName}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          `Delete branch '${branchName}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', 'Delete Error', String(error));
       }
     },
@@ -894,14 +942,28 @@ function App() {
 
       try {
         const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
-        addLogEntry('Other', `Add remote '${name}'`, command, result.message, result.success);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          `Add remote '${name}'`,
+          command,
+          result.message,
+          result.success
+        );
 
         if (!result.success) {
           addAlert('error', 'Add Remote Failed', result.message);
         }
       } catch (error) {
         const errorMessage = String(error);
-        addLogEntry('Other', `Add remote '${name}'`, command, errorMessage, false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          `Add remote '${name}'`,
+          command,
+          errorMessage,
+          false
+        );
         addAlert('error', 'Add Remote Error', errorMessage);
         throw error;
       }
@@ -953,6 +1015,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Save ${operationType.toLowerCase()}`,
           command,
@@ -971,7 +1034,14 @@ function App() {
       } catch (error) {
         console.error(`Error saving ${operationType.toLowerCase()}:`, error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Other', `Save ${operationType.toLowerCase()}`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          `Save ${operationType.toLowerCase()}`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', `${operationType} Error`, String(error));
       }
     },
@@ -1001,6 +1071,7 @@ function App() {
 
       completeOperation(result);
       addLogEntry(
+        activeTab?.path || '',
         'Other',
         `Apply stash '${selectedStash.message}'`,
         command,
@@ -1019,7 +1090,14 @@ function App() {
     } catch (error) {
       console.error('Error applying stash:', error);
       completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Apply stash '${selectedStash.message}'`, command, String(error), false);
+      addLogEntry(
+        activeTab?.path || '',
+        'Other',
+        `Apply stash '${selectedStash.message}'`,
+        command,
+        String(error),
+        false
+      );
       addAlert('error', 'Apply Stash Error', String(error));
     }
   }, [
@@ -1049,6 +1127,7 @@ function App() {
 
       completeOperation(result);
       addLogEntry(
+        activeTab?.path || '',
         'Other',
         `Pop stash '${selectedStash.message}'`,
         command,
@@ -1067,7 +1146,14 @@ function App() {
     } catch (error) {
       console.error('Error popping stash:', error);
       completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Pop stash '${selectedStash.message}'`, command, String(error), false);
+      addLogEntry(
+        activeTab?.path || '',
+        'Other',
+        `Pop stash '${selectedStash.message}'`,
+        command,
+        String(error),
+        false
+      );
       addAlert('error', 'Pop Stash Error', String(error));
     }
   }, [
@@ -1097,6 +1183,7 @@ function App() {
 
       completeOperation(result);
       addLogEntry(
+        activeTab?.path || '',
         'Other',
         `Drop stash '${selectedStash.message}'`,
         command,
@@ -1114,7 +1201,14 @@ function App() {
     } catch (error) {
       console.error('Error dropping stash:', error);
       completeOperation({ success: false, message: String(error) });
-      addLogEntry('Other', `Drop stash '${selectedStash.message}'`, command, String(error), false);
+      addLogEntry(
+        activeTab?.path || '',
+        'Other',
+        `Drop stash '${selectedStash.message}'`,
+        command,
+        String(error),
+        false
+      );
       addAlert('error', 'Drop Stash Error', String(error));
     }
   }, [
@@ -1182,6 +1276,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Merge',
           `Merge '${mergeBranch.name}'`,
           command,
@@ -1204,7 +1299,14 @@ function App() {
       } catch (error) {
         console.error('Error merging:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Merge', `Merge '${mergeBranch.name}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Merge',
+          `Merge '${mergeBranch.name}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', t('alerts.mergeFailed'), String(error));
       }
     },
@@ -1272,6 +1374,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Rebase onto '${rebaseBranch.name}'`,
           command,
@@ -1294,7 +1397,14 @@ function App() {
       } catch (error) {
         console.error('Error rebasing:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Other', `Rebase onto '${rebaseBranch.name}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          `Rebase onto '${rebaseBranch.name}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', t('alerts.rebaseFailed'), String(error));
       }
     },
@@ -1362,6 +1472,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Interactive rebase onto '${interactiveRebaseBranch.name}'`,
           command,
@@ -1385,6 +1496,7 @@ function App() {
         console.error('Error during interactive rebase:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
+          activeTab?.path || '',
           'Other',
           `Interactive rebase onto '${interactiveRebaseBranch.name}'`,
           command,
@@ -1495,6 +1607,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Branch',
           `Start ${flowType} '${name}'`,
           command,
@@ -1518,7 +1631,14 @@ function App() {
       } catch (error) {
         console.error('Error starting git flow:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Branch', `Start ${flowType} '${name}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Branch',
+          `Start ${flowType} '${name}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', 'Git Flow Error', String(error));
       }
     },
@@ -1558,6 +1678,7 @@ function App() {
 
         completeOperation(result);
         addLogEntry(
+          activeTab?.path || '',
           'Merge',
           `Finish ${flowType} '${name}'`,
           command,
@@ -1580,7 +1701,14 @@ function App() {
       } catch (error) {
         console.error('Error finishing git flow:', error);
         completeOperation({ success: false, message: String(error) });
-        addLogEntry('Merge', `Finish ${flowType} '${name}'`, command, String(error), false);
+        addLogEntry(
+          activeTab?.path || '',
+          'Merge',
+          `Finish ${flowType} '${name}'`,
+          command,
+          String(error),
+          false
+        );
         addAlert('error', 'Git Flow Error', String(error));
       }
     },
@@ -1633,7 +1761,14 @@ function App() {
           }
 
           completeOperation(result);
-          addLogEntry('Fetch', `Fetch ${target}`, command, result.message, result.success);
+          addLogEntry(
+            activeTab?.path || '',
+            'Fetch',
+            `Fetch ${target}`,
+            command,
+            result.message,
+            result.success
+          );
           closeModal();
 
           if (result.success) {
@@ -1646,7 +1781,14 @@ function App() {
         } catch (error) {
           console.error('Error fetching:', error);
           completeOperation({ success: false, message: String(error) });
-          addLogEntry('Fetch', `Fetch ${target}`, command, String(error), false);
+          addLogEntry(
+            activeTab?.path || '',
+            'Fetch',
+            `Fetch ${target}`,
+            command,
+            String(error),
+            false
+          );
           addAlert('error', 'Fetch Error', String(error));
           closeModal();
         }
@@ -1695,7 +1837,14 @@ function App() {
           }
 
           completeOperation(result);
-          addLogEntry('Pull', `Pull ${target}`, command, result.message, result.success);
+          addLogEntry(
+            activeTab?.path || '',
+            'Pull',
+            `Pull ${target}`,
+            command,
+            result.message,
+            result.success
+          );
 
           if (result.success) {
             closeModal();
@@ -1715,7 +1864,14 @@ function App() {
         } catch (error) {
           console.error('Error pulling:', error);
           completeOperation({ success: false, message: String(error) });
-          addLogEntry('Pull', `Pull ${target}`, command, String(error), false);
+          addLogEntry(
+            activeTab?.path || '',
+            'Pull',
+            `Pull ${target}`,
+            command,
+            String(error),
+            false
+          );
           addAlert('error', 'Pull Error', String(error));
           closeModal();
         }
@@ -1773,7 +1929,14 @@ function App() {
           }
 
           completeOperation(result);
-          addLogEntry('Push', `Push to ${target}`, command, result.message, result.success);
+          addLogEntry(
+            activeTab?.path || '',
+            'Push',
+            `Push to ${target}`,
+            command,
+            result.message,
+            result.success
+          );
           closeModal();
 
           if (result.success) {
@@ -1786,7 +1949,14 @@ function App() {
         } catch (error) {
           console.error('Error pushing:', error);
           completeOperation({ success: false, message: String(error) });
-          addLogEntry('Push', `Push to ${target}`, command, String(error), false);
+          addLogEntry(
+            activeTab?.path || '',
+            'Push',
+            `Push to ${target}`,
+            command,
+            String(error),
+            false
+          );
           addAlert('error', 'Push Error', String(error));
           closeModal();
         }
@@ -2026,7 +2196,6 @@ function App() {
             onBranchChange={handleBranchChange}
             gitOperation={currentOperation}
             onDismissOperation={clearOperation}
-            onOpenActivityLog={openActivityLog}
             onFeedback={() => setFeedbackModalOpen(true)}
             gitFlowConfig={null}
             currentBranchFlowInfo={null}
@@ -2070,7 +2239,6 @@ function App() {
           isLoading={isGitLoading}
           gitOperation={currentOperation}
           onDismissOperation={clearOperation}
-          onOpenActivityLog={openActivityLog}
           onFeedback={() => setFeedbackModalOpen(true)}
           gitFlowConfig={gitFlowConfig}
           currentBranchFlowInfo={currentBranchFlowInfo}
@@ -2325,11 +2493,6 @@ function App() {
           />
         )}
 
-        {/* Git Activity Log */}
-        {isActivityLogOpen && (
-          <GitActivityLog entries={activityLog} isOpen={true} onClose={closeActivityLog} />
-        )}
-
         {/* Divergent Branches Modal */}
         {divergentBranchesModalOpen && (
           <DivergentBranchesModal
@@ -2392,6 +2555,14 @@ function App() {
           />
         )}
       </Suspense>
+
+      {/* Activity Log Panel */}
+      {isActivityLogPanelOpen && (
+        <ActivityLogPanel entries={activityLog} onClear={handleClearActivityLog} />
+      )}
+
+      {/* Status Bar */}
+      <StatusBar entryCount={activityLogStats.total} errorCount={activityLogStats.errors} />
 
       {/* Alert Container - Not lazy loaded as it needs to be always ready */}
       <AlertContainer alerts={alerts} onDismiss={removeAlert} />

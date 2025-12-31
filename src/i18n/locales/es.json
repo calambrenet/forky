@@ -380,12 +380,22 @@
     "yesterday": "Ayer",
     "daysAgo": "días atrás"
   },
+  "statusBar": {
+    "activityLog": "Activity Log"
+  },
   "activityLog": {
-    "title": "Registro de Actividad Git",
-    "noActivity": "Sin actividad aún",
-    "success": "Éxito",
-    "failed": "Fallido",
-    "clearLog": "Limpiar Registro"
+    "title": "Activity Log",
+    "empty": "Sin actividad registrada",
+    "clear": "Limpiar",
+    "error": "Error",
+    "errors": "Errores",
+    "command": "Comando",
+    "time": {
+      "justNow": "Ahora",
+      "minutesAgo": "Hace {n} min",
+      "hoursAgo": "Hace {n}h",
+      "daysAgo": "Hace {n} días"
+    }
   },
   "alerts": {
     "fetchFailed": "Fetch Fallido",

@@ -380,12 +380,22 @@
     "yesterday": "Yesterday",
     "daysAgo": "days ago"
   },
+  "statusBar": {
+    "activityLog": "Activity Log"
+  },
   "activityLog": {
-    "title": "Git Activity Log",
-    "noActivity": "No activity yet",
-    "success": "Success",
-    "failed": "Failed",
-    "clearLog": "Clear Log"
+    "title": "Activity Log",
+    "empty": "No activity recorded",
+    "clear": "Clear",
+    "error": "Error",
+    "errors": "Errors",
+    "command": "Command",
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago",
+      "daysAgo": "{n}d ago"
+    }
   },
   "alerts": {
     "fetchFailed": "Fetch Failed",

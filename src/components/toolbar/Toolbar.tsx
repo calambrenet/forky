@@ -62,7 +62,6 @@ interface ToolbarProps {
   isLoading?: boolean;
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
-  onOpenActivityLog?: () => void;
   onFeedback?: () => void;
 }
 
@@ -96,7 +95,6 @@ export const Toolbar: FC<ToolbarProps> = memo(
     isLoading = false,
     gitOperation,
     onDismissOperation,
-    onOpenActivityLog,
     onFeedback,
   }) => {
     const { t } = useTranslation();
@@ -214,7 +212,6 @@ export const Toolbar: FC<ToolbarProps> = memo(
             onBranchChange={onBranchChange || (() => {})}
             gitOperation={gitOperation}
             onDismissOperation={onDismissOperation}
-            onOpenActivityLog={onOpenActivityLog}
           />
         </div>
 
