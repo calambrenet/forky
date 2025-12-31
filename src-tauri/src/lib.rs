@@ -178,6 +178,7 @@ pub fn run() {
             git_commands::git_interactive_rebase,
             git_commands::get_gitflow_config,
             git_commands::get_current_branch_flow_info,
+            git_commands::git_flow_init,
             git_commands::git_flow_start,
             git_commands::git_flow_finish,
             system_commands::get_system_theme,

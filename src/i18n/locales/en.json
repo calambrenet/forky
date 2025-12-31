@@ -37,6 +37,8 @@
     "openRepository": "Open Repository...",
     "cloneRepository": "Clone Repository...",
     "openInTerminal": "Open in Terminal",
+    "gitFlow": "Git Flow",
+    "initGitFlow": "Initialize Git Flow...",
     "theme": "Theme",
     "themeSystem": "System",
     "themeLight": "Light",
@@ -361,6 +363,18 @@
       "loadingRelease": "Finishing release...",
       "loadingHotfix": "Finishing hotfix..."
     },
+    "gitFlowInit": {
+      "title": "Initialize Git Flow",
+      "description": "Configure Git Flow for this repository",
+      "productionBranch": "Production Branch",
+      "developmentBranch": "Development Branch",
+      "featurePrefix": "Feature Prefix",
+      "releasePrefix": "Release Prefix",
+      "hotfixPrefix": "Hotfix Prefix",
+      "versionTagPrefix": "Version Tag Prefix",
+      "loading": "Initializing...",
+      "initialize": "Initialize"
+    },
     "divergentBranches": {
       "title": "Divergent Branches",
       "description": "Your local and remote branches have diverged",
@@ -422,7 +436,9 @@
     "rebaseSuccess": "Rebase Successful",
     "rebaseFailed": "Rebase Failed",
     "rebaseConflicts": "Rebase Conflicts",
-    "gitFlowFinishSuccess": "Git Flow Completed"
+    "gitFlowFinishSuccess": "Git Flow Completed",
+    "gitFlowInitSuccess": "Git Flow initialized successfully",
+    "gitFlowInitFailed": "Failed to initialize Git Flow"
   },
   "welcome": {
     "title": "Forky",

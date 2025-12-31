@@ -87,6 +87,11 @@ const GitFlowFinishModal = lazy(() =>
     default: m.GitFlowFinishModal,
   }))
 );
+const GitFlowInitModal = lazy(() =>
+  import('./components/git-modals/GitFlowInitModal').then((m) => ({
+    default: m.GitFlowInitModal,
+  }))
+);
 const CreateBranchModal = lazy(() =>
   import('./components/git-modals/CreateBranchModal').then((m) => ({
     default: m.CreateBranchModal,
@@ -293,6 +298,7 @@ function App() {
   const [gitFlowStartModalOpen, setGitFlowStartModalOpen] = useState(false);
   const [gitFlowStartType, setGitFlowStartType] = useState<GitFlowType>('feature');
   const [gitFlowFinishModalOpen, setGitFlowFinishModalOpen] = useState(false);
+  const [gitFlowInitModalOpen, setGitFlowInitModalOpen] = useState(false);
 
   // Create Branch modal state (from Branch dropdown)
   const [createBranchModalOpen, setCreateBranchModalOpen] = useState(false);
@@ -1581,9 +1587,85 @@ function App() {
     }
   }, [currentBranchFlowInfo]);
 
+  // Handle Git Flow Init (open modal)
+  const handleInitGitFlow = useCallback(() => {
+    setGitFlowInitModalOpen(true);
+  }, []);
+
+  // Handle Git Flow Init (actual initialization)
+  const handleGitFlowInit = useCallback(
+    async (config: {
+      masterBranch: string;
+      developBranch: string;
+      featurePrefix: string;
+      releasePrefix: string;
+      hotfixPrefix: string;
+      versionTagPrefix: string;
+    }) => {
+      if (!activeTab?.path || isGitLoading) return;
+
+      startOperation('Other', 'Git Flow Init');
+
+      try {
+        const result = await invoke<GitOperationResult>('git_flow_init', {
+          masterBranch: config.masterBranch,
+          developBranch: config.developBranch,
+          featurePrefix: config.featurePrefix,
+          releasePrefix: config.releasePrefix,
+          hotfixPrefix: config.hotfixPrefix,
+          versionTagPrefix: config.versionTagPrefix,
+        });
+
+        completeOperation(result);
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          'Initialize Git Flow',
+          'git flow init',
+          result.message,
+          result.success
+        );
+
+        setGitFlowInitModalOpen(false);
+
+        if (result.success) {
+          await loadGitFlowConfig();
+          await refreshActiveTab();
+          addAlert('success', t('alerts.gitFlowInitSuccess'), result.message);
+        } else {
+          addAlert('error', t('alerts.gitFlowInitFailed'), result.message);
+        }
+      } catch (error) {
+        console.error('Error initializing git flow:', error);
+        setGitFlowInitModalOpen(false);
+        completeOperation({ success: false, message: String(error) });
+        addLogEntry(
+          activeTab?.path || '',
+          'Other',
+          'Initialize Git Flow',
+          'git flow init',
+          String(error),
+          false
+        );
+        addAlert('error', t('alerts.gitFlowInitFailed'), String(error));
+      }
+    },
+    [
+      activeTab?.path,
+      isGitLoading,
+      startOperation,
+      completeOperation,
+      addLogEntry,
+      loadGitFlowConfig,
+      refreshActiveTab,
+      addAlert,
+      t,
+    ]
+  );
+
   // Handle Git Flow Start
   const handleGitFlowStart = useCallback(
-    async (name: string) => {
+    async (name: string, baseBranch: string) => {
       if (!activeTab?.path || isGitLoading) return;
 
       const flowType = gitFlowStartType;
@@ -1595,7 +1677,7 @@ function App() {
             : gitFlowConfig.hotfix_prefix
         : `${flowType}/`;
       const fullBranchName = `${prefix}${name}`;
-      const command = `git checkout -b ${fullBranchName}`;
+      const command = `git checkout -b ${fullBranchName} ${baseBranch}`;
 
       startOperation('Branch', fullBranchName);
 
@@ -1603,6 +1685,7 @@ function App() {
         const result = await invoke<GitOperationResult>('git_flow_start', {
           flowType,
           name,
+          baseBranch,
         });
 
         completeOperation(result);
@@ -2211,6 +2294,7 @@ function App() {
             onStartRelease={handleStartRelease}
             onStartHotfix={handleStartHotfix}
             onFinishBranch={handleFinishBranch}
+            onInitGitFlow={handleInitGitFlow}
           />
         </TitleBar>
         <div className="loading-overlay">
@@ -2254,6 +2338,7 @@ function App() {
           onStartRelease={handleStartRelease}
           onStartHotfix={handleStartHotfix}
           onFinishBranch={handleFinishBranch}
+          onInitGitFlow={handleInitGitFlow}
         />
       </TitleBar>
 
@@ -2533,11 +2618,12 @@ function App() {
             onClose={() => setGitFlowStartModalOpen(false)}
             onStart={handleGitFlowStart}
             flowType={gitFlowStartType}
-            baseBranch={
+            defaultBaseBranch={
               gitFlowStartType === 'hotfix'
                 ? gitFlowConfig.master_branch
                 : gitFlowConfig.develop_branch
             }
+            branches={activeTabState?.branches ?? []}
             prefix={
               gitFlowStartType === 'feature'
                 ? gitFlowConfig.feature_prefix
@@ -2559,6 +2645,16 @@ function App() {
             featureName={currentBranchFlowInfo.name}
             masterBranch={gitFlowConfig.master_branch}
             developBranch={gitFlowConfig.develop_branch}
+          />
+        )}
+
+        {/* Git Flow Init Modal */}
+        {gitFlowInitModalOpen && (
+          <GitFlowInitModal
+            isOpen={true}
+            onClose={() => setGitFlowInitModalOpen(false)}
+            onInit={handleGitFlowInit}
+            defaultMasterBranch={activeTab?.currentBranch || 'main'}
           />
         )}
       </Suspense>
