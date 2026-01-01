@@ -7,8 +7,8 @@ import {
   useGitOperationStore,
   useRepositoryStore,
   useUIStore,
-} from '../stores';
-import type { GitOperationResult } from '../types/git';
+} from '../../stores';
+import type { GitOperationResult } from '../../types/git';
 
 /**
  * Configuration for a Git operation
@@ -57,22 +57,17 @@ export interface ExecuteOperationResult {
  *
  * @example
  * ```typescript
- * const { executeOperation, canExecute } = useGitOperation();
+ * import { useGitOperation } from '@/hooks/git';
+ * import { deleteBranchOperation } from '@/hooks/git/helpers';
  *
- * const handleFastForward = async (branch: string, remote: string) => {
- *   const { result } = await executeOperation(
- *     'git_fast_forward',
- *     { branch, remote },
- *     {
- *       operationType: 'Pull',
- *       operationTarget: `Fast-forward ${branch}`,
- *       logDescription: `Fast-forward '${branch}' from '${remote}'`,
- *       command: `git fetch ${remote} ${branch}:${branch}`,
- *       successAlertKey: 'alerts.fastForwardSuccess',
- *       errorAlertKey: 'alerts.fastForwardFailed',
- *     }
+ * const { executeOperation } = useGitOperation();
+ *
+ * const handleDeleteBranch = async (branchName: string, force: boolean) => {
+ *   await executeOperation(
+ *     'git_delete_branch',
+ *     { branchName, force },
+ *     deleteBranchOperation(branchName, force)
  *   );
- *   return result?.success ?? false;
  * };
  * ```
  */
