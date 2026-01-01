@@ -1,5 +1,7 @@
 import type { FC, ReactNode } from 'react';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useId } from 'react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { ModalContextProvider, useModalContext } from './ModalContext';
 import './Modal.css';
 
 interface ModalProps {
@@ -31,7 +33,14 @@ interface ModalRowProps {
 
 export const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Generate unique IDs for ARIA attributes
+  const modalId = useId();
+  const titleId = `${modalId}-title`;
+  const descriptionId = `${modalId}-desc`;
+
+  // Focus trap - automatically focuses first element and traps Tab
+  const dialogRef = useFocusTrap<HTMLDivElement>({ isActive: isOpen });
 
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
@@ -66,20 +75,37 @@ export const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
 
   return (
     <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
-      <div className="modal-dialog" ref={dialogRef}>
-        {children}
+      <div
+        className="modal-dialog"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+      >
+        <ModalContextProvider titleId={titleId} descriptionId={descriptionId}>
+          {children}
+        </ModalContextProvider>
       </div>
     </div>
   );
 };
 
 export const ModalHeader: FC<ModalHeaderProps> = ({ icon, title, description }) => {
+  const { titleId, descriptionId } = useModalContext();
+
   return (
     <div className="modal-header">
       {icon && <div className="modal-icon">{icon}</div>}
       <div className="modal-header-text">
-        <h2 className="modal-title">{title}</h2>
-        {description && <p className="modal-description">{description}</p>}
+        <h2 className="modal-title" id={titleId}>
+          {title}
+        </h2>
+        {description && (
+          <p className="modal-description" id={descriptionId}>
+            {description}
+          </p>
+        )}
       </div>
     </div>
   );

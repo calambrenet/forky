@@ -175,3 +175,32 @@
     transform: scale(1) translateY(0);
   }
 }
+
+/* ============================================
+   KEYBOARD ACCESSIBILITY - FOCUS STYLES
+   ============================================ */
+
+/* Focus visible for keyboard navigation only */
+.modal-dialog *:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Enhanced focus style for buttons */
+.modal-footer button:focus-visible {
+  box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.2);
+}
+
+/* Input focus styles */
+.modal-body input:focus-visible,
+.modal-body textarea:focus-visible,
+.modal-body select:focus-visible {
+  outline-offset: -2px;
+  border-color: var(--accent-blue);
+}
+
+/* Remove default outlines on mouse clicks */
+.modal-dialog *:focus:not(:focus-visible) {
+  outline: none;
+}
