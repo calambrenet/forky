@@ -1,0 +1,93 @@
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-height);
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  border-top-left-radius: 7px;
+  border-top-right-radius: 7px;
+  user-select: none;
+}
+
+/* macOS: Add padding for native traffic light buttons */
+.titlebar.macos {
+  padding-left: 78px; /* Space for close, minimize, maximize buttons */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.titlebar-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+
+.titlebar-btn svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.titlebar-controls:hover .titlebar-btn svg {
+  opacity: 1;
+}
+
+.titlebar-btn.close {
+  background-color: #ff5f57;
+}
+
+.titlebar-btn.close:hover {
+  background-color: #ff4136;
+}
+
+.titlebar-btn.close svg {
+  color: #4d0000;
+}
+
+.titlebar-btn.minimize {
+  background-color: #febc2e;
+}
+
+.titlebar-btn.minimize:hover {
+  background-color: #ffb000;
+}
+
+.titlebar-btn.minimize svg {
+  color: #995700;
+}
+
+.titlebar-btn.maximize {
+  background-color: #28c840;
+}
+
+.titlebar-btn.maximize:hover {
+  background-color: #20a835;
+}
+
+.titlebar-btn.maximize svg {
+  color: #006500;
+}
+
+.titlebar-btn:active {
+  opacity: 0.7;
+}
+
+.titlebar-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}

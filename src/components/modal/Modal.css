@@ -1,0 +1,200 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: overlayFadeIn 0.15s ease-out;
+}
+
+.modal-dialog {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 0 1px var(--border-color);
+  min-width: 400px;
+  max-width: 500px;
+  animation: dialogFadeIn 0.15s ease-out;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px 16px;
+}
+
+.modal-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-blue), #0056a3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.modal-icon svg {
+  width: 24px;
+  height: 24px;
+  color: white;
+}
+
+.modal-header-text {
+  flex: 1;
+  padding-top: 4px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-description {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.modal-body {
+  padding: 8px 24px 16px;
+}
+
+.modal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.modal-row:last-child {
+  margin-bottom: 0;
+}
+
+.modal-row-label {
+  width: 70px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.modal-row-content {
+  flex: 1;
+}
+
+.modal-row-info {
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal-row-info svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+}
+
+.modal-checkboxes {
+  padding: 8px 24px 16px;
+  padding-left: 108px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px 20px;
+}
+
+.modal-footer button {
+  min-width: 80px;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.modal-footer .btn-cancel {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.modal-footer .btn-cancel:hover {
+  background-color: var(--bg-hover);
+}
+
+.modal-footer .btn-primary {
+  background-color: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  color: white;
+}
+
+.modal-footer .btn-primary:hover {
+  background-color: #0068c0;
+  border-color: #0068c0;
+}
+
+.modal-footer .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialogFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Focus styles (keyboard navigation only) */
+
+.modal-dialog *:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.modal-footer button:focus-visible {
+  box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.2);
+}
+
+.modal-body input:focus-visible,
+.modal-body textarea:focus-visible,
+.modal-body select:focus-visible {
+  outline-offset: -2px;
+  border-color: var(--accent-blue);
+}
+
+.modal-dialog *:focus:not(:focus-visible) {
+  outline: none;
+}

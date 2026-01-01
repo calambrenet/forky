@@ -1,0 +1,130 @@
+.commit-history {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.commit-header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.commit-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.commit-row {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.commit-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.commit-row.selected {
+  background-color: var(--bg-selected);
+}
+
+.commit-col {
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-col {
+  width: 60px;
+  min-width: 60px;
+  display: flex;
+  justify-content: center;
+}
+
+.message-col {
+  flex: 1;
+  min-width: 200px;
+}
+
+.author-col {
+  width: 150px;
+  min-width: 120px;
+}
+
+.date-col {
+  width: 100px;
+  min-width: 80px;
+}
+
+.sha-col {
+  width: 80px;
+  min-width: 70px;
+}
+
+.graph-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  position: relative;
+}
+
+.graph-line {
+  width: 2px;
+  flex: 1;
+  background-color: var(--accent-blue);
+}
+
+.graph-line.top {
+  position: absolute;
+  top: 0;
+  height: 50%;
+}
+
+.graph-line.bottom {
+  position: absolute;
+  bottom: 0;
+  height: 50%;
+}
+
+.graph-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-blue);
+  z-index: 1;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.commit-message {
+  color: var(--text-primary);
+}
+
+.commit-author {
+  color: var(--text-secondary);
+}
+
+.commit-date {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.commit-sha {
+  font-family: 'SF Mono', Consolas, 'Liberation Mono', monospace;
+  color: var(--accent-orange);
+  font-size: 11px;
+}

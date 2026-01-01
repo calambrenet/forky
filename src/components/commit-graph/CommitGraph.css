@@ -1,0 +1,218 @@
+.commit-graph-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  background-color: var(--bg-primary);
+  font-size: 13px;
+}
+
+/* Header row */
+.commit-graph-header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0;
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.header-graph {
+  flex-shrink: 0;
+}
+
+.header-description {
+  flex: 1;
+  padding: 0 8px;
+  min-width: 200px;
+}
+
+.header-author {
+  width: 140px;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.header-date {
+  width: 130px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.header-sha {
+  width: 80px;
+  padding: 0 8px 0 8px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+/* Scrollable area */
+.commit-graph-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.commit-graph-content {
+  position: relative;
+  min-width: 100%;
+}
+
+/* SVG graph */
+.commit-graph-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Commit rows */
+.commit-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.commit-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.commit-row.selected {
+  background-color: var(--accent-blue);
+}
+
+.commit-row.selected .row-message,
+.commit-row.selected .row-author,
+.commit-row.selected .row-date,
+.commit-row.selected .row-sha {
+  color: white;
+}
+
+/* Graph space in each row (invisible, just for spacing) */
+.row-graph {
+  flex-shrink: 0;
+  height: 100%;
+}
+
+/* Branch labels */
+.row-labels {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-right: 8px;
+}
+
+.branch-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-label.is-head::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background-color: white;
+  border-radius: 50%;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+/* Row columns */
+.row-message {
+  flex: 1;
+  padding: 0 8px;
+  min-width: 200px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-author {
+  width: 140px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-date {
+  width: 130px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.row-sha {
+  width: 80px;
+  padding: 0 8px 0 8px;
+  flex-shrink: 0;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+/* Empty state */
+.commit-graph-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Scrollbar styling */
+.commit-graph-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.commit-graph-scroll::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.commit-graph-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 5px;
+  border: 2px solid var(--bg-secondary);
+}
+
+.commit-graph-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
+}
+
+.commit-graph-scroll::-webkit-scrollbar-corner {
+  background: var(--bg-secondary);
+}

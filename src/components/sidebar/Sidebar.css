@@ -1,0 +1,498 @@
+.sidebar {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Repository Header */
+.sidebar-repo-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+}
+
+/* Filter Input */
+.sidebar-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 4px 8px 8px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.sidebar-filter .filter-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.sidebar-filter .filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.sidebar-filter .filter-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.sidebar-filter .filter-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.sidebar-filter .filter-clear:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.repo-icon-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: var(--accent-blue);
+  border-radius: 6px;
+  color: white;
+}
+
+.repo-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.repo-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.repo-parent {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Navigation Section */
+.sidebar-nav-section {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  margin-bottom: 2px;
+}
+
+.sidebar-nav-item:last-child {
+  margin-bottom: 0;
+}
+
+.sidebar-nav-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.sidebar-nav-item.active {
+  background-color: var(--accent-blue);
+  color: white;
+}
+
+.sidebar-nav-item.active .nav-icon {
+  color: white;
+}
+
+.sidebar-nav-item.active .nav-badge {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.nav-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.nav-badge {
+  background-color: var(--accent-blue);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.sidebar-section {
+  margin-bottom: 4px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.section-header:hover {
+  background-color: var(--bg-hover);
+}
+
+.expand-icon {
+  font-size: 8px;
+  margin-right: 8px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+
+.expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.section-title {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.section-count {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+.section-content {
+  padding-left: 8px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px 5px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 4px;
+  margin: 1px 4px;
+}
+
+.sidebar-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.sidebar-item.active {
+  background-color: var(--bg-selected);
+  color: var(--text-highlight);
+}
+
+.item-icon {
+  margin-right: 8px;
+  font-size: 12px;
+  width: 16px;
+  text-align: center;
+}
+
+.branch-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-branch {
+  padding-left: 36px;
+}
+
+.sidebar-empty {
+  padding: 8px 20px;
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Context Menu */
+.sidebar-context-menu {
+  position: fixed;
+  min-width: 220px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px var(--shadow-color);
+  padding: 6px 0;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.sidebar-context-menu.visible {
+  opacity: 1;
+  visibility: visible;
+  animation: contextMenuFadeIn 0.1s ease-out;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sidebar-context-menu .context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  font-size: 13px;
+  position: relative;
+}
+
+.sidebar-context-menu .context-menu-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.sidebar-context-menu .context-menu-item.checked {
+  padding-left: 8px;
+}
+
+.sidebar-context-menu .context-menu-check {
+  width: 20px;
+  color: var(--accent-blue);
+  font-size: 12px;
+}
+
+.sidebar-context-menu .context-menu-label {
+  flex: 1;
+}
+
+.sidebar-context-menu .context-menu-arrow {
+  font-size: 8px;
+  color: var(--text-secondary);
+  margin-left: 12px;
+}
+
+.sidebar-context-menu .context-menu-separator {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 6px 0;
+}
+
+/* Submenu */
+.sidebar-context-menu .context-menu-item.has-submenu {
+  position: relative;
+}
+
+.sidebar-context-menu .context-submenu {
+  position: absolute;
+  left: calc(100% - 4px);
+  top: -6px;
+  min-width: 280px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px var(--shadow-color);
+  padding: 6px 0;
+  z-index: 10001;
+  animation: contextMenuFadeIn 0.1s ease-out;
+}
+
+.sidebar-context-menu .context-submenu .context-menu-item {
+  padding-left: 12px;
+}
+
+.sidebar-context-menu .context-submenu .context-menu-item.checked {
+  padding-left: 8px;
+}
+
+/* Branch Tree Styles */
+.branch-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  border-radius: 4px;
+  margin: 1px 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+  min-height: 24px;
+}
+
+.tree-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.tree-item.current-branch {
+  font-weight: 600;
+}
+
+.tree-item.current-branch .tree-icon.branch-icon {
+  color: var(--accent-green);
+}
+
+.tree-expand-icon {
+  width: 12px;
+  font-size: 8px;
+  color: var(--text-secondary);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.tree-expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-expand-icon.placeholder {
+  visibility: hidden;
+}
+
+.tree-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.tree-icon {
+  color: var(--text-secondary);
+}
+
+.tree-icon.folder-icon {
+  color: var(--text-secondary);
+}
+
+.tree-icon.branch-icon {
+  color: var(--text-secondary);
+}
+
+.tree-icon.branch-icon.current {
+  color: var(--accent-green);
+}
+
+.tree-icon.tag-icon {
+  color: var(--accent-orange);
+}
+
+.tree-icon.remote-icon {
+  color: var(--accent-blue);
+}
+
+.tree-node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Branch ahead/behind counters */
+.branch-counters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+}
+
+.branch-counter {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.branch-counter.ahead {
+  color: var(--accent-green);
+}
+
+.branch-counter.behind {
+  color: var(--accent-orange);
+}
+
+/* Stash List Styles */
+.stash-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.stash-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px 5px 20px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  border-radius: 4px;
+  margin: 1px 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.stash-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.stash-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

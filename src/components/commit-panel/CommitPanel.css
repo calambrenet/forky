@@ -1,0 +1,152 @@
+.commit-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.commit-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.commit-subject {
+  flex: 1;
+  padding: 8px 12px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.commit-subject:focus {
+  border-color: var(--accent-blue);
+}
+
+.commit-subject:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.commit-subject::placeholder {
+  color: var(--text-secondary);
+}
+
+.commit-subject-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.commit-description {
+  padding: 8px 12px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  min-height: 60px;
+  transition: border-color 0.15s;
+}
+
+.commit-description:focus {
+  border-color: var(--accent-blue);
+}
+
+.commit-description:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.commit-description::placeholder {
+  color: var(--text-secondary);
+}
+
+.commit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.commit-amend-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.commit-amend-label input[type='checkbox'] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.commit-amend-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.commit-amend-label:hover .commit-amend-checkbox {
+  border-color: var(--accent-blue);
+}
+
+.commit-amend-checkbox[data-checked='true'] {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.commit-amend-checkbox svg {
+  color: white;
+}
+
+.commit-amend-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.commit-button {
+  padding: 8px 16px;
+  background-color: var(--accent-blue);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
+}
+
+.commit-button:hover:not(:disabled) {
+  background-color: var(--accent-blue-hover, #2563eb);
+}
+
+.commit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

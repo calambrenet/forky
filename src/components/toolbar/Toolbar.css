@@ -1,0 +1,143 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  flex: 1;
+  padding: 0 12px;
+  gap: 16px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Vertical button layout - icon on top, label below */
+.toolbar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 48px;
+  height: 52px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: var(--text-primary);
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-hover);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-btn svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.btn-label {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.toolbar-btn:hover .btn-label {
+  color: var(--text-primary);
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 40px;
+  background: var(--border-color);
+  margin: 0 8px;
+}
+
+.toolbar-icon-btn,
+.hamburger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: var(--text-primary);
+}
+
+.toolbar-icon-btn:hover,
+.hamburger-btn:hover {
+  background: var(--bg-hover);
+}
+
+.toolbar-icon-btn svg,
+.hamburger-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Split button for Stash */
+.toolbar-split-btn {
+  display: flex;
+  position: relative;
+}
+
+.toolbar-split-btn .split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: 8px;
+}
+
+.toolbar-split-btn .split-dropdown-trigger {
+  min-width: 20px;
+  width: 20px;
+  padding: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid var(--border-color);
+}
+
+.toolbar-split-btn .split-dropdown-trigger svg {
+  width: 10px;
+  height: 10px;
+}
+
+.toolbar-split-btn .split-dropdown-trigger:hover {
+  background: var(--bg-hover);
+}
+
+/* Simple dropdown container (no split button) */
+.toolbar-dropdown-container {
+  position: relative;
+}

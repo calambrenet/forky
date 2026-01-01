@@ -1,0 +1,40 @@
+.resizer {
+  flex-shrink: 0;
+  background-color: var(--border-color);
+  position: relative;
+  z-index: 10;
+  transition: background-color 0.15s;
+}
+
+.resizer-horizontal {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.resizer-vertical {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.resizer:hover,
+.resizer.resizing {
+  background-color: var(--accent-blue);
+}
+
+.resizer-handle {
+  position: absolute;
+}
+
+.resizer-horizontal .resizer-handle {
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+
+.resizer-vertical .resizer-handle {
+  left: 0;
+  right: 0;
+  top: -4px;
+  bottom: -4px;
+}

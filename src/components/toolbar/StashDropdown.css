@@ -1,0 +1,91 @@
+/* Stash Dropdown */
+.stash-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 300px;
+  max-width: 400px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 20px var(--shadow-color),
+    0 0 1px var(--border-color);
+  z-index: 1000;
+  animation: stashDropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes stashDropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stash-dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.stash-dropdown-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.stash-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.stash-dropdown-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.stash-dropdown-message {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stash-dropdown-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.stash-dropdown-empty {
+  padding: 16px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.stash-dropdown-separator {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+.stash-dropdown-action {
+  color: var(--text-primary);
+}
+
+.stash-dropdown-action svg {
+  color: var(--text-secondary);
+}

@@ -1,0 +1,189 @@
+.repo-info-box {
+  position: relative;
+  min-width: 250px;
+  max-width: 300px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+/* Normal state content - vertical layout */
+.repo-info-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 16px;
+}
+
+.repo-info-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.repo-info-branch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--accent-green);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.repo-info-branch:hover {
+  background: var(--bg-hover);
+}
+
+.repo-info-branch .branch-text {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Operation overlay */
+.repo-info-operation {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px 0;
+}
+
+.operation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.operation-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.operation-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.operation-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.operation-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.operation-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
+.operation-status {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Progress bar */
+.operation-progress {
+  height: 3px;
+  margin-top: 8px;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.operation-progress-fill {
+  height: 100%;
+  background: var(--accent-blue);
+  width: 0;
+  transition: width 0.3s ease;
+}
+
+.operation-progress-fill.complete {
+  width: 100%;
+}
+
+.operation-progress-fill.error {
+  background: var(--accent-red);
+  width: 100%;
+}
+
+/* Indeterminate animation */
+.operation-progress-fill.indeterminate {
+  width: 30%;
+  animation: indeterminate 1.5s infinite ease-in-out;
+}
+
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* Spinner */
+.repo-info-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-secondary);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error state */
+.repo-info-operation.error .operation-title {
+  color: var(--accent-red);
+}
+
+/* Complete success state */
+.repo-info-operation.complete:not(.error) .operation-status {
+  color: var(--accent-green);
+}
