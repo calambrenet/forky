@@ -4,6 +4,10 @@ A cross-platform Git client inspired by [Fork](https://git-fork.com/).
 
 ![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcalambrenet%2Fforky%2Fmain%2Fpackage.json&query=%24.version&label=version&color=blue)
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+
+> **Warning**
+> This software is in **alpha stage**. It is not recommended for use in production environments or critical projects. Expect bugs, incomplete features, and breaking changes between versions. Use at your own risk.
 
 ## About
 
