@@ -120,14 +120,14 @@ Built with:
 
 ### Pre-built Binaries
 
-Pre-built binaries will be available in the [Releases](../../releases) section once we set up the official repository.
+Download the latest version from the [Releases](https://github.com/calambrenet/forky/releases) page.
 
 | Platform | Format |
 |----------|--------|
 | Windows | `.msi`, `.exe` |
-| macOS Intel | `.dmg` (x64) |
-| macOS Apple Silicon | `.dmg` (aarch64) |
+| macOS Apple Silicon | `.dmg` |
 | Linux (Debian/Ubuntu) | `.deb` |
+| Linux (Fedora/openSUSE) | `.rpm` |
 | Linux (Universal) | `.AppImage` |
 
 ### Building from Source
@@ -158,7 +158,7 @@ xcode-select --install
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/forky.git
+git clone https://github.com/calambrenet/forky.git
 cd forky
 
 # Install frontend dependencies
@@ -284,7 +284,14 @@ Consulta el archivo [LICENSE](LICENSE) para obtener más detalles.
 - [Tauri](https://tauri.app/) - For making cross-platform desktop apps with web technologies actually good.
 - [libgit2](https://libgit2.org/) - For the Git implementation that powers this app.
 
----
+## Author
 
+**José Luis Castro**
+
+[![Website](https://img.shields.io/badge/Website-jluiscastro.com-blue?style=flat-square&logo=google-chrome&logoColor=white)](https://jluiscastro.com)
+[![Twitter](https://img.shields.io/badge/Twitter-@calambrenet-1DA1F2?style=flat-square&logo=x&logoColor=white)](https://x.com/calambrenet)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-jluiscastro-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jluiscastro/)
+
+---
 
 **Note:** This is a personal project built for my own use. It works for me, but your mileage may vary. Bug reports and contributions are welcome, but please don't expect enterprise-level support.
