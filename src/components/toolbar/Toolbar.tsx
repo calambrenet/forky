@@ -64,6 +64,7 @@ interface ToolbarProps {
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
   onFeedback?: () => void;
+  onAbout?: () => void;
 }
 
 const ICON_SIZE = 16;
@@ -98,6 +99,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     gitOperation,
     onDismissOperation,
     onFeedback,
+    onAbout,
   }) => {
     const { t } = useTranslation();
     const appWindow = getCurrentWindow();
@@ -123,10 +125,6 @@ export const Toolbar: FC<ToolbarProps> = memo(
 
     const handleKeyboardShortcuts = () => {
       // TODO: Show keyboard shortcuts
-    };
-
-    const handleAbout = () => {
-      // TODO: Show about dialog
     };
 
     const handleHelp = () => {
@@ -356,7 +354,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
             <MenuItem icon={<HelpCircle size={ICON_SIZE} />} shortcut="F1" onClick={handleHelp}>
               {t('menu.help')}
             </MenuItem>
-            <MenuItem icon={<Info size={ICON_SIZE} />} onClick={handleAbout}>
+            <MenuItem icon={<Info size={ICON_SIZE} />} onClick={onAbout}>
               {t('menu.about')}
             </MenuItem>
             <MenuSeparator />

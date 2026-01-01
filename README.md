@@ -290,7 +290,7 @@ See the [LICENSE](LICENSE) file for details.
 
 ## Author
 
-**José Luis Castro**
+**José Luis Castro (@calambrenet)**
 
 [![Website](https://img.shields.io/badge/Website-jluiscastro.com-blue?style=flat-square&logo=google-chrome&logoColor=white)](https://jluiscastro.com)
 [![Twitter](https://img.shields.io/badge/Twitter-@calambrenet-1DA1F2?style=flat-square&logo=x&logoColor=white)](https://x.com/calambrenet)

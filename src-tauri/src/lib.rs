@@ -29,12 +29,16 @@ pub fn run() {
 
             // macOS app menu (required as first menu on macOS)
             #[cfg(target_os = "macos")]
+            let about_forky =
+                MenuItem::with_id(app, "about_forky", "About Forky", true, None::<&str>)?;
+
+            #[cfg(target_os = "macos")]
             let app_menu = Submenu::with_items(
                 app,
                 "Forky",
                 true,
                 &[
-                    &PredefinedMenuItem::about(app, Some("About Forky"), None)?,
+                    &about_forky,
                     &PredefinedMenuItem::separator(app)?,
                     &PredefinedMenuItem::services(app, Some("Services"))?,
                     &PredefinedMenuItem::separator(app)?,
@@ -195,6 +199,11 @@ pub fn run() {
                 // Emit event to frontend to open the folder picker
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.emit("menu-open-repository", ());
+                }
+            } else if event.id() == "about_forky" {
+                // Emit event to frontend to open the About modal
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("menu-about", ());
                 }
             }
         })

@@ -97,6 +97,9 @@ const CreateBranchModal = lazy(() =>
     default: m.CreateBranchModal,
   }))
 );
+const AboutModal = lazy(() =>
+  import('./components/about-modal').then((m) => ({ default: m.AboutModal }))
+);
 
 // Zustand stores
 import {
@@ -280,6 +283,9 @@ function App() {
 
   // Feedback modal state
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+
+  // About modal state
+  const [aboutModalOpen, setAboutModalOpen] = useState(false);
 
   // Stash modal state
   const [saveStashModalOpen, setSaveStashModalOpen] = useState(false);
@@ -1689,6 +1695,25 @@ function App() {
     };
   }, [handleOpenRepo]);
 
+  // Menu event: listen for "About Forky" from native menu
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen('menu-about', () => {
+        setAboutModalOpen(true);
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
+
   // Check if Git is installed on startup
   useEffect(() => {
     const checkGitInstallation = async () => {
@@ -1734,6 +1759,7 @@ function App() {
             gitOperation={currentOperation}
             onDismissOperation={clearOperation}
             onFeedback={() => setFeedbackModalOpen(true)}
+            onAbout={() => setAboutModalOpen(true)}
             gitFlowConfig={null}
             currentBranchFlowInfo={null}
             onNewBranch={handleNewBranch}
@@ -1778,6 +1804,7 @@ function App() {
           gitOperation={currentOperation}
           onDismissOperation={clearOperation}
           onFeedback={() => setFeedbackModalOpen(true)}
+          onAbout={() => setAboutModalOpen(true)}
           gitFlowConfig={gitFlowConfig}
           currentBranchFlowInfo={currentBranchFlowInfo}
           onNewBranch={handleNewBranch}
@@ -1976,6 +2003,9 @@ function App() {
         {feedbackModalOpen && (
           <FeedbackModal isOpen={true} onClose={() => setFeedbackModalOpen(false)} />
         )}
+
+        {/* About Modal */}
+        {aboutModalOpen && <AboutModal isOpen={true} onClose={() => setAboutModalOpen(false)} />}
 
         {/* Save Stash Modal */}
         {saveStashModalOpen && (

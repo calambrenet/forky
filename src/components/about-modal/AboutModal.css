@@ -1,0 +1,167 @@
+.about-modal-body {
+  text-align: center;
+  padding: 24px 32px !important;
+}
+
+.about-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.about-logo-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.about-app-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.about-app-name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.about-app-tagline {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.about-version-info {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.about-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.about-version-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.about-version-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+}
+
+.about-version-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f97316;
+  color: white;
+}
+
+.about-description {
+  margin-bottom: 16px;
+}
+
+.about-description p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.about-links {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.about-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.about-link:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.about-link svg {
+  opacity: 0.7;
+}
+
+.about-author {
+  margin-bottom: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.about-author-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.about-author-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.about-author-link {
+  font-size: 13px;
+  color: var(--accent-blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.15s ease;
+}
+
+.about-author-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.about-author-separator {
+  color: var(--text-tertiary);
+}
+
+.about-license {
+  padding-top: 12px;
+}
+
+.about-license p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}

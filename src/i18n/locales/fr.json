@@ -428,6 +428,16 @@
     "remoteBranches": "Branches Distantes",
     "noBranches": "Aucune branche disponible"
   },
+  "about": {
+    "version": "Version",
+    "tauriVersion": "Tauri",
+    "alpha": "Alpha",
+    "description": "Un client Git multiplateforme inspiré de Fork. Construit avec Tauri, React et Rust.",
+    "releases": "Versions",
+    "reportIssue": "Signaler un Problème",
+    "createdBy": "Créé par",
+    "license": "Sous licence GPL-3.0"
+  },
   "validation": {
     "branchNameEmpty": "Le nom ne peut pas être vide",
     "branchNameInvalidStart": "Ne peut pas commencer par '.' ou '-'",

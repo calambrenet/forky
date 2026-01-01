@@ -531,6 +531,16 @@
     "startHotfix": "Iniciar Hotfix...",
     "finishBranch": "Finalizar '{{name}}'..."
   },
+  "about": {
+    "version": "Versión",
+    "tauriVersion": "Tauri",
+    "alpha": "Alfa",
+    "description": "Un cliente Git multiplataforma inspirado en Fork. Construido con Tauri, React y Rust.",
+    "releases": "Versiones",
+    "reportIssue": "Reportar Problema",
+    "createdBy": "Creado por",
+    "license": "Licenciado bajo GPL-3.0"
+  },
   "validation": {
     "branchNameEmpty": "El nombre no puede estar vacío",
     "branchNameInvalidStart": "No puede empezar con '.' o '-'",
