@@ -1,10 +1,11 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tag, GitBranch, AlertTriangle } from 'lucide-react';
+import { Tag, GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
-import { Checkbox } from '../form';
+import { Checkbox, BranchNameInput } from '../form';
 import type { BranchInfo, TagInfo } from '../../types/git';
+import type { ValidationResult } from '../../utils/branchNameValidation';
 import './GitModals.css';
 
 interface CreateTagModalProps {
@@ -26,6 +27,12 @@ export const CreateTagModal: FC<CreateTagModalProps> = memo(
     const [tagName, setTagName] = useState('');
     const [message, setMessage] = useState('');
     const [pushToRemotes, setPushToRemotes] = useState(true);
+    const [isValid, setIsValid] = useState(false);
+
+    // Get existing tag names for validation
+    const existingTagNames = useMemo(() => {
+      return existingTags.map((tag) => tag.name);
+    }, [existingTags]);
 
     // Reset when modal opens
     useEffect(() => {
@@ -33,52 +40,32 @@ export const CreateTagModal: FC<CreateTagModalProps> = memo(
         setTagName('');
         setMessage('');
         setPushToRemotes(true);
+        setIsValid(false);
       }
     }, [isOpen]);
 
-    // Check if tag name already exists
-    const tagExists = useMemo(() => {
-      if (!tagName.trim()) return false;
-      return existingTags.some((t) => t.name === tagName.trim());
-    }, [existingTags, tagName]);
+    const handleValidationChange = useCallback((result: ValidationResult) => {
+      setIsValid(result.isValid);
+    }, []);
 
-    // Validate tag name (similar to git ref name validation)
-    const isValidTagName = useMemo(() => {
-      const name = tagName.trim();
-      if (!name) return false;
-      // Git tag name rules: no spaces, no "..", no starting with ".", no ending with ".lock", etc.
-      if (name.startsWith('.') || name.startsWith('-')) return false;
-      if (name.endsWith('.') || name.endsWith('.lock')) return false;
-      if (name.includes('..') || name.includes('~') || name.includes('^') || name.includes(':'))
-        return false;
-      if (
-        name.includes('\\') ||
-        name.includes(' ') ||
-        name.includes('?') ||
-        name.includes('*') ||
-        name.includes('[')
-      )
-        return false;
-      if (name.includes('@{')) return false;
-      return true;
-    }, [tagName]);
-
-    const handleCreate = () => {
-      if (!tagExists && isValidTagName && sourceBranch) {
+    const handleCreate = useCallback(() => {
+      if (isValid && sourceBranch && tagName) {
         const trimmedMessage = message.trim();
-        onCreate(tagName.trim(), sourceBranch.name, trimmedMessage || null, pushToRemotes);
+        onCreate(tagName, sourceBranch.name, trimmedMessage || null, pushToRemotes);
         onClose();
       }
-    };
+    }, [isValid, sourceBranch, tagName, message, pushToRemotes, onCreate, onClose]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey && !tagExists && isValidTagName) {
-        handleCreate();
-      }
-    };
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey && isValid) {
+          handleCreate();
+        }
+      },
+      [isValid, handleCreate]
+    );
 
-    const isCreateDisabled = tagExists || !isValidTagName || !tagName.trim();
-
+    const isCreateDisabled = !isValid || !tagName;
     const sourceBranchDisplayName = sourceBranch?.name || '';
 
     return (
@@ -96,18 +83,16 @@ export const CreateTagModal: FC<CreateTagModalProps> = memo(
             </div>
           </ModalRow>
           <ModalRow label={t('modals.createTag.tagName')}>
-            <div className="track-branch-input-container">
-              <Tag size={14} className="input-icon" />
-              <input
-                type="text"
-                className="track-branch-input"
-                value={tagName}
-                onChange={(e) => setTagName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t('modals.createTag.tagNamePlaceholder')}
-                autoFocus
-              />
-            </div>
+            <BranchNameInput
+              value={tagName}
+              onChange={setTagName}
+              onKeyDown={handleKeyDown}
+              onValidationChange={handleValidationChange}
+              existingNames={existingTagNames}
+              mode="tag"
+              placeholder={t('modals.createTag.tagNamePlaceholder')}
+              autoFocus
+            />
           </ModalRow>
           <ModalRow label={t('modals.createTag.message')}>
             <textarea
@@ -126,12 +111,6 @@ export const CreateTagModal: FC<CreateTagModalProps> = memo(
             label={t('modals.createTag.pushToRemotes')}
           />
         </div>
-        {tagExists && (
-          <div className="modal-warning">
-            <AlertTriangle size={16} />
-            <span>{t('modals.createTag.tagExists', { tag: tagName })}</span>
-          </div>
-        )}
         <ModalFooter>
           <button className="btn-cancel" onClick={onClose}>
             {t('common.cancel')}

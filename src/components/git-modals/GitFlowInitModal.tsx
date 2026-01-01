@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { ModalLoadingIndicator } from './ModalLoadingIndicator';
+import { BranchNameInput } from '../form';
 import './GitModals.css';
 
 interface GitFlowInitModalProps {
@@ -45,11 +46,11 @@ export const GitFlowInitModal: FC<GitFlowInitModalProps> = memo(
     }, [isOpen, defaultMasterBranch]);
 
     const isValid =
-      masterBranch.trim() !== '' &&
-      developBranch.trim() !== '' &&
-      featurePrefix.trim() !== '' &&
-      releasePrefix.trim() !== '' &&
-      hotfixPrefix.trim() !== '';
+      masterBranch !== '' &&
+      developBranch !== '' &&
+      featurePrefix !== '' &&
+      releasePrefix !== '' &&
+      hotfixPrefix !== '';
 
     const handleInit = useCallback(() => {
       if (!isValid || isLoading) return;
@@ -59,12 +60,12 @@ export const GitFlowInitModal: FC<GitFlowInitModalProps> = memo(
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           onInit({
-            masterBranch: masterBranch.trim(),
-            developBranch: developBranch.trim(),
-            featurePrefix: featurePrefix.trim(),
-            releasePrefix: releasePrefix.trim(),
-            hotfixPrefix: hotfixPrefix.trim(),
-            versionTagPrefix: versionTagPrefix.trim(),
+            masterBranch,
+            developBranch,
+            featurePrefix,
+            releasePrefix,
+            hotfixPrefix,
+            versionTagPrefix,
           });
         });
       });
@@ -80,11 +81,14 @@ export const GitFlowInitModal: FC<GitFlowInitModalProps> = memo(
       versionTagPrefix,
     ]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && isValid && !isLoading) {
-        handleInit();
-      }
-    };
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && isValid && !isLoading) {
+          handleInit();
+        }
+      },
+      [isValid, isLoading, handleInit]
+    );
 
     return (
       <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
@@ -96,75 +100,73 @@ export const GitFlowInitModal: FC<GitFlowInitModalProps> = memo(
         <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
           <div className={isLoading ? 'modal-content-loading' : undefined}>
             <ModalRow label={t('modals.gitFlowInit.productionBranch')}>
-              <input
-                type="text"
-                className="modal-input"
+              <BranchNameInput
                 value={masterBranch}
-                onChange={(e) => setMasterBranch(e.target.value)}
+                onChange={setMasterBranch}
                 onKeyDown={handleKeyDown}
                 placeholder="main"
-                autoFocus
                 disabled={isLoading}
+                showErrors={false}
+                autoFocus
               />
             </ModalRow>
 
             <ModalRow label={t('modals.gitFlowInit.developmentBranch')}>
-              <input
-                type="text"
-                className="modal-input"
+              <BranchNameInput
                 value={developBranch}
-                onChange={(e) => setDevelopBranch(e.target.value)}
+                onChange={setDevelopBranch}
                 onKeyDown={handleKeyDown}
                 placeholder="develop"
                 disabled={isLoading}
+                showErrors={false}
               />
             </ModalRow>
 
             <ModalRow label={t('modals.gitFlowInit.featurePrefix')}>
-              <input
-                type="text"
-                className="modal-input"
+              <BranchNameInput
                 value={featurePrefix}
-                onChange={(e) => setFeaturePrefix(e.target.value)}
+                onChange={setFeaturePrefix}
                 onKeyDown={handleKeyDown}
                 placeholder="feature/"
+                mode="prefix"
                 disabled={isLoading}
+                showErrors={false}
               />
             </ModalRow>
 
             <ModalRow label={t('modals.gitFlowInit.releasePrefix')}>
-              <input
-                type="text"
-                className="modal-input"
+              <BranchNameInput
                 value={releasePrefix}
-                onChange={(e) => setReleasePrefix(e.target.value)}
+                onChange={setReleasePrefix}
                 onKeyDown={handleKeyDown}
                 placeholder="release/"
+                mode="prefix"
                 disabled={isLoading}
+                showErrors={false}
               />
             </ModalRow>
 
             <ModalRow label={t('modals.gitFlowInit.hotfixPrefix')}>
-              <input
-                type="text"
-                className="modal-input"
+              <BranchNameInput
                 value={hotfixPrefix}
-                onChange={(e) => setHotfixPrefix(e.target.value)}
+                onChange={setHotfixPrefix}
                 onKeyDown={handleKeyDown}
                 placeholder="hotfix/"
+                mode="prefix"
                 disabled={isLoading}
+                showErrors={false}
               />
             </ModalRow>
 
             <ModalRow label={t('modals.gitFlowInit.versionTagPrefix')}>
-              <input
-                type="text"
-                className="modal-input"
+              <BranchNameInput
                 value={versionTagPrefix}
-                onChange={(e) => setVersionTagPrefix(e.target.value)}
+                onChange={setVersionTagPrefix}
                 onKeyDown={handleKeyDown}
                 placeholder=""
+                mode="tag"
                 disabled={isLoading}
+                showErrors={false}
               />
             </ModalRow>
           </div>

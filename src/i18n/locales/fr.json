@@ -427,5 +427,15 @@
     "localBranches": "Branches Locales",
     "remoteBranches": "Branches Distantes",
     "noBranches": "Aucune branche disponible"
+  },
+  "validation": {
+    "branchNameEmpty": "Le nom ne peut pas être vide",
+    "branchNameInvalidStart": "Ne peut pas commencer par '.' ou '-'",
+    "branchNameInvalidEnd": "Ne peut pas se terminer par '.', '-' ou '.lock'",
+    "branchNameInvalidChars": "Contient des caractères invalides",
+    "branchNameExists": "Ce nom existe déjà",
+    "branchNameTooLong": "Le nom est trop long",
+    "branchNameDoubleDots": "Ne peut pas contenir '..'",
+    "branchNameDoubleSlashes": "Ne peut pas contenir '//'"
   }
 }

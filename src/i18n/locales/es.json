@@ -530,5 +530,15 @@
     "startRelease": "Iniciar Release...",
     "startHotfix": "Iniciar Hotfix...",
     "finishBranch": "Finalizar '{{name}}'..."
+  },
+  "validation": {
+    "branchNameEmpty": "El nombre no puede estar vacío",
+    "branchNameInvalidStart": "No puede empezar con '.' o '-'",
+    "branchNameInvalidEnd": "No puede terminar con '.', '-' o '.lock'",
+    "branchNameInvalidChars": "Contiene caracteres no válidos",
+    "branchNameExists": "Este nombre ya existe",
+    "branchNameTooLong": "El nombre es demasiado largo",
+    "branchNameDoubleDots": "No puede contener '..'",
+    "branchNameDoubleSlashes": "No puede contener '//'"
   }
 }

@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { GitBranch, Play, Flag, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
 import { ModalLoadingIndicator } from './ModalLoadingIndicator';
+import { BranchNameInput } from '../form';
 import type { GitFlowType, BranchInfo } from '../../types/git';
+import type { ValidationResult } from '../../utils/branchNameValidation';
 import './GitModals.css';
 
 interface GitFlowStartModalProps {
@@ -23,6 +25,7 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
     const [name, setName] = useState('');
     const [selectedBaseBranch, setSelectedBaseBranch] = useState(defaultBaseBranch);
     const [isLoading, setIsLoading] = useState(false);
+    const [isValid, setIsValid] = useState(false);
 
     // Reset when modal opens
     useEffect(() => {
@@ -30,24 +33,26 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
         setName('');
         setSelectedBaseBranch(defaultBaseBranch);
         setIsLoading(false);
+        setIsValid(false);
       }
     }, [isOpen, defaultBaseBranch]);
 
     // Get local branches for selection
     const localBranches = useMemo(() => branches.filter((b) => !b.is_remote), [branches]);
 
-    // Validate name (no spaces, no special characters)
-    const isValidName = useMemo(() => {
-      const trimmed = name.trim();
-      if (!trimmed) return false;
-      if (trimmed.startsWith('.') || trimmed.startsWith('-')) return false;
-      if (trimmed.includes(' ') || trimmed.includes('..')) return false;
-      if (/[~^:?*\\[\]@{]/.test(trimmed)) return false;
-      return true;
-    }, [name]);
+    // Get existing branch names with prefix for validation
+    const existingBranchNames = useMemo(() => {
+      return branches
+        .filter((b) => b.name.startsWith(prefix))
+        .map((b) => b.name.replace(prefix, ''));
+    }, [branches, prefix]);
+
+    const handleValidationChange = useCallback((result: ValidationResult) => {
+      setIsValid(result.isValid);
+    }, []);
 
     const handleStart = useCallback(() => {
-      if (!isValidName || isLoading) return;
+      if (!isValid || isLoading) return;
 
       // Set loading state immediately
       setIsLoading(true);
@@ -56,16 +61,19 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
       // before the blocking git operation starts
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          onStart(name.trim(), selectedBaseBranch);
+          onStart(name, selectedBaseBranch);
         });
       });
-    }, [isValidName, isLoading, onStart, name, selectedBaseBranch]);
+    }, [isValid, isLoading, onStart, name, selectedBaseBranch]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && isValidName && !isLoading) {
-        handleStart();
-      }
-    };
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && isValid && !isLoading) {
+          handleStart();
+        }
+      },
+      [isValid, isLoading, handleStart]
+    );
 
     const getIcon = () => {
       switch (flowType) {
@@ -106,8 +114,8 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
       }
     };
 
-    const fullBranchName = `${prefix}${name.trim()}`;
-    const isStartDisabled = !isValidName || isLoading;
+    const fullBranchName = `${prefix}${name}`;
+    const isStartDisabled = !isValid || isLoading;
 
     return (
       <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
@@ -138,22 +146,20 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
             </ModalRow>
 
             <ModalRow label={t('modals.gitFlowStart.name')}>
-              <div className="track-branch-input-container">
-                <GitBranch size={14} className="input-icon" />
-                <input
-                  type="text"
-                  className="track-branch-input"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={t('modals.gitFlowStart.namePlaceholder', { type: flowType })}
-                  autoFocus
-                  disabled={isLoading}
-                />
-              </div>
+              <BranchNameInput
+                value={name}
+                onChange={setName}
+                onKeyDown={handleKeyDown}
+                onValidationChange={handleValidationChange}
+                existingNames={existingBranchNames}
+                placeholder={t('modals.gitFlowStart.namePlaceholder', { type: flowType })}
+                prefix={prefix}
+                disabled={isLoading}
+                autoFocus
+              />
             </ModalRow>
 
-            {name.trim() && (
+            {name && (
               <div className="modal-info">
                 <GitBranch size={14} />
                 <span>{t('modals.gitFlowStart.willCreate', { branch: fullBranchName })}</span>
