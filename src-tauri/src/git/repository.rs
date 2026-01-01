@@ -3804,10 +3804,7 @@ pub fn git_fast_forward(
 
     // Check if the branch is currently checked out
     let head = repo.head().map_err(|e| e.to_string())?;
-    let current_branch = head
-        .shorthand()
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+    let current_branch = head.shorthand().map(|s| s.to_string()).unwrap_or_default();
 
     let is_current_branch = current_branch == branch;
 
