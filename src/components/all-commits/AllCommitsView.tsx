@@ -116,7 +116,9 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       if (selectedCommit) {
         loadCommitFiles(selectedCommit);
       }
-    }, [selectedCommit?.id, loadCommitFiles]);
+      // Using selectedCommitId instead of selectedCommit to avoid unnecessary re-renders
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedCommitId, loadCommitFiles]);
 
     // Scroll to commit when selectedCommitId changes externally
     useEffect(() => {

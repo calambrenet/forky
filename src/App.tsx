@@ -791,7 +791,7 @@ function App() {
         throw error;
       }
     },
-    [addLogEntry, addAlert]
+    [activeTab?.path, addLogEntry, addAlert]
   );
 
   // Stash handlers
@@ -1272,6 +1272,7 @@ function App() {
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
+      getErrorTitle,
     ]
   );
 
@@ -1356,7 +1357,7 @@ function App() {
       handleSshVerificationRequired,
       refreshActiveTab,
       setLocalChangesRefreshKey,
-      closeModal,
+      getErrorTitle,
     ]
   );
 
@@ -1440,6 +1441,7 @@ function App() {
       addAlert,
       handleSshVerificationRequired,
       refreshActiveTab,
+      getErrorTitle,
     ]
   );
 

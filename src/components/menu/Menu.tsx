@@ -11,6 +11,7 @@ interface MenuContextType {
 const MenuContext = createContext<MenuContextType | null>(null);
 
 // Hook to use menu context (optional - returns null if not in context)
+// eslint-disable-next-line react-refresh/only-export-components
 export const useMenu = () => {
   return useContext(MenuContext);
 };

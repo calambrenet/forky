@@ -166,6 +166,7 @@ export function useRepositoryTabs() {
     };
 
     restoreRepositories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   // Open a new repository

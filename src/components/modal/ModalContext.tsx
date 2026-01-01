@@ -10,6 +10,7 @@ const ModalContext = createContext<ModalContextValue | null>(null);
 /**
  * Hook to access modal ARIA IDs. Must be used within Modal.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export const useModalContext = () => {
   const context = useContext(ModalContext);
   if (!context) {
