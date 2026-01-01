@@ -8,8 +8,7 @@ interface ModalContextValue {
 const ModalContext = createContext<ModalContextValue | null>(null);
 
 /**
- * Hook to access modal context (IDs for ARIA attributes).
- * Must be used within Modal component.
+ * Hook to access modal ARIA IDs. Must be used within Modal.
  */
 export const useModalContext = () => {
   const context = useContext(ModalContext);
@@ -25,22 +24,12 @@ interface ModalContextProviderProps {
   children: ReactNode;
 }
 
-/**
- * Provider for modal context.
- * Memoizes value to prevent unnecessary re-renders.
- */
 export const ModalContextProvider = ({
   titleId,
   descriptionId,
   children,
 }: ModalContextProviderProps) => {
-  // Memoize to prevent re-renders - IDs never change after mount
-  const value = useMemo(
-    () => ({ titleId, descriptionId }),
-    [titleId, descriptionId]
-  );
+  const value = useMemo(() => ({ titleId, descriptionId }), [titleId, descriptionId]);
 
-  return (
-    <ModalContext.Provider value={value}>{children}</ModalContext.Provider>
-  );
+  return <ModalContext.Provider value={value}>{children}</ModalContext.Provider>;
 };

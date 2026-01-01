@@ -33,13 +33,9 @@ interface ModalRowProps {
 
 export const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
   const overlayRef = useRef<HTMLDivElement>(null);
-
-  // Generate unique IDs for ARIA attributes
   const modalId = useId();
   const titleId = `${modalId}-title`;
   const descriptionId = `${modalId}-desc`;
-
-  // Focus trap - automatically focuses first element and traps Tab
   const dialogRef = useFocusTrap<HTMLDivElement>({ isActive: isOpen });
 
   const handleEscape = useCallback(

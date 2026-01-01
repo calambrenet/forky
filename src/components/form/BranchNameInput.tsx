@@ -115,7 +115,9 @@ export const BranchNameInput: FC<BranchNameInputProps> = memo(
         const sanitizedValue = sanitize(rawValue);
 
         // Calculate cursor offset (characters removed before cursor)
-        const charsRemovedBefore = rawValue.substring(0, cursorPos).length - sanitize(rawValue.substring(0, cursorPos)).length;
+        const charsRemovedBefore =
+          rawValue.substring(0, cursorPos).length -
+          sanitize(rawValue.substring(0, cursorPos)).length;
         const newCursorPos = Math.max(0, cursorPos - charsRemovedBefore);
 
         // Update value
