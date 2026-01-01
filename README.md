@@ -274,9 +274,9 @@ forky/
 
 ## License
 
-Este proyecto está bajo la Licencia **GNU General Public License v3.0**. 
+This project is licensed under the **GNU General Public License v3.0**.
 
-Consulta el archivo [LICENSE](LICENSE) para obtener más detalles.
+See the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
