@@ -14,7 +14,7 @@ If you discover a security vulnerability in Forky, please report it responsibly.
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Instead, please send an email to: **security@jluiscastro.com**
+Instead, please send an email to: **joseluis@codefriends.es**
 
 Include the following information:
 - Type of vulnerability
