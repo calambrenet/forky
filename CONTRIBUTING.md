@@ -53,7 +53,7 @@ npm run tauri dev
 #### Workflow
 
 1. **Fork** the repository
-2. **Create a branch** from `master`:
+2. **Create a branch** from `main`:
    ```bash
    git checkout -b feature/my-new-feature
    # or
@@ -82,7 +82,7 @@ npm run tauri dev
    ```bash
    git push origin feature/my-new-feature
    ```
-7. Open a **Pull Request** to `master`
+7. Open a **Pull Request** to `main`
 
 #### Code Conventions
 
@@ -138,7 +138,7 @@ See [CLAUDE.md](CLAUDE.md) for more technical details.
 
 1. A maintainer will review your PR
 2. They may request changes or clarifications
-3. Once approved, it will be merged to `master`
+3. Once approved, it will be merged to `main`
 4. Your contribution will appear in the next release
 
 ## First Contribution
@@ -149,7 +149,7 @@ Look for issues labeled with:
 
 ## Questions
 
-If you have questions, open an issue or ask in the comments of an existing PR.
+If you have questions, open a [Discussion](https://github.com/calambrenet/forky/discussions) or ask in the comments of an existing PR.
 
 ---
 

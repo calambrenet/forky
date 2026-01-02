@@ -1,0 +1,73 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please fill out the form below.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Use Case
+      description: What problem does this feature solve? Or what use case does it address?
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature Area
+      description: Which area of the app does this relate to?
+      options:
+        - Repository Management
+        - Commit History / Graph
+        - Working Copy / Staging
+        - Branch Operations
+        - Remote Operations (Push/Pull/Fetch)
+        - Merge / Rebase
+        - Stash
+        - Tags
+        - Git Flow
+        - UI / UX
+        - Performance
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: fork-parity
+    attributes:
+      label: Fork Parity
+      description: Is this feature present in the original Fork app?
+      options:
+        - label: This feature exists in Fork (git-fork.com)
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Mockups / Screenshots
+      description: If you have any mockups or screenshots showing the desired feature, add them here
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the feature request here
