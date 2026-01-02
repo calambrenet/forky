@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import './GitModals.css';
@@ -19,7 +20,7 @@ const GIT_DOWNLOAD_URLS: Record<string, string> = {
 export const GitNotInstalledModal: FC<GitNotInstalledModalProps> = memo(({ isOpen, onClose }) => {
   const { t } = useTranslation();
 
-  const handleDownloadClick = () => {
+  const handleDownloadClick = async () => {
     // Detect OS and open appropriate download page
     const platform = navigator.platform.toLowerCase();
     let url = GIT_DOWNLOAD_URLS.linux; // default
@@ -30,7 +31,11 @@ export const GitNotInstalledModal: FC<GitNotInstalledModalProps> = memo(({ isOpe
       url = GIT_DOWNLOAD_URLS.macos;
     }
 
-    window.open(url, '_blank');
+    try {
+      await openUrl(url);
+    } catch (error) {
+      console.error('Failed to open Git download page:', error);
+    }
   };
 
   return (
