@@ -5,6 +5,7 @@ mod watcher;
 use git::commands::{self as git_commands, AppState};
 use std::sync::Mutex;
 use system::commands as system_commands;
+#[cfg(not(target_os = "linux"))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 use watcher::commands as watcher_commands;
@@ -18,79 +19,84 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_decorum::init())
         .setup(|app| {
-            // Create custom menu
-            let open_repo = MenuItem::with_id(
-                app,
-                "open_repository",
-                "Open Repository...",
-                true,
-                Some("CmdOrCtrl+O"),
-            )?;
+            // Create custom menu (skipped on Linux, where the native menu
+            // can be rendered outside the window by some desktop environments)
+            #[cfg(not(target_os = "linux"))]
+            {
+                let open_repo = MenuItem::with_id(
+                    app,
+                    "open_repository",
+                    "Open Repository...",
+                    true,
+                    Some("CmdOrCtrl+O"),
+                )?;
 
-            // macOS app menu (required as first menu on macOS)
-            #[cfg(target_os = "macos")]
-            let app_menu = Submenu::with_items(
-                app,
-                "Forky",
-                true,
-                &[
-                    &PredefinedMenuItem::about(app, Some("About Forky"), None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::services(app, Some("Services"))?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::hide(app, Some("Hide Forky"))?,
-                    &PredefinedMenuItem::hide_others(app, Some("Hide Others"))?,
-                    &PredefinedMenuItem::show_all(app, Some("Show All"))?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::quit(app, Some("Quit Forky"))?,
-                ],
-            )?;
+                // macOS app menu (required as first menu on macOS)
+                #[cfg(target_os = "macos")]
+                let app_menu = Submenu::with_items(
+                    app,
+                    "Forky",
+                    true,
+                    &[
+                        &PredefinedMenuItem::about(app, Some("About Forky"), None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::services(app, Some("Services"))?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::hide(app, Some("Hide Forky"))?,
+                        &PredefinedMenuItem::hide_others(app, Some("Hide Others"))?,
+                        &PredefinedMenuItem::show_all(app, Some("Show All"))?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::quit(app, Some("Quit Forky"))?,
+                    ],
+                )?;
 
-            let file_menu = Submenu::with_items(
-                app,
-                "File",
-                true,
-                &[
-                    &open_repo,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
-                ],
-            )?;
+                let file_menu = Submenu::with_items(
+                    app,
+                    "File",
+                    true,
+                    &[
+                        &open_repo,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
+                    ],
+                )?;
 
-            let edit_menu = Submenu::with_items(
-                app,
-                "Edit",
-                true,
-                &[
-                    &PredefinedMenuItem::undo(app, Some("Undo"))?,
-                    &PredefinedMenuItem::redo(app, Some("Redo"))?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::cut(app, Some("Cut"))?,
-                    &PredefinedMenuItem::copy(app, Some("Copy"))?,
-                    &PredefinedMenuItem::paste(app, Some("Paste"))?,
-                    &PredefinedMenuItem::select_all(app, Some("Select All"))?,
-                ],
-            )?;
+                let edit_menu = Submenu::with_items(
+                    app,
+                    "Edit",
+                    true,
+                    &[
+                        &PredefinedMenuItem::undo(app, Some("Undo"))?,
+                        &PredefinedMenuItem::redo(app, Some("Redo"))?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::cut(app, Some("Cut"))?,
+                        &PredefinedMenuItem::copy(app, Some("Copy"))?,
+                        &PredefinedMenuItem::paste(app, Some("Paste"))?,
+                        &PredefinedMenuItem::select_all(app, Some("Select All"))?,
+                    ],
+                )?;
 
-            let window_menu = Submenu::with_items(
-                app,
-                "Window",
-                true,
-                &[
-                    &PredefinedMenuItem::minimize(app, Some("Minimize"))?,
-                    &PredefinedMenuItem::maximize(app, Some("Zoom"))?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen"))?,
-                ],
-            )?;
+                let window_menu = Submenu::with_items(
+                    app,
+                    "Window",
+                    true,
+                    &[
+                        &PredefinedMenuItem::minimize(app, Some("Minimize"))?,
+                        &PredefinedMenuItem::maximize(app, Some("Zoom"))?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen"))?,
+                    ],
+                )?;
 
-            #[cfg(target_os = "macos")]
-            let menu = Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu])?;
+                #[cfg(target_os = "macos")]
+                let menu =
+                    Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu])?;
 
-            #[cfg(not(target_os = "macos"))]
-            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu])?;
+                #[cfg(not(target_os = "macos"))]
+                let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu])?;
 
-            app.set_menu(menu)?;
+                app.set_menu(menu)?;
+            }
             // Set traffic light position on macOS
             #[cfg(target_os = "macos")]
             {

@@ -99,6 +99,7 @@ import {
   useRepositoryStore,
   useTabs,
   useActiveTab,
+  useActiveTabId,
   useActiveTabState,
   useActiveTabStashes,
   useIsRestoring,
@@ -167,6 +168,7 @@ function App() {
   // Repository store
   const tabs = useTabs();
   const activeTab = useActiveTab();
+  const activeTabId = useActiveTabId();
   const activeTabState = useActiveTabState();
   const stashes = useActiveTabStashes();
   const isRestoring = useIsRestoring();
@@ -2082,7 +2084,7 @@ function App() {
       {hasOpenRepos && (
         <TabBar
           tabs={tabs}
-          activeTabId={useRepositoryStore.getState().activeTabId}
+          activeTabId={activeTabId}
           onTabSelect={selectTab}
           onTabClose={closeTab}
           onCloseOthers={closeOtherTabs}

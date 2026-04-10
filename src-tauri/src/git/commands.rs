@@ -3,6 +3,7 @@ use crate::git::repository::{
     GitOperationResult, HunkData, ImageContent, InteractiveRebaseEntry, PullOptions, PushOptions,
     RepositoryInfo, StashInfo, TagInfo,
 };
+use git2::Repository;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -10,12 +11,39 @@ pub struct AppState {
     pub current_repo_path: Mutex<Option<String>>,
 }
 
+/// Lee el path del repo desde el estado y abre la instancia de git2::Repository.
+/// Maneja mutex poisoning convirtiéndolo a error de string, y valida que haya
+/// un repositorio abierto.
+fn repo_from_state(state: &State<AppState>) -> Result<Repository, String> {
+    let repo_path = state
+        .current_repo_path
+        .lock()
+        .map_err(|e| format!("State mutex poisoned: {}", e))?;
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::open_repository(path)
+}
+
+/// Lee el path del repo desde el estado como String, manejando mutex poisoning.
+fn path_from_state(state: &State<AppState>) -> Result<String, String> {
+    let repo_path = state
+        .current_repo_path
+        .lock()
+        .map_err(|e| format!("State mutex poisoned: {}", e))?;
+    repo_path
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| "No repository opened".to_string())
+}
+
 #[tauri::command]
 pub fn open_repository(path: String, state: State<AppState>) -> Result<RepositoryInfo, String> {
     let repo = repository::open_repository(&path)?;
     let info = repository::get_repository_info(&repo)?;
 
-    let mut repo_path = state.current_repo_path.lock().unwrap();
+    let mut repo_path = state
+        .current_repo_path
+        .lock()
+        .map_err(|e| format!("State mutex poisoned: {}", e))?;
     *repo_path = Some(path);
 
     Ok(info)
@@ -23,17 +51,13 @@ pub fn open_repository(path: String, state: State<AppState>) -> Result<Repositor
 
 #[tauri::command]
 pub fn get_branches(state: State<AppState>) -> Result<Vec<BranchInfo>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_branches(&repo)
 }
 
 #[tauri::command]
 pub fn get_branch_heads(state: State<AppState>) -> Result<Vec<BranchHead>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_branch_heads(&repo)
 }
 
@@ -42,41 +66,31 @@ pub fn get_commits(
     limit: Option<usize>,
     state: State<AppState>,
 ) -> Result<Vec<CommitInfo>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_commits(&repo, limit.unwrap_or(100))
 }
 
 #[tauri::command]
 pub fn get_file_status(state: State<AppState>) -> Result<Vec<FileStatus>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_file_status(&repo)
 }
 
 #[tauri::command]
 pub fn get_tags(state: State<AppState>) -> Result<Vec<TagInfo>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_tags(&repo)
 }
 
 #[tauri::command]
 pub fn get_remotes(state: State<AppState>) -> Result<Vec<String>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_remotes(&repo)
 }
 
 #[tauri::command]
 pub fn get_repository_info(state: State<AppState>) -> Result<RepositoryInfo, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_repository_info(&repo)
 }
 
@@ -88,9 +102,7 @@ pub struct FileStatusSeparated {
 
 #[tauri::command]
 pub fn get_file_status_separated(state: State<AppState>) -> Result<FileStatusSeparated, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     let (unstaged, staged) = repository::get_file_status_separated(&repo)?;
     Ok(FileStatusSeparated { unstaged, staged })
 }
@@ -102,9 +114,7 @@ pub fn get_working_diff(
     file_status: String,
     state: State<AppState>,
 ) -> Result<DiffInfo, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
 
     // Handle untracked files - read the file content directly
     if file_status == "untracked" {
@@ -136,9 +146,7 @@ pub fn get_commit_diff(
     file_path: String,
     state: State<AppState>,
 ) -> Result<DiffInfo, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_commit_diff(&repo, &commit_id, &file_path)
 }
 
@@ -147,25 +155,19 @@ pub fn get_commit_files(
     commit_id: String,
     state: State<AppState>,
 ) -> Result<Vec<FileStatus>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_commit_files(&repo, &commit_id)
 }
 
 #[tauri::command]
 pub fn stage_file(file_path: String, state: State<AppState>) -> Result<(), String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::stage_file(&repo, &file_path)
 }
 
 #[tauri::command]
 pub fn unstage_file(file_path: String, state: State<AppState>) -> Result<(), String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::unstage_file(&repo, &file_path)
 }
 
@@ -175,30 +177,26 @@ pub fn discard_file(
     is_untracked: bool,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::discard_file(path, &file_path, is_untracked)
+    let path = path_from_state(&state)?;
+    repository::discard_file(&path, &file_path, is_untracked)
 }
 
 #[tauri::command]
 pub fn git_pull(state: State<AppState>) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_pull(path)
+    let path = path_from_state(&state)?;
+    repository::git_pull(&path)
 }
 
 #[tauri::command]
 pub fn git_push(state: State<AppState>) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_push(path)
+    let path = path_from_state(&state)?;
+    repository::git_push(&path)
 }
 
 #[tauri::command]
 pub fn git_fetch(state: State<AppState>) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_fetch(path)
+    let path = path_from_state(&state)?;
+    repository::git_fetch(&path)
 }
 
 #[tauri::command]
@@ -207,9 +205,8 @@ pub fn git_fetch_with_options(
     all: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_fetch_with_options(path, FetchOptions { remote, all })
+    let path = path_from_state(&state)?;
+    repository::git_fetch_with_options(&path, FetchOptions { remote, all })
 }
 
 #[tauri::command]
@@ -220,10 +217,9 @@ pub fn git_pull_with_options(
     autostash: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let path = path_from_state(&state)?;
     repository::git_pull_with_options(
-        path,
+        &path,
         PullOptions {
             remote,
             branch,
@@ -242,10 +238,9 @@ pub fn git_push_with_options(
     force_with_lease: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let path = path_from_state(&state)?;
     repository::git_push_with_options(
-        path,
+        &path,
         PushOptions {
             branch,
             remote,
@@ -267,16 +262,13 @@ pub fn git_commit(
     amend: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_commit(path, &message, amend)
+    let path = path_from_state(&state)?;
+    repository::git_commit(&path, &message, amend)
 }
 
 #[tauri::command]
 pub fn get_last_commit_message(state: State<AppState>) -> Result<CommitMessage, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_last_commit_message(&repo)
 }
 
@@ -286,9 +278,8 @@ pub fn git_add_remote(
     url: String,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_add_remote(path, &name, &url)
+    let path = path_from_state(&state)?;
+    repository::git_add_remote(&path, &name, &url)
 }
 
 #[tauri::command]
@@ -301,9 +292,8 @@ pub fn git_checkout(
     branch_name: String,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_checkout(path, &branch_name)
+    let path = path_from_state(&state)?;
+    repository::git_checkout(&path, &branch_name)
 }
 
 #[tauri::command]
@@ -312,9 +302,8 @@ pub fn git_checkout_with_stash(
     restore_changes: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_checkout_with_stash(path, &branch_name, restore_changes)
+    let path = path_from_state(&state)?;
+    repository::git_checkout_with_stash(&path, &branch_name, restore_changes)
 }
 
 #[tauri::command]
@@ -323,9 +312,8 @@ pub fn git_checkout_track(
     remote_branch: String,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_checkout_track(path, &local_branch, &remote_branch)
+    let path = path_from_state(&state)?;
+    repository::git_checkout_track(&path, &local_branch, &remote_branch)
 }
 
 #[tauri::command]
@@ -335,9 +323,8 @@ pub fn git_create_branch(
     checkout: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_create_branch(path, &branch_name, &start_point, checkout)
+    let path = path_from_state(&state)?;
+    repository::git_create_branch(&path, &branch_name, &start_point, checkout)
 }
 
 #[tauri::command]
@@ -348,10 +335,9 @@ pub fn git_create_tag(
     push_to_remotes: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let path = path_from_state(&state)?;
     repository::git_create_tag(
-        path,
+        &path,
         &tag_name,
         &start_point,
         message.as_deref(),
@@ -367,10 +353,9 @@ pub fn git_rename_branch(
     remote_name: Option<String>,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let path = path_from_state(&state)?;
     repository::git_rename_branch(
-        path,
+        &path,
         &old_name,
         &new_name,
         rename_remote,
@@ -386,10 +371,9 @@ pub fn git_delete_branch(
     remote_name: Option<String>,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let path = path_from_state(&state)?;
     repository::git_delete_branch(
-        path,
+        &path,
         &branch_name,
         force,
         delete_remote,
@@ -403,9 +387,8 @@ pub fn git_delete_branch(
 
 #[tauri::command]
 pub fn get_stashes(state: State<AppState>) -> Result<Vec<StashInfo>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::get_stashes(path)
+    let path = path_from_state(&state)?;
+    repository::get_stashes(&path)
 }
 
 #[tauri::command]
@@ -415,9 +398,8 @@ pub fn git_stash_save(
     keep_index: bool,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_stash_save(path, message.as_deref(), include_untracked, keep_index)
+    let path = path_from_state(&state)?;
+    repository::git_stash_save(&path, message.as_deref(), include_untracked, keep_index)
 }
 
 #[tauri::command]
@@ -425,9 +407,8 @@ pub fn git_stash_apply(
     stash_index: usize,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_stash_apply(path, stash_index)
+    let path = path_from_state(&state)?;
+    repository::git_stash_apply(&path, stash_index)
 }
 
 #[tauri::command]
@@ -435,9 +416,8 @@ pub fn git_stash_pop(
     stash_index: usize,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_stash_pop(path, stash_index)
+    let path = path_from_state(&state)?;
+    repository::git_stash_pop(&path, stash_index)
 }
 
 #[tauri::command]
@@ -445,9 +425,8 @@ pub fn git_stash_drop(
     stash_index: usize,
     state: State<AppState>,
 ) -> Result<GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_stash_drop(path, stash_index)
+    let path = path_from_state(&state)?;
+    repository::git_stash_drop(&path, stash_index)
 }
 
 // ============================================================================
@@ -459,9 +438,7 @@ pub fn get_image_content(
     file_path: String,
     state: State<AppState>,
 ) -> Result<ImageContent, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_image_content(&repo, &file_path)
 }
 
@@ -470,9 +447,7 @@ pub fn get_image_from_head(
     file_path: String,
     state: State<AppState>,
 ) -> Result<ImageContent, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_image_from_head(&repo, &file_path)
 }
 
@@ -481,9 +456,7 @@ pub fn get_image_from_index(
     file_path: String,
     state: State<AppState>,
 ) -> Result<ImageContent, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_image_from_index(&repo, &file_path)
 }
 
@@ -493,9 +466,8 @@ pub fn get_image_from_index(
 
 #[tauri::command]
 pub fn stage_hunk(file_path: String, hunk: HunkData, state: State<AppState>) -> Result<(), String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::stage_hunk(path, &file_path, hunk)
+    let path = path_from_state(&state)?;
+    repository::stage_hunk(&path, &file_path, hunk)
 }
 
 #[tauri::command]
@@ -504,9 +476,8 @@ pub fn unstage_hunk(
     hunk: HunkData,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::unstage_hunk(path, &file_path, hunk)
+    let path = path_from_state(&state)?;
+    repository::unstage_hunk(&path, &file_path, hunk)
 }
 
 #[tauri::command]
@@ -515,9 +486,8 @@ pub fn discard_hunk(
     hunk: HunkData,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::discard_hunk(path, &file_path, hunk)
+    let path = path_from_state(&state)?;
+    repository::discard_hunk(&path, &file_path, hunk)
 }
 
 // ============================================================================
@@ -529,9 +499,8 @@ pub fn get_merge_preview(
     source_branch: String,
     state: State<AppState>,
 ) -> Result<repository::MergePreview, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::get_merge_preview(path, &source_branch)
+    let path = path_from_state(&state)?;
+    repository::get_merge_preview(&path, &source_branch)
 }
 
 #[tauri::command]
@@ -540,16 +509,14 @@ pub fn git_merge(
     merge_type: String,
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_merge(path, &source_branch, &merge_type)
+    let path = path_from_state(&state)?;
+    repository::git_merge(&path, &source_branch, &merge_type)
 }
 
 #[tauri::command]
 pub fn git_merge_abort(state: State<AppState>) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_merge_abort(path)
+    let path = path_from_state(&state)?;
+    repository::git_merge_abort(&path)
 }
 
 // ============================================================================
@@ -561,9 +528,8 @@ pub fn get_rebase_preview(
     target_branch: String,
     state: State<AppState>,
 ) -> Result<repository::RebasePreview, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::get_rebase_preview(path, &target_branch)
+    let path = path_from_state(&state)?;
+    repository::get_rebase_preview(&path, &target_branch)
 }
 
 #[tauri::command]
@@ -573,29 +539,26 @@ pub fn git_rebase(
     autostash: bool,
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    let path = path_from_state(&state)?;
     let options = repository::RebaseOptions {
         preserve_merges,
         autostash,
     };
-    repository::git_rebase(path, &target_branch, options)
+    repository::git_rebase(&path, &target_branch, options)
 }
 
 #[tauri::command]
 pub fn git_rebase_abort(state: State<AppState>) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_rebase_abort(path)
+    let path = path_from_state(&state)?;
+    repository::git_rebase_abort(&path)
 }
 
 #[tauri::command]
 pub fn git_rebase_continue(
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_rebase_continue(path)
+    let path = path_from_state(&state)?;
+    repository::git_rebase_continue(&path)
 }
 
 #[tauri::command]
@@ -603,9 +566,8 @@ pub fn get_interactive_rebase_commits(
     target_branch: String,
     state: State<AppState>,
 ) -> Result<Vec<InteractiveRebaseEntry>, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::get_interactive_rebase_commits(path, &target_branch)
+    let path = path_from_state(&state)?;
+    repository::get_interactive_rebase_commits(&path, &target_branch)
 }
 
 #[tauri::command]
@@ -615,18 +577,15 @@ pub fn git_interactive_rebase(
     autostash: bool,
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_interactive_rebase(path, &target_branch, entries, autostash)
+    let path = path_from_state(&state)?;
+    repository::git_interactive_rebase(&path, &target_branch, entries, autostash)
 }
 
 // ==================== Git Flow Commands ====================
 
 #[tauri::command]
 pub fn get_gitflow_config(state: State<AppState>) -> Result<repository::GitFlowConfig, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_gitflow_config(&repo)
 }
 
@@ -634,9 +593,7 @@ pub fn get_gitflow_config(state: State<AppState>) -> Result<repository::GitFlowC
 pub fn get_current_branch_flow_info(
     state: State<AppState>,
 ) -> Result<repository::CurrentBranchFlowInfo, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    let repo = repository::open_repository(path)?;
+    let repo = repo_from_state(&state)?;
     repository::get_current_branch_flow_info(&repo)
 }
 
@@ -646,9 +603,8 @@ pub fn git_flow_start(
     name: String,
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_flow_start(path, &flow_type, &name)
+    let path = path_from_state(&state)?;
+    repository::git_flow_start(&path, &flow_type, &name)
 }
 
 #[tauri::command]
@@ -658,7 +614,6 @@ pub fn git_flow_finish(
     delete_branch: bool,
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let repo_path = state.current_repo_path.lock().unwrap();
-    let path = repo_path.as_ref().ok_or("No repository opened")?;
-    repository::git_flow_finish(path, &flow_type, &name, delete_branch)
+    let path = path_from_state(&state)?;
+    repository::git_flow_finish(&path, &flow_type, &name, delete_branch)
 }
