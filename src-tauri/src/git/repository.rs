@@ -1004,6 +1004,16 @@ fn detect_error_type(stderr: &str) -> Option<String> {
     {
         return Some("divergent_branches".to_string());
     }
+    // Detect missing Git identity (user.name / user.email not configured)
+    if lower.contains("author identity unknown")
+        || lower.contains("identidad del autor desconocido")
+        || lower.contains("please tell me who you are")
+        || lower.contains("empty ident name")
+        || lower.contains("no es posible auto-detectar")
+        || lower.contains("unable to auto-detect")
+    {
+        return Some("missing_identity".to_string());
+    }
     if lower.contains("fatal:") {
         return Some("git_error".to_string());
     }
@@ -3707,4 +3717,87 @@ pub fn git_flow_finish(
         .output();
 
     Ok(create_success_result(messages.join(". ")))
+}
+
+// ============================================================================
+// Global Git Identity
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GitIdentity {
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+
+/// Read a single global git config entry. Returns None if it is unset.
+fn read_global_config(key: &str) -> Option<String> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["config", "--global", "--get", key])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+/// Read the global git identity (user.name / user.email)
+pub fn git_get_global_identity() -> Result<GitIdentity, String> {
+    Ok(GitIdentity {
+        name: read_global_config("user.name"),
+        email: read_global_config("user.email"),
+    })
+}
+
+/// Write user.name and user.email at the global level
+pub fn git_set_global_identity(name: &str, email: &str) -> Result<GitOperationResult, String> {
+    use std::process::Command;
+
+    let name = name.trim();
+    let email = email.trim();
+
+    if name.is_empty() {
+        return Ok(create_error_result("Name cannot be empty", ""));
+    }
+    if email.is_empty() {
+        return Ok(create_error_result("Email cannot be empty", ""));
+    }
+
+    let set_name = Command::new("git")
+        .args(["config", "--global", "user.name", name])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()
+        .map_err(|e| format!("Failed to set user.name: {}", e))?;
+
+    if !set_name.status.success() {
+        let stderr = String::from_utf8_lossy(&set_name.stderr).to_string();
+        let stdout = String::from_utf8_lossy(&set_name.stdout).to_string();
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    let set_email = Command::new("git")
+        .args(["config", "--global", "user.email", email])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()
+        .map_err(|e| format!("Failed to set user.email: {}", e))?;
+
+    if !set_email.status.success() {
+        let stderr = String::from_utf8_lossy(&set_email.stderr).to_string();
+        let stdout = String::from_utf8_lossy(&set_email.stdout).to_string();
+        return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    Ok(create_success_result(
+        "Global Git identity updated".to_string(),
+    ))
 }

@@ -93,6 +93,9 @@ const CreateBranchModal = lazy(() =>
     default: m.CreateBranchModal,
   }))
 );
+const SettingsModal = lazy(() =>
+  import('./components/settings-modal').then((m) => ({ default: m.SettingsModal }))
+);
 
 // Zustand stores
 import {
@@ -217,6 +220,10 @@ function App() {
   const alerts = useAlerts();
   const panelSizes = usePanelSizes();
   const isResizing = useIsResizing();
+  const settingsOpen = useUIStore((state) => state.settingsOpen);
+  const settingsInitialPanel = useUIStore((state) => state.settingsInitialPanel);
+  const openSettings = useUIStore((state) => state.openSettings);
+  const closeSettings = useUIStore((state) => state.closeSettings);
   const { addAlert, removeAlert, setPanelSize, setIsResizing } = useUIStore();
 
   // Theme hook (for system theme detection)
@@ -2027,6 +2034,7 @@ function App() {
             onDismissOperation={clearOperation}
             onOpenActivityLog={openActivityLog}
             onFeedback={() => setFeedbackModalOpen(true)}
+            onOpenSettings={() => openSettings()}
             gitFlowConfig={null}
             currentBranchFlowInfo={null}
             onNewBranch={handleNewBranch}
@@ -2071,6 +2079,7 @@ function App() {
           onDismissOperation={clearOperation}
           onOpenActivityLog={openActivityLog}
           onFeedback={() => setFeedbackModalOpen(true)}
+          onOpenSettings={() => openSettings()}
           gitFlowConfig={gitFlowConfig}
           currentBranchFlowInfo={currentBranchFlowInfo}
           onNewBranch={handleNewBranch}
@@ -2247,6 +2256,15 @@ function App() {
         {/* Feedback Modal */}
         {feedbackModalOpen && (
           <FeedbackModal isOpen={true} onClose={() => setFeedbackModalOpen(false)} />
+        )}
+
+        {/* Settings Modal */}
+        {settingsOpen && (
+          <SettingsModal
+            isOpen={true}
+            initialPanel={settingsInitialPanel}
+            onClose={closeSettings}
+          />
         )}
 
         {/* Save Stash Modal */}

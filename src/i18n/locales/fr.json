@@ -419,5 +419,34 @@
     "localBranches": "Branches Locales",
     "remoteBranches": "Branches Distantes",
     "noBranches": "Aucune branche disponible"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "tabs": {
+      "general": "Général",
+      "git": "Git"
+    },
+    "general": {
+      "placeholder": "Options générales à venir."
+    },
+    "git": {
+      "globalUserInfo": "Informations utilisateur globales",
+      "name": "Nom",
+      "namePlaceholder": "Votre nom",
+      "email": "Email",
+      "emailPlaceholder": "vous@email.com",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "saved": "Configuration Git enregistrée",
+      "saveFailed": "Impossible d'enregistrer la configuration Git",
+      "loadFailed": "Impossible de lire la configuration Git",
+      "invalidEmail": "Email invalide",
+      "nameRequired": "Le nom est obligatoire"
+    },
+    "missingIdentity": {
+      "title": "Identité Git non configurée",
+      "message": "Git a besoin d'un nom et d'un email pour créer des commits. Voulez-vous le configurer maintenant ?",
+      "openSettings": "Ouvrir les Paramètres"
+    }
   }
 }

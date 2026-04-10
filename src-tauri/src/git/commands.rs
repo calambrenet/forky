@@ -1,7 +1,7 @@
 use crate::git::repository::{
     self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FetchOptions, FileStatus,
-    GitOperationResult, HunkData, ImageContent, InteractiveRebaseEntry, PullOptions, PushOptions,
-    RepositoryInfo, StashInfo, TagInfo,
+    GitIdentity, GitOperationResult, HunkData, ImageContent, InteractiveRebaseEntry, PullOptions,
+    PushOptions, RepositoryInfo, StashInfo, TagInfo,
 };
 use git2::Repository;
 use std::sync::Mutex;
@@ -616,4 +616,19 @@ pub fn git_flow_finish(
 ) -> Result<repository::GitOperationResult, String> {
     let path = path_from_state(&state)?;
     repository::git_flow_finish(&path, &flow_type, &name, delete_branch)
+}
+
+// ==================== Global Git Identity Commands ====================
+
+#[tauri::command]
+pub fn git_get_global_identity() -> Result<GitIdentity, String> {
+    repository::git_get_global_identity()
+}
+
+#[tauri::command]
+pub fn git_set_global_identity(
+    name: String,
+    email: String,
+) -> Result<GitOperationResult, String> {
+    repository::git_set_global_identity(&name, &email)
 }

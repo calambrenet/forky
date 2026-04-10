@@ -13,7 +13,10 @@ import type {
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
 import { DiscardChangesModal, DiscardHunkModal } from '../git-modals';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
+import { AlertTriangle } from 'lucide-react';
 import { useGitOperationStore, useRepositoryStore } from '../../stores';
+import { useUIStore } from '../../stores/uiStore';
 import './LocalChangesView.css';
 
 interface ImageContent {
@@ -76,6 +79,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     // Commit panel state
     const [lastCommitMessage, setLastCommitMessage] = useState<CommitMessage | null>(null);
     const [isCommitLoading, setIsCommitLoading] = useState(false);
+
+    // Missing Git identity confirmation modal
+    const [missingIdentityOpen, setMissingIdentityOpen] = useState(false);
+    const openSettings = useUIStore((state) => state.openSettings);
 
     // Image diff state
     const [imageDiff, setImageDiff] = useState<ImageDiffState>({
@@ -380,7 +387,11 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         startOperation('Commit', amend ? '(amend)' : undefined);
 
         try {
-          const result = await invoke<{ success: boolean; message: string }>('git_commit', {
+          const result = await invoke<{
+            success: boolean;
+            message: string;
+            error_type?: string;
+          }>('git_commit', {
             message: fullMessage,
             amend,
           });
@@ -394,17 +405,25 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             result.success
           );
 
+          // Always refresh repository state: even on failure, the working copy
+          // or hooks may have touched files, so the UI should stay consistent.
+          await loadFileStatus();
+          onRefreshRepository?.();
+
           if (result.success) {
-            // Refresh file status after successful commit
-            await loadFileStatus();
             setSelectedFile(null);
             setDiffInfo(null);
-            onRefreshRepository?.();
+          } else if (result.error_type === 'missing_identity') {
+            // Offer the user a one-click path to configure their Git identity
+            setMissingIdentityOpen(true);
           }
         } catch (error) {
           const errorMessage = String(error);
           completeOperation({ success: false, message: errorMessage });
           addLogEntry('Commit', amend ? 'Amend Commit' : 'Commit', command, errorMessage, false);
+          // Refresh on thrown errors too, in case state changed
+          await loadFileStatus();
+          onRefreshRepository?.();
         } finally {
           setIsCommitLoading(false);
         }
@@ -916,6 +935,31 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
           hunk={discardHunkModal.hunk}
           filePath={selectedFile?.path}
         />
+        <Modal
+          isOpen={missingIdentityOpen}
+          onClose={() => setMissingIdentityOpen(false)}
+        >
+          <ModalHeader
+            icon={<AlertTriangle size={24} />}
+            title={t('settings.missingIdentity.title')}
+            description={t('settings.missingIdentity.message')}
+          />
+          <ModalBody>{null}</ModalBody>
+          <ModalFooter>
+            <button className="btn-cancel" onClick={() => setMissingIdentityOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setMissingIdentityOpen(false);
+                openSettings('git');
+              }}
+            >
+              {t('settings.missingIdentity.openSettings')}
+            </button>
+          </ModalFooter>
+        </Modal>
       </div>
     );
   }

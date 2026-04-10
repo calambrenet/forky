@@ -64,6 +64,7 @@ interface ToolbarProps {
   onDismissOperation?: () => void;
   onOpenActivityLog?: () => void;
   onFeedback?: () => void;
+  onOpenSettings?: () => void;
 }
 
 const ICON_SIZE = 16;
@@ -98,6 +99,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     onDismissOperation,
     onOpenActivityLog,
     onFeedback,
+    onOpenSettings,
   }) => {
     const { t } = useTranslation();
     const appWindow = getCurrentWindow();
@@ -118,7 +120,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     };
 
     const handleSettings = () => {
-      // TODO: Open settings
+      onOpenSettings?.();
     };
 
     const handleKeyboardShortcuts = () => {
