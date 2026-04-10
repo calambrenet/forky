@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import type { GitOperationState, GitOperationResult, GitLogEntry } from '../types/git';
 
 type OperationType =
@@ -13,17 +14,21 @@ type OperationType =
   | 'Stash'
   | 'Other';
 
+// Activity logs stored per repository path
+type ActivityLogsByRepo = Record<string, GitLogEntry[]>;
+
 interface GitOperationStore {
   // State
   isLoading: boolean;
   currentOperation: GitOperationState | null;
-  activityLog: GitLogEntry[];
+  activityLogsByRepo: ActivityLogsByRepo;
 
   // Actions
   startOperation: (type: OperationType, target?: string) => void;
   completeOperation: (result: GitOperationResult) => void;
   clearOperation: () => void;
   addLogEntry: (
+    repoPath: string,
     operationType: GitLogEntry['operationType'],
     operationName: string,
     command: string,
@@ -31,7 +36,8 @@ interface GitOperationStore {
     success: boolean,
     isBackground?: boolean
   ) => void;
-  clearActivityLog: () => void;
+  clearActivityLog: (repoPath: string) => void;
+  getActivityLogForRepo: (repoPath: string) => GitLogEntry[];
 }
 
 // Auto-dismiss timeout reference
@@ -42,7 +48,7 @@ export const useGitOperationStore = create<GitOperationStore>()(
     (set, get) => ({
       isLoading: false,
       currentOperation: null,
-      activityLog: [],
+      activityLogsByRepo: {},
 
       startOperation: (type, target) => {
         // Clear any pending dismiss timeout
@@ -104,6 +110,7 @@ export const useGitOperationStore = create<GitOperationStore>()(
       },
 
       addLogEntry: (
+        repoPath,
         operationType,
         operationName,
         command,
@@ -111,6 +118,8 @@ export const useGitOperationStore = create<GitOperationStore>()(
         success,
         isBackground = false
       ) => {
+        if (!repoPath) return; // Don't add entries without a repo path
+
         const entry: GitLogEntry = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           timestamp: new Date(),
@@ -122,20 +131,36 @@ export const useGitOperationStore = create<GitOperationStore>()(
           isBackground,
         };
 
+        set((state) => {
+          const currentLog = state.activityLogsByRepo[repoPath] || [];
+          return {
+            activityLogsByRepo: {
+              ...state.activityLogsByRepo,
+              [repoPath]: [entry, ...currentLog].slice(0, 500), // Limit to 500 entries per repo
+            },
+          };
+        });
+      },
+
+      clearActivityLog: (repoPath) => {
+        if (!repoPath) return;
         set((state) => ({
-          activityLog: [entry, ...state.activityLog].slice(0, 500), // Limit to 500 entries
+          activityLogsByRepo: {
+            ...state.activityLogsByRepo,
+            [repoPath]: [],
+          },
         }));
       },
 
-      clearActivityLog: () => {
-        set({ activityLog: [] });
+      getActivityLogForRepo: (repoPath) => {
+        return get().activityLogsByRepo[repoPath] || [];
       },
     }),
     {
       name: 'forky:git-activity-log',
       partialize: (state) => ({
-        // Only persist activity log, not current operation state
-        activityLog: state.activityLog,
+        // Only persist activity logs by repo, not current operation state
+        activityLogsByRepo: state.activityLogsByRepo,
       }),
       // Handle Date serialization
       storage: {
@@ -145,14 +170,16 @@ export const useGitOperationStore = create<GitOperationStore>()(
 
           try {
             const parsed = JSON.parse(str);
-            // Convert timestamp strings back to Date objects
-            if (parsed.state?.activityLog) {
-              parsed.state.activityLog = parsed.state.activityLog.map(
-                (entry: GitLogEntry & { timestamp: string }) => ({
+            // Convert timestamp strings back to Date objects for all repos
+            if (parsed.state?.activityLogsByRepo) {
+              for (const repoPath in parsed.state.activityLogsByRepo) {
+                parsed.state.activityLogsByRepo[repoPath] = parsed.state.activityLogsByRepo[
+                  repoPath
+                ].map((entry: GitLogEntry & { timestamp: string }) => ({
                   ...entry,
                   timestamp: new Date(entry.timestamp),
-                })
-              );
+                }));
+              }
             }
             return parsed;
           } catch {
@@ -170,7 +197,19 @@ export const useGitOperationStore = create<GitOperationStore>()(
   )
 );
 
+// Stable empty array reference to avoid infinite re-renders
+const EMPTY_LOG: GitLogEntry[] = [];
+
 // Selector hooks for optimized re-renders
 export const useIsGitLoading = () => useGitOperationStore((state) => state.isLoading);
 export const useCurrentOperation = () => useGitOperationStore((state) => state.currentOperation);
-export const useActivityLog = () => useGitOperationStore((state) => state.activityLog);
+export const useActivityLogsByRepo = () =>
+  useGitOperationStore((state) => state.activityLogsByRepo);
+
+// Hook to get activity log for a specific repo (with shallow equality for optimization)
+export const useActivityLogForRepo = (repoPath: string | undefined) =>
+  useGitOperationStore(
+    useShallow((state) =>
+      repoPath ? (state.activityLogsByRepo[repoPath] ?? EMPTY_LOG) : EMPTY_LOG
+    )
+  );

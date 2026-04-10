@@ -398,6 +398,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
           completeOperation(result);
           addLogEntry(
+            repoPath,
             'Commit',
             amend ? 'Amend Commit' : 'Commit',
             command,
@@ -420,7 +421,14 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         } catch (error) {
           const errorMessage = String(error);
           completeOperation({ success: false, message: errorMessage });
-          addLogEntry('Commit', amend ? 'Amend Commit' : 'Commit', command, errorMessage, false);
+          addLogEntry(
+            repoPath,
+            'Commit',
+            amend ? 'Amend Commit' : 'Commit',
+            command,
+            errorMessage,
+            false
+          );
           // Refresh on thrown errors too, in case state changed
           await loadFileStatus();
           onRefreshRepository?.();
@@ -428,7 +436,14 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
           setIsCommitLoading(false);
         }
       },
-      [loadFileStatus, startOperation, completeOperation, addLogEntry, onRefreshRepository]
+      [
+        loadFileStatus,
+        startOperation,
+        completeOperation,
+        addLogEntry,
+        onRefreshRepository,
+        repoPath,
+      ]
     );
 
     // Context menu handlers

@@ -1,54 +1,79 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranch, Play, Flag, AlertTriangle } from 'lucide-react';
+import { GitBranch, Play, Flag, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
-import type { GitFlowType } from '../../types/git';
+import { ModalLoadingIndicator } from './ModalLoadingIndicator';
+import { BranchNameInput } from '../form';
+import type { GitFlowType, BranchInfo } from '../../types/git';
+import type { ValidationResult } from '../../utils/branchNameValidation';
 import './GitModals.css';
 
 interface GitFlowStartModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStart: (name: string) => void;
+  onStart: (name: string, baseBranch: string) => void;
   flowType: GitFlowType;
-  baseBranch: string;
+  defaultBaseBranch: string;
+  branches: BranchInfo[];
   prefix: string;
-  isLoading: boolean;
 }
 
 export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
-  ({ isOpen, onClose, onStart, flowType, baseBranch, prefix, isLoading }) => {
+  ({ isOpen, onClose, onStart, flowType, defaultBaseBranch, branches, prefix }) => {
     const { t } = useTranslation();
     const [name, setName] = useState('');
+    const [selectedBaseBranch, setSelectedBaseBranch] = useState(defaultBaseBranch);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isValid, setIsValid] = useState(false);
 
     // Reset when modal opens
     useEffect(() => {
       if (isOpen) {
         setName('');
+        setSelectedBaseBranch(defaultBaseBranch);
+        setIsLoading(false);
+        setIsValid(false);
       }
-    }, [isOpen]);
+    }, [isOpen, defaultBaseBranch]);
 
-    // Validate name (no spaces, no special characters)
-    const isValidName = useMemo(() => {
-      const trimmed = name.trim();
-      if (!trimmed) return false;
-      if (trimmed.startsWith('.') || trimmed.startsWith('-')) return false;
-      if (trimmed.includes(' ') || trimmed.includes('..')) return false;
-      if (/[~^:?*\\[\]@{]/.test(trimmed)) return false;
-      return true;
-    }, [name]);
+    // Get local branches for selection
+    const localBranches = useMemo(() => branches.filter((b) => !b.is_remote), [branches]);
 
-    const handleStart = () => {
-      if (isValidName && !isLoading) {
-        onStart(name.trim());
-      }
-    };
+    // Get existing branch names with prefix for validation
+    const existingBranchNames = useMemo(() => {
+      return branches
+        .filter((b) => b.name.startsWith(prefix))
+        .map((b) => b.name.replace(prefix, ''));
+    }, [branches, prefix]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && isValidName && !isLoading) {
-        handleStart();
-      }
-    };
+    const handleValidationChange = useCallback((result: ValidationResult) => {
+      setIsValid(result.isValid);
+    }, []);
+
+    const handleStart = useCallback(() => {
+      if (!isValid || isLoading) return;
+
+      // Set loading state immediately
+      setIsLoading(true);
+
+      // Use requestAnimationFrame to allow React to render the loading state
+      // before the blocking git operation starts
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          onStart(name, selectedBaseBranch);
+        });
+      });
+    }, [isValid, isLoading, onStart, name, selectedBaseBranch]);
+
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && isValid && !isLoading) {
+          handleStart();
+        }
+      },
+      [isValid, isLoading, handleStart]
+    );
 
     const getIcon = () => {
       switch (flowType) {
@@ -76,54 +101,80 @@ export const GitFlowStartModal: FC<GitFlowStartModalProps> = memo(
       }
     };
 
-    const fullBranchName = `${prefix}${name.trim()}`;
-    const isStartDisabled = !isValidName || isLoading;
+    const getLoadingText = () => {
+      switch (flowType) {
+        case 'feature':
+          return t('modals.gitFlowStart.loadingFeature');
+        case 'release':
+          return t('modals.gitFlowStart.loadingRelease');
+        case 'hotfix':
+          return t('modals.gitFlowStart.loadingHotfix');
+        default:
+          return '';
+      }
+    };
+
+    const fullBranchName = `${prefix}${name}`;
+    const isStartDisabled = !isValid || isLoading;
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
         <ModalHeader
           icon={getIcon()}
           title={getTitle()}
           description={t('modals.gitFlowStart.description', { type: flowType })}
         />
-        <ModalBody>
-          <ModalRow label={t('modals.gitFlowStart.baseBranch')}>
-            <div className="track-branch-value">
-              <GitBranch size={14} />
-              <span className="branch-name-display">{baseBranch}</span>
-            </div>
-          </ModalRow>
+        <ModalBody className={isLoading ? 'modal-body-loading' : undefined}>
+          <div className={isLoading ? 'modal-content-loading' : undefined}>
+            <ModalRow label={t('modals.gitFlowStart.baseBranch')}>
+              <div className="modal-select-wrapper">
+                <GitBranch size={14} className="select-icon" />
+                <select
+                  className="modal-select"
+                  value={selectedBaseBranch}
+                  onChange={(e) => setSelectedBaseBranch(e.target.value)}
+                  disabled={isLoading}
+                >
+                  {localBranches.map((branch) => (
+                    <option key={branch.name} value={branch.name}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="select-chevron" />
+              </div>
+            </ModalRow>
 
-          <ModalRow label={t('modals.gitFlowStart.name')}>
-            <div className="track-branch-input-container">
-              <GitBranch size={14} className="input-icon" />
-              <input
-                type="text"
-                className="track-branch-input"
+            <ModalRow label={t('modals.gitFlowStart.name')}>
+              <BranchNameInput
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={setName}
                 onKeyDown={handleKeyDown}
+                onValidationChange={handleValidationChange}
+                existingNames={existingBranchNames}
                 placeholder={t('modals.gitFlowStart.namePlaceholder', { type: flowType })}
-                autoFocus
+                prefix={prefix}
                 disabled={isLoading}
+                autoFocus
               />
-            </div>
-          </ModalRow>
+            </ModalRow>
 
-          {name.trim() && (
-            <div className="modal-info">
-              <GitBranch size={14} />
-              <span>{t('modals.gitFlowStart.willCreate', { branch: fullBranchName })}</span>
-            </div>
-          )}
+            {name && (
+              <div className="modal-info">
+                <GitBranch size={14} />
+                <span>{t('modals.gitFlowStart.willCreate', { branch: fullBranchName })}</span>
+              </div>
+            )}
+          </div>
         </ModalBody>
 
-        <ModalFooter>
+        <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>
+          <ModalLoadingIndicator isLoading={isLoading} loadingText={getLoadingText()} />
           <button className="btn-cancel" onClick={onClose} disabled={isLoading}>
             {t('common.cancel')}
           </button>
           <button className="btn-primary" onClick={handleStart} disabled={isStartDisabled}>
-            {isLoading ? t('common.loading') : t('modals.gitFlowStart.start')}
+            {t('modals.gitFlowStart.start')}
           </button>
         </ModalFooter>
       </Modal>

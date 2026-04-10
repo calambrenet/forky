@@ -283,6 +283,7 @@ export interface GitFlowConfig {
   feature_prefix: string;
   release_prefix: string;
   hotfix_prefix: string;
+  version_tag_prefix: string;
 }
 
 export type GitFlowBranchType = 'Feature' | 'Release' | 'Hotfix' | 'Master' | 'Develop' | 'Other';

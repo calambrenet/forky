@@ -7,33 +7,6 @@
   border-radius: 6px;
 }
 
-/* Activity log button - bottom left corner */
-.repo-info-log-btn {
-  position: absolute;
-  bottom: 4px;
-  left: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
-  z-index: 1;
-}
-
-.repo-info-log-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
 /* Normal state content - vertical layout */
 .repo-info-content {
   display: flex;

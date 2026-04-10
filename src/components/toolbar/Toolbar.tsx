@@ -59,10 +59,10 @@ interface ToolbarProps {
   onStartRelease?: () => void;
   onStartHotfix?: () => void;
   onFinishBranch?: () => void;
+  onInitGitFlow?: () => void;
   isLoading?: boolean;
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
-  onOpenActivityLog?: () => void;
   onFeedback?: () => void;
   onOpenSettings?: () => void;
 }
@@ -94,10 +94,10 @@ export const Toolbar: FC<ToolbarProps> = memo(
     onStartRelease,
     onStartHotfix,
     onFinishBranch,
+    onInitGitFlow,
     isLoading = false,
     gitOperation,
     onDismissOperation,
-    onOpenActivityLog,
     onFeedback,
     onOpenSettings,
   }) => {
@@ -216,7 +216,6 @@ export const Toolbar: FC<ToolbarProps> = memo(
             onBranchChange={onBranchChange || (() => {})}
             gitOperation={gitOperation}
             onDismissOperation={onDismissOperation}
-            onOpenActivityLog={onOpenActivityLog}
           />
         </div>
 
@@ -308,6 +307,17 @@ export const Toolbar: FC<ToolbarProps> = memo(
             <MenuItem icon={<Terminal size={ICON_SIZE} />} onClick={handleOpenInTerminal}>
               {t('menu.openInTerminal')}
             </MenuItem>
+            <SubMenu icon={<GitBranch size={ICON_SIZE} />} label={t('menu.gitFlow')}>
+              {gitFlowConfig?.initialized ? (
+                <>
+                  <MenuItem onClick={onStartFeature}>{t('branchDropdown.startFeature')}</MenuItem>
+                  <MenuItem onClick={onStartRelease}>{t('branchDropdown.startRelease')}</MenuItem>
+                  <MenuItem onClick={onStartHotfix}>{t('branchDropdown.startHotfix')}</MenuItem>
+                </>
+              ) : (
+                <MenuItem onClick={onInitGitFlow}>{t('menu.initGitFlow')}</MenuItem>
+              )}
+            </SubMenu>
             <MenuSeparator />
             <SubMenu icon={<Sun size={ICON_SIZE} />} label={t('menu.theme')}>
               <MenuItem

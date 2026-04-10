@@ -37,6 +37,8 @@
     "openRepository": "Abrir Repositorio...",
     "cloneRepository": "Clonar Repositorio...",
     "openInTerminal": "Abrir en Terminal",
+    "gitFlow": "Git Flow",
+    "initGitFlow": "Inicializar Git Flow...",
     "theme": "Tema",
     "themeSystem": "Sistema",
     "themeLight": "Claro",
@@ -121,7 +123,8 @@
       "title": "Fetch",
       "description": "Obtener cambios del repositorio remoto",
       "remote": "Remoto",
-      "fetchAllRemotes": "Obtener de todos los remotos"
+      "fetchAllRemotes": "Obtener de todos los remotos",
+      "loading": "Obteniendo..."
     },
     "pull": {
       "title": "Pull",
@@ -131,7 +134,8 @@
       "into": "Hacia",
       "noBranch": "Sin rama",
       "rebaseInsteadOfMerge": "Hacer rebase en lugar de merge",
-      "stashAndReapply": "Guardar y reaplicar cambios locales"
+      "stashAndReapply": "Guardar y reaplicar cambios locales",
+      "loading": "Descargando..."
     },
     "push": {
       "title": "Push",
@@ -139,7 +143,8 @@
       "branch": "Rama",
       "to": "Hacia",
       "pushAllTags": "Enviar todas las etiquetas",
-      "forcePush": "Forzar push"
+      "forcePush": "Forzar push",
+      "loading": "Enviando..."
     },
     "credential": {
       "usernameRequired": "Usuario Requerido",
@@ -299,7 +304,8 @@
       "typeNoFf": "Sin Fast-forward",
       "typeSquash": "Squash",
       "merge": "Fusionar",
-      "merging": "Fusionando..."
+      "merging": "Fusionando...",
+      "loading": "Fusionando..."
     },
     "rebase": {
       "title": "Rebase de Rama",
@@ -311,7 +317,8 @@
       "preserveMerges": "Preservar commits de merge",
       "autostash": "Guardar y restaurar cambios automáticamente",
       "rebase": "Rebase",
-      "rebasing": "Rebaseando..."
+      "rebasing": "Rebaseando...",
+      "loading": "Rebaseando..."
     },
     "interactiveRebase": {
       "title": "Rebase Interactivo",
@@ -324,7 +331,8 @@
       "author": "Autor",
       "autostash": "Guardar y restaurar cambios automáticamente",
       "startRebase": "Iniciar Rebase",
-      "noCommits": "No hay commits para rebase"
+      "noCommits": "No hay commits para rebase",
+      "loading": "Rebaseando..."
     },
     "gitFlowStart": {
       "titleFeature": "Iniciar Feature",
@@ -335,7 +343,10 @@
       "namePlaceholder": "Nombre del {{type}}",
       "baseBranch": "Rama base",
       "willCreate": "Se creará: {{branch}}",
-      "start": "Iniciar"
+      "start": "Iniciar",
+      "loadingFeature": "Iniciando feature...",
+      "loadingRelease": "Iniciando release...",
+      "loadingHotfix": "Iniciando hotfix..."
     },
     "gitFlowFinish": {
       "titleFeature": "Finalizar Feature",
@@ -347,7 +358,22 @@
       "mergeIntoBoth": "Se fusionará en {{master}} y {{develop}}",
       "createTag": "Se creará la etiqueta '{{tag}}'",
       "deleteBranch": "Eliminar rama después del merge",
-      "finish": "Finalizar"
+      "finish": "Finalizar",
+      "loadingFeature": "Finalizando feature...",
+      "loadingRelease": "Finalizando release...",
+      "loadingHotfix": "Finalizando hotfix..."
+    },
+    "gitFlowInit": {
+      "title": "Inicializar Git Flow",
+      "description": "Configura Git Flow para este repositorio",
+      "productionBranch": "Rama de Producción",
+      "developmentBranch": "Rama de Desarrollo",
+      "featurePrefix": "Prefijo de Feature",
+      "releasePrefix": "Prefijo de Release",
+      "hotfixPrefix": "Prefijo de Hotfix",
+      "versionTagPrefix": "Prefijo de Tag de Versión",
+      "loading": "Inicializando...",
+      "initialize": "Inicializar"
     },
     "divergentBranches": {
       "title": "Ramas Divergentes",
@@ -356,7 +382,9 @@
       "merge": "Merge",
       "mergeDescription": "Crear un commit de merge combinando ambos historiales",
       "rebase": "Rebase",
-      "rebaseDescription": "Reaplicar tus commits sobre la rama remota"
+      "rebaseDescription": "Reaplicar tus commits sobre la rama remota",
+      "loadingMerge": "Fusionando...",
+      "loadingRebase": "Rebaseando..."
     }
   },
   "stashDropdown": {
@@ -366,12 +394,22 @@
     "yesterday": "Ayer",
     "daysAgo": "días atrás"
   },
+  "statusBar": {
+    "activityLog": "Activity Log"
+  },
   "activityLog": {
-    "title": "Registro de Actividad Git",
-    "noActivity": "Sin actividad aún",
-    "success": "Éxito",
-    "failed": "Fallido",
-    "clearLog": "Limpiar Registro"
+    "title": "Activity Log",
+    "empty": "Sin actividad registrada",
+    "clear": "Limpiar",
+    "error": "Error",
+    "errors": "Errores",
+    "command": "Comando",
+    "time": {
+      "justNow": "Ahora",
+      "minutesAgo": "Hace {n} min",
+      "hoursAgo": "Hace {n}h",
+      "daysAgo": "Hace {n} días"
+    }
   },
   "alerts": {
     "fetchFailed": "Fetch Fallido",
@@ -398,7 +436,11 @@
     "rebaseSuccess": "Rebase Exitoso",
     "rebaseFailed": "Rebase Fallido",
     "rebaseConflicts": "Conflictos de Rebase",
-    "gitFlowFinishSuccess": "Git Flow Completado"
+    "gitFlowFinishSuccess": "Git Flow Completado",
+    "gitFlowInitSuccess": "Git Flow inicializado correctamente",
+    "gitFlowInitFailed": "Error al inicializar Git Flow",
+    "fastForwardSuccess": "Fast-forward exitoso",
+    "fastForwardFailed": "Fast-forward fallido"
   },
   "welcome": {
     "title": "Forky",
@@ -517,5 +559,15 @@
       "message": "Git necesita un nombre y un email para crear commits. ¿Quieres configurarlo ahora?",
       "openSettings": "Abrir Configuración"
     }
+  },
+  "validation": {
+    "branchNameEmpty": "El nombre no puede estar vacío",
+    "branchNameInvalidStart": "No puede empezar con '.' o '-'",
+    "branchNameInvalidEnd": "No puede terminar con '.', '-' o '.lock'",
+    "branchNameInvalidChars": "Contiene caracteres no válidos",
+    "branchNameExists": "Este nombre ya existe",
+    "branchNameTooLong": "El nombre es demasiado largo",
+    "branchNameDoubleDots": "No puede contener '..'",
+    "branchNameDoubleSlashes": "No puede contener '//'"
   }
 }

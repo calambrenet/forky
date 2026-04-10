@@ -16,7 +16,6 @@ interface ModalStore {
   // State
   activeModal: ModalType;
   isAddRemoteModalOpen: boolean;
-  isActivityLogOpen: boolean;
   sshVerification: SshVerificationState;
   credentialModal: CredentialModalState;
 
@@ -29,11 +28,6 @@ interface ModalStore {
   // Add Remote modal
   openAddRemoteModal: () => void;
   closeAddRemoteModal: () => void;
-
-  // Activity Log
-  openActivityLog: () => void;
-  closeActivityLog: () => void;
-  toggleActivityLog: () => void;
 
   // SSH Verification
   showSshVerification: (hostInfo: SshHostInfo, pendingOperation: () => Promise<void>) => void;
@@ -64,7 +58,6 @@ export const useModalStore = create<ModalStore>()((set) => ({
   // Initial state
   activeModal: null,
   isAddRemoteModalOpen: false,
-  isActivityLogOpen: false,
   sshVerification: initialSshVerification,
   credentialModal: initialCredentialModal,
 
@@ -77,11 +70,6 @@ export const useModalStore = create<ModalStore>()((set) => ({
   // Add Remote modal
   openAddRemoteModal: () => set({ isAddRemoteModalOpen: true }),
   closeAddRemoteModal: () => set({ isAddRemoteModalOpen: false }),
-
-  // Activity Log
-  openActivityLog: () => set({ isActivityLogOpen: true }),
-  closeActivityLog: () => set({ isActivityLogOpen: false }),
-  toggleActivityLog: () => set((state) => ({ isActivityLogOpen: !state.isActivityLogOpen })),
 
   // SSH Verification
   showSshVerification: (hostInfo, pendingOperation) =>
@@ -119,6 +107,5 @@ export const useModalStore = create<ModalStore>()((set) => ({
 // Selector hooks for optimized re-renders
 export const useActiveModal = () => useModalStore((state) => state.activeModal);
 export const useIsAddRemoteModalOpen = () => useModalStore((state) => state.isAddRemoteModalOpen);
-export const useIsActivityLogOpen = () => useModalStore((state) => state.isActivityLogOpen);
 export const useSshVerification = () => useModalStore((state) => state.sshVerification);
 export const useCredentialModal = () => useModalStore((state) => state.credentialModal);

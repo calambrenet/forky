@@ -1,10 +1,11 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranch, AlertTriangle } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
-import { Checkbox } from '../form';
+import { Checkbox, BranchNameInput } from '../form';
 import type { BranchInfo } from '../../types/git';
+import type { ValidationResult } from '../../utils/branchNameValidation';
 import './GitModals.css';
 
 interface CreateBranchModalProps {
@@ -20,57 +21,41 @@ export const CreateBranchModal: FC<CreateBranchModalProps> = memo(
     const { t } = useTranslation();
     const [branchName, setBranchName] = useState('');
     const [checkoutAfterCreate, setCheckoutAfterCreate] = useState(true);
+    const [isValid, setIsValid] = useState(false);
+
+    // Get existing branch names for validation
+    const existingBranchNames = localBranches.map((b) => b.name);
 
     // Reset when modal opens
     useEffect(() => {
       if (isOpen) {
         setBranchName('');
         setCheckoutAfterCreate(true);
+        setIsValid(false);
       }
     }, [isOpen]);
 
-    // Check if branch name already exists
-    const branchExists = useMemo(() => {
-      if (!branchName.trim()) return false;
-      return localBranches.some((b) => b.name === branchName.trim());
-    }, [localBranches, branchName]);
+    const handleValidationChange = useCallback((result: ValidationResult) => {
+      setIsValid(result.isValid);
+    }, []);
 
-    // Validate branch name (basic git branch name validation)
-    const isValidBranchName = useMemo(() => {
-      const name = branchName.trim();
-      if (!name) return false;
-      // Git branch name rules: no spaces, no "..", no starting with ".", no ending with ".lock", etc.
-      if (name.startsWith('.') || name.startsWith('-')) return false;
-      if (name.endsWith('.') || name.endsWith('.lock')) return false;
-      if (name.includes('..') || name.includes('~') || name.includes('^') || name.includes(':'))
-        return false;
-      if (
-        name.includes('\\') ||
-        name.includes(' ') ||
-        name.includes('?') ||
-        name.includes('*') ||
-        name.includes('[')
-      )
-        return false;
-      if (name.includes('@{')) return false;
-      return true;
-    }, [branchName]);
-
-    const handleCreate = () => {
-      if (!branchExists && isValidBranchName && sourceBranch) {
-        onCreate(branchName.trim(), sourceBranch.name, checkoutAfterCreate);
+    const handleCreate = useCallback(() => {
+      if (isValid && sourceBranch && branchName) {
+        onCreate(branchName, sourceBranch.name, checkoutAfterCreate);
         onClose();
       }
-    };
+    }, [isValid, sourceBranch, branchName, checkoutAfterCreate, onCreate, onClose]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !branchExists && isValidBranchName) {
-        handleCreate();
-      }
-    };
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && isValid) {
+          handleCreate();
+        }
+      },
+      [isValid, handleCreate]
+    );
 
-    const isCreateDisabled = branchExists || !isValidBranchName || !branchName.trim();
-
+    const isCreateDisabled = !isValid || !branchName;
     const sourceBranchDisplayName = sourceBranch?.name || '';
 
     return (
@@ -88,18 +73,15 @@ export const CreateBranchModal: FC<CreateBranchModalProps> = memo(
             </div>
           </ModalRow>
           <ModalRow label={t('modals.createBranch.branchName')}>
-            <div className="track-branch-input-container">
-              <GitBranch size={14} className="input-icon" />
-              <input
-                type="text"
-                className="track-branch-input"
-                value={branchName}
-                onChange={(e) => setBranchName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t('modals.createBranch.branchNamePlaceholder')}
-                autoFocus
-              />
-            </div>
+            <BranchNameInput
+              value={branchName}
+              onChange={setBranchName}
+              onKeyDown={handleKeyDown}
+              onValidationChange={handleValidationChange}
+              existingNames={existingBranchNames}
+              placeholder={t('modals.createBranch.branchNamePlaceholder')}
+              autoFocus
+            />
           </ModalRow>
         </ModalBody>
         <div className="modal-checkboxes">
@@ -109,12 +91,6 @@ export const CreateBranchModal: FC<CreateBranchModalProps> = memo(
             label={t('modals.createBranch.checkoutAfterCreate')}
           />
         </div>
-        {branchExists && (
-          <div className="modal-warning">
-            <AlertTriangle size={16} />
-            <span>{t('modals.createBranch.branchExists', { branch: branchName })}</span>
-          </div>
-        )}
         <ModalFooter>
           <button className="btn-cancel" onClick={onClose}>
             {t('common.cancel')}

@@ -598,13 +598,38 @@ pub fn get_current_branch_flow_info(
 }
 
 #[tauri::command]
+pub fn git_flow_init(
+    master_branch: String,
+    develop_branch: String,
+    feature_prefix: String,
+    release_prefix: String,
+    hotfix_prefix: String,
+    version_tag_prefix: String,
+    state: State<AppState>,
+) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_flow_init(
+        path,
+        &master_branch,
+        &develop_branch,
+        &feature_prefix,
+        &release_prefix,
+        &hotfix_prefix,
+        &version_tag_prefix,
+    )
+}
+
+#[tauri::command]
 pub fn git_flow_start(
     flow_type: String,
     name: String,
+    base_branch: Option<String>,
     state: State<AppState>,
 ) -> Result<repository::GitOperationResult, String> {
-    let path = path_from_state(&state)?;
-    repository::git_flow_start(&path, &flow_type, &name)
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_flow_start(path, &flow_type, &name, base_branch.as_deref())
 }
 
 #[tauri::command]
@@ -631,4 +656,15 @@ pub fn git_set_global_identity(
     email: String,
 ) -> Result<GitOperationResult, String> {
     repository::git_set_global_identity(&name, &email)
+}
+
+#[tauri::command]
+pub fn git_fast_forward(
+    branch: String,
+    remote: String,
+    state: State<AppState>,
+) -> Result<repository::GitOperationResult, String> {
+    let repo_path = state.current_repo_path.lock().unwrap();
+    let path = repo_path.as_ref().ok_or("No repository opened")?;
+    repository::git_fast_forward(path, &branch, &remote)
 }

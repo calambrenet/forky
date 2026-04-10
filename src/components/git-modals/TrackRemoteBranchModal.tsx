@@ -1,9 +1,11 @@
 import type { FC } from 'react';
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranch, AlertTriangle } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody, ModalFooter, ModalRow } from '../modal';
+import { BranchNameInput } from '../form';
 import type { BranchInfo } from '../../types/git';
+import type { ValidationResult } from '../../utils/branchNameValidation';
 import './GitModals.css';
 
 interface TrackRemoteBranchModalProps {
@@ -29,33 +31,42 @@ export const TrackRemoteBranchModal: FC<TrackRemoteBranchModalProps> = memo(
     const { t } = useTranslation();
     const defaultLocalName = getDefaultLocalBranchName(remoteBranch);
     const [localBranchName, setLocalBranchName] = useState(defaultLocalName);
+    const [isValid, setIsValid] = useState(false);
+
+    // Get existing branch names for validation
+    const existingBranchNames = useMemo(() => {
+      return localBranches.map((b) => b.name);
+    }, [localBranches]);
 
     // Reset when modal opens with new remote branch
     useEffect(() => {
       if (isOpen) {
         setLocalBranchName(getDefaultLocalBranchName(remoteBranch));
+        setIsValid(false);
       }
     }, [isOpen, remoteBranch]);
 
-    // Check if local branch already exists
-    const localBranchExists = useMemo(() => {
-      return localBranches.some((b) => b.name === localBranchName);
-    }, [localBranches, localBranchName]);
+    const handleValidationChange = useCallback((result: ValidationResult) => {
+      setIsValid(result.isValid);
+    }, []);
 
-    const handleTrack = () => {
-      if (!localBranchExists && localBranchName.trim()) {
-        onTrack(localBranchName.trim(), remoteBranch);
+    const handleTrack = useCallback(() => {
+      if (isValid && localBranchName) {
+        onTrack(localBranchName, remoteBranch);
         onClose();
       }
-    };
+    }, [isValid, localBranchName, remoteBranch, onTrack, onClose]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !localBranchExists && localBranchName.trim()) {
-        handleTrack();
-      }
-    };
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && isValid) {
+          handleTrack();
+        }
+      },
+      [isValid, handleTrack]
+    );
 
-    const isTrackDisabled = localBranchExists || !localBranchName.trim();
+    const isTrackDisabled = !isValid || !localBranchName;
 
     return (
       <Modal isOpen={isOpen} onClose={onClose}>
@@ -72,25 +83,16 @@ export const TrackRemoteBranchModal: FC<TrackRemoteBranchModalProps> = memo(
             </div>
           </ModalRow>
           <ModalRow label={t('modals.trackBranch.localBranch')}>
-            <div className="track-branch-input-container">
-              <GitBranch size={14} className="input-icon" />
-              <input
-                type="text"
-                className="track-branch-input"
-                value={localBranchName}
-                onChange={(e) => setLocalBranchName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                autoFocus
-              />
-            </div>
+            <BranchNameInput
+              value={localBranchName}
+              onChange={setLocalBranchName}
+              onKeyDown={handleKeyDown}
+              onValidationChange={handleValidationChange}
+              existingNames={existingBranchNames}
+              autoFocus
+            />
           </ModalRow>
         </ModalBody>
-        {localBranchExists && (
-          <div className="modal-warning">
-            <AlertTriangle size={16} />
-            <span>{t('modals.trackBranch.branchExists', { branch: localBranchName })}</span>
-          </div>
-        )}
         <ModalFooter>
           <button className="btn-cancel" onClick={onClose}>
             {t('common.cancel')}

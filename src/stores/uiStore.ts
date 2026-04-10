@@ -36,6 +36,11 @@ const MAX_SIZES = {
   diffSidebarWidth: 600,
 };
 
+// Activity Log Panel constants
+const ACTIVITY_PANEL_DEFAULT_HEIGHT = 250;
+const ACTIVITY_PANEL_MIN_HEIGHT = 150;
+const ACTIVITY_PANEL_MAX_HEIGHT_PERCENT = 0.6; // 60% of viewport
+
 interface UIStore {
   // Theme state
   theme: Theme;
@@ -52,6 +57,10 @@ interface UIStore {
   // Settings modal state
   settingsOpen: boolean;
   settingsInitialPanel: SettingsPanel;
+
+  // Activity Log Panel state
+  activityLogPanelOpen: boolean;
+  activityLogPanelHeight: number;
 
   // Theme actions
   setTheme: (theme: Theme) => void;
@@ -71,6 +80,11 @@ interface UIStore {
   setPanelSizes: (sizes: Partial<PanelSizes>) => void;
   setIsResizing: (resizing: string | null) => void;
   resetPanelSizes: () => void;
+
+  // Activity Log Panel actions
+  setActivityLogPanelOpen: (open: boolean) => void;
+  toggleActivityLogPanel: () => void;
+  setActivityLogPanelHeight: (height: number) => void;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -88,6 +102,8 @@ export const useUIStore = create<UIStore>()(
       isResizing: null,
       settingsOpen: false,
       settingsInitialPanel: 'general',
+      activityLogPanelOpen: false,
+      activityLogPanelHeight: ACTIVITY_PANEL_DEFAULT_HEIGHT,
 
       // Theme actions
       setTheme: (theme) => set({ theme }),
@@ -152,13 +168,28 @@ export const useUIStore = create<UIStore>()(
       setIsResizing: (resizing) => set({ isResizing: resizing }),
 
       resetPanelSizes: () => set({ panelSizes: DEFAULT_PANEL_SIZES }),
+
+      // Activity Log Panel actions
+      setActivityLogPanelOpen: (open) => set({ activityLogPanelOpen: open }),
+
+      toggleActivityLogPanel: () =>
+        set((state) => ({ activityLogPanelOpen: !state.activityLogPanelOpen })),
+
+      setActivityLogPanelHeight: (height) => {
+        const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+        const maxHeight = viewportHeight * ACTIVITY_PANEL_MAX_HEIGHT_PERCENT;
+        const clampedHeight = Math.min(maxHeight, Math.max(ACTIVITY_PANEL_MIN_HEIGHT, height));
+        set({ activityLogPanelHeight: clampedHeight });
+      },
     }),
     {
       name: 'forky:ui-settings',
       partialize: (state) => ({
-        // Only persist theme and panel sizes
+        // Only persist theme, panel sizes, and activity log panel state
         theme: state.theme,
         panelSizes: state.panelSizes,
+        activityLogPanelOpen: state.activityLogPanelOpen,
+        activityLogPanelHeight: state.activityLogPanelHeight,
       }),
     }
   )
@@ -178,5 +209,16 @@ export const useIsResizing = () => useUIStore((state) => state.isResizing);
 export const useSettingsOpen = () => useUIStore((state) => state.settingsOpen);
 export const useSettingsInitialPanel = () => useUIStore((state) => state.settingsInitialPanel);
 
+// Activity Log Panel selector hooks
+export const useActivityLogPanelOpen = () => useUIStore((state) => state.activityLogPanelOpen);
+export const useActivityLogPanelHeight = () => useUIStore((state) => state.activityLogPanelHeight);
+
 // Constants export
-export { MIN_SIZES, MAX_SIZES, DEFAULT_PANEL_SIZES };
+export {
+  MIN_SIZES,
+  MAX_SIZES,
+  DEFAULT_PANEL_SIZES,
+  ACTIVITY_PANEL_MIN_HEIGHT,
+  ACTIVITY_PANEL_MAX_HEIGHT_PERCENT,
+  ACTIVITY_PANEL_DEFAULT_HEIGHT,
+};

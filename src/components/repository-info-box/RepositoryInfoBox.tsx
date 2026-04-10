@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useState, useRef, useEffect } from 'react';
-import { List, ChevronDown, X, FileText } from 'lucide-react';
+import { List, ChevronDown, X } from 'lucide-react';
 import type { BranchInfo } from '../../types/git';
 import { BranchSelector } from '../branch-selector';
 import './RepositoryInfoBox.css';
@@ -21,7 +21,6 @@ interface RepositoryInfoBoxProps {
   onBranchChange: (branchName: string) => void;
   gitOperation?: GitOperationState | null;
   onDismissOperation?: () => void;
-  onOpenActivityLog?: () => void;
 }
 
 const Spinner = () => <div className="repo-info-spinner" />;
@@ -33,7 +32,6 @@ export const RepositoryInfoBox: FC<RepositoryInfoBoxProps> = ({
   onBranchChange,
   gitOperation,
   onDismissOperation,
-  onOpenActivityLog,
 }) => {
   const [isBranchSelectorOpen, setIsBranchSelectorOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,13 +68,6 @@ export const RepositoryInfoBox: FC<RepositoryInfoBoxProps> = ({
 
   return (
     <div className="repo-info-box" ref={containerRef}>
-      {/* Activity log button - only show in idle state */}
-      {!showOperation && (
-        <button className="repo-info-log-btn" onClick={onOpenActivityLog} title="Activity Log">
-          <FileText size={14} />
-        </button>
-      )}
-
       {/* Operation overlay */}
       {showOperation && (
         <div

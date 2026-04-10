@@ -64,6 +64,9 @@ interface SidebarProps {
   onMergeInto?: (branch: BranchInfo) => void;
   onRebaseOn?: (branch: BranchInfo) => void;
   onInteractiveRebase?: (branch: BranchInfo) => void;
+  onFastForward?: (branch: BranchInfo) => void;
+  onBranchPull?: (branch: BranchInfo) => void;
+  onBranchPush?: (branch: BranchInfo) => void;
   expandTagsSection?: boolean;
 }
 
@@ -190,6 +193,9 @@ export const Sidebar: FC<SidebarProps> = memo(
     onMergeInto,
     onRebaseOn,
     onInteractiveRebase,
+    onFastForward,
+    onBranchPull,
+    onBranchPush,
     expandTagsSection,
   }) => {
     const { t } = useTranslation();
@@ -545,6 +551,42 @@ export const Sidebar: FC<SidebarProps> = memo(
       [closeBranchContextMenu, onInteractiveRebase]
     );
 
+    // Checkout handler
+    const handleCheckout = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onBranchCheckout(branch.name);
+      },
+      [closeBranchContextMenu, onBranchCheckout]
+    );
+
+    // Fast-forward handler
+    const handleFastForward = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onFastForward?.(branch);
+      },
+      [closeBranchContextMenu, onFastForward]
+    );
+
+    // Pull branch handler (opens pull modal with branch pre-selected)
+    const handleBranchPull = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onBranchPull?.(branch);
+      },
+      [closeBranchContextMenu, onBranchPull]
+    );
+
+    // Push branch handler (opens push modal with branch pre-selected)
+    const handleBranchPush = useCallback(
+      (branch: BranchInfo) => {
+        closeBranchContextMenu();
+        onBranchPush?.(branch);
+      },
+      [closeBranchContextMenu, onBranchPush]
+    );
+
     // Clear filter
     const handleClearFilter = useCallback(() => {
       setFilter('');
@@ -858,6 +900,10 @@ export const Sidebar: FC<SidebarProps> = memo(
             currentBranch={currentBranch}
             position={branchContextMenu.position}
             onClose={closeBranchContextMenu}
+            onCheckout={handleCheckout}
+            onFastForward={handleFastForward}
+            onPull={handleBranchPull}
+            onPush={handleBranchPush}
             onCopyBranchName={handleCopyBranchName}
             onNewBranch={handleNewBranch}
             onNewTag={handleNewTag}

@@ -98,6 +98,7 @@ pub struct GitFlowConfig {
     pub feature_prefix: String,
     pub release_prefix: String,
     pub hotfix_prefix: String,
+    pub version_tag_prefix: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -3434,6 +3435,7 @@ pub fn get_gitflow_config(repo: &Repository) -> Result<GitFlowConfig, String> {
             feature_prefix: "feature/".to_string(),
             release_prefix: "release/".to_string(),
             hotfix_prefix: "hotfix/".to_string(),
+            version_tag_prefix: "".to_string(),
         });
     }
 
@@ -3458,6 +3460,10 @@ pub fn get_gitflow_config(repo: &Repository) -> Result<GitFlowConfig, String> {
         .get_string("gitflow.prefix.hotfix")
         .unwrap_or_else(|_| "hotfix/".to_string());
 
+    let version_tag_prefix = config
+        .get_string("gitflow.prefix.versiontag")
+        .unwrap_or_else(|_| "".to_string());
+
     Ok(GitFlowConfig {
         initialized: true,
         master_branch,
@@ -3465,6 +3471,7 @@ pub fn get_gitflow_config(repo: &Repository) -> Result<GitFlowConfig, String> {
         feature_prefix,
         release_prefix,
         hotfix_prefix,
+        version_tag_prefix,
     })
 }
 
@@ -3522,16 +3529,86 @@ pub fn get_current_branch_flow_info(repo: &Repository) -> Result<CurrentBranchFl
     })
 }
 
+/// Initialize Git Flow in a repository
+pub fn git_flow_init(
+    repo_path: &str,
+    master_branch: &str,
+    develop_branch: &str,
+    feature_prefix: &str,
+    release_prefix: &str,
+    hotfix_prefix: &str,
+    version_tag_prefix: &str,
+) -> Result<GitOperationResult, String> {
+    let repo = open_repository(repo_path)?;
+
+    // Get mutable config
+    let mut config = repo
+        .config()
+        .map_err(|e| format!("Failed to get config: {}", e))?;
+
+    // Set git flow configuration values
+    config
+        .set_str("gitflow.branch.master", master_branch)
+        .map_err(|e| format!("Failed to set gitflow.branch.master: {}", e))?;
+
+    config
+        .set_str("gitflow.branch.develop", develop_branch)
+        .map_err(|e| format!("Failed to set gitflow.branch.develop: {}", e))?;
+
+    config
+        .set_str("gitflow.prefix.feature", feature_prefix)
+        .map_err(|e| format!("Failed to set gitflow.prefix.feature: {}", e))?;
+
+    config
+        .set_str("gitflow.prefix.release", release_prefix)
+        .map_err(|e| format!("Failed to set gitflow.prefix.release: {}", e))?;
+
+    config
+        .set_str("gitflow.prefix.hotfix", hotfix_prefix)
+        .map_err(|e| format!("Failed to set gitflow.prefix.hotfix: {}", e))?;
+
+    config
+        .set_str("gitflow.prefix.versiontag", version_tag_prefix)
+        .map_err(|e| format!("Failed to set gitflow.prefix.versiontag: {}", e))?;
+
+    // Check if develop branch exists, create it if not
+    let develop_exists = repo
+        .find_branch(develop_branch, git2::BranchType::Local)
+        .is_ok();
+
+    if !develop_exists {
+        // Create develop branch from master/main
+        let master_ref = repo
+            .find_branch(master_branch, git2::BranchType::Local)
+            .map_err(|_| format!("Production branch '{}' not found", master_branch))?;
+
+        let master_commit = master_ref
+            .get()
+            .peel_to_commit()
+            .map_err(|e| format!("Failed to get commit from master branch: {}", e))?;
+
+        repo.branch(develop_branch, &master_commit, false)
+            .map_err(|e| format!("Failed to create develop branch: {}", e))?;
+    }
+
+    Ok(create_success_result(format!(
+        "Git Flow initialized with production branch '{}' and development branch '{}'",
+        master_branch, develop_branch
+    )))
+}
+
 /// Start a git flow branch (feature, release, or hotfix)
+/// If custom_base is provided and not empty, it will be used instead of the default base branch
 pub fn git_flow_start(
     repo_path: &str,
     flow_type: &str,
     name: &str,
+    custom_base: Option<&str>,
 ) -> Result<GitOperationResult, String> {
     let repo = open_repository(repo_path)?;
     let config = get_gitflow_config(&repo)?;
 
-    let (prefix, base_branch) = match flow_type {
+    let (prefix, default_base) = match flow_type {
         "feature" => (config.feature_prefix, config.develop_branch),
         "release" => (config.release_prefix, config.develop_branch),
         "hotfix" => (config.hotfix_prefix, config.master_branch),
@@ -3541,6 +3618,12 @@ pub fn git_flow_start(
                 "",
             ))
         }
+    };
+
+    // Use custom base if provided and not empty, otherwise use default
+    let base_branch = match custom_base {
+        Some(b) if !b.is_empty() => b.to_string(),
+        _ => default_base,
     };
 
     let branch_name = format!("{}{}", prefix, name);
@@ -3800,4 +3883,109 @@ pub fn git_set_global_identity(name: &str, email: &str) -> Result<GitOperationRe
     Ok(create_success_result(
         "Global Git identity updated".to_string(),
     ))
+}
+
+/// Fast-forward a local branch to match its remote tracking branch
+/// Uses `git fetch remote branch:branch` for non-checked-out branches
+/// Uses `git merge --ff-only` for the currently checked-out branch
+pub fn git_fast_forward(
+    repo_path: &str,
+    branch: &str,
+    remote: &str,
+) -> Result<GitOperationResult, String> {
+    let repo = open_repository(repo_path)?;
+
+    // Check if the branch is currently checked out
+    let head = repo.head().map_err(|e| e.to_string())?;
+    let current_branch = head
+        .shorthand()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    let is_current_branch = current_branch == branch;
+
+    if is_current_branch {
+        // For the current branch, use git merge --ff-only
+        let remote_ref = format!("{}/{}", remote, branch);
+
+        // First fetch the remote branch
+        let fetch_output = std::process::Command::new("git")
+            .args(["fetch", remote, branch])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
+
+        if !fetch_output.status.success() {
+            let stderr = String::from_utf8_lossy(&fetch_output.stderr).to_string();
+            return Ok(create_error_result(&stderr, ""));
+        }
+
+        // Then merge with --ff-only
+        let merge_output = std::process::Command::new("git")
+            .args(["merge", "--ff-only", &remote_ref])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git merge: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&merge_output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&merge_output.stderr).to_string();
+
+        if !merge_output.status.success() {
+            // Check if it's because it can't be fast-forwarded
+            if stderr.contains("Not possible to fast-forward") || stderr.contains("fatal") {
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!(
+                        "Cannot fast-forward '{}': branches have diverged or are up to date",
+                        branch
+                    ),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("fast_forward_failed".to_string()),
+                    conflicting_files: None,
+                });
+            }
+            return Ok(create_error_result(&stderr, &stdout));
+        }
+
+        Ok(create_success_result(format!(
+            "Fast-forwarded '{}' from '{}/{}'",
+            branch, remote, branch
+        )))
+    } else {
+        // For non-current branches, use git fetch remote branch:branch
+        let refspec = format!("{}:{}", branch, branch);
+
+        let output = std::process::Command::new("git")
+            .args(["fetch", remote, &refspec])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if !output.status.success() {
+            // Check for non-fast-forward error
+            if stderr.contains("non-fast-forward") {
+                return Ok(GitOperationResult {
+                    success: false,
+                    message: format!(
+                        "Cannot fast-forward '{}': local branch has commits not in remote",
+                        branch
+                    ),
+                    requires_ssh_verification: None,
+                    requires_credential: None,
+                    error_type: Some("fast_forward_failed".to_string()),
+                    conflicting_files: None,
+                });
+            }
+            return Ok(create_error_result(&stderr, &stdout));
+        }
+
+        Ok(create_success_result(format!(
+            "Fast-forwarded '{}' from '{}/{}'",
+            branch, remote, branch
+        )))
+    }
 }

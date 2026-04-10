@@ -1,3 +1,7 @@
+:root {
+  --status-bar-height: 28px;
+}
+
 .app {
   display: flex;
   flex-direction: column;

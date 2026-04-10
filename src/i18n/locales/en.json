@@ -37,6 +37,8 @@
     "openRepository": "Open Repository...",
     "cloneRepository": "Clone Repository...",
     "openInTerminal": "Open in Terminal",
+    "gitFlow": "Git Flow",
+    "initGitFlow": "Initialize Git Flow...",
     "theme": "Theme",
     "themeSystem": "System",
     "themeLight": "Light",
@@ -121,7 +123,8 @@
       "title": "Fetch",
       "description": "Fetch changes from remote repository",
       "remote": "Remote",
-      "fetchAllRemotes": "Fetch all remotes"
+      "fetchAllRemotes": "Fetch all remotes",
+      "loading": "Fetching..."
     },
     "pull": {
       "title": "Pull",
@@ -131,7 +134,8 @@
       "into": "Into",
       "noBranch": "No branch",
       "rebaseInsteadOfMerge": "Rebase instead of merge",
-      "stashAndReapply": "Stash and reapply local changes"
+      "stashAndReapply": "Stash and reapply local changes",
+      "loading": "Pulling..."
     },
     "push": {
       "title": "Push",
@@ -139,7 +143,8 @@
       "branch": "Branch",
       "to": "To",
       "pushAllTags": "Push all tags",
-      "forcePush": "Force push"
+      "forcePush": "Force push",
+      "loading": "Pushing..."
     },
     "credential": {
       "usernameRequired": "Username Required",
@@ -299,7 +304,8 @@
       "typeNoFf": "No Fast-forward",
       "typeSquash": "Squash",
       "merge": "Merge",
-      "merging": "Merging..."
+      "merging": "Merging...",
+      "loading": "Merging..."
     },
     "rebase": {
       "title": "Rebase Branch",
@@ -311,7 +317,8 @@
       "preserveMerges": "Preserve merge commits",
       "autostash": "Automatically stash and restore changes",
       "rebase": "Rebase",
-      "rebasing": "Rebasing..."
+      "rebasing": "Rebasing...",
+      "loading": "Rebasing..."
     },
     "interactiveRebase": {
       "title": "Interactive Rebase",
@@ -324,7 +331,8 @@
       "author": "Author",
       "autostash": "Automatically stash and restore changes",
       "startRebase": "Start Rebase",
-      "noCommits": "No commits to rebase"
+      "noCommits": "No commits to rebase",
+      "loading": "Rebasing..."
     },
     "gitFlowStart": {
       "titleFeature": "Start Feature",
@@ -335,7 +343,10 @@
       "namePlaceholder": "Enter {{type}} name",
       "baseBranch": "Base branch",
       "willCreate": "Will create: {{branch}}",
-      "start": "Start"
+      "start": "Start",
+      "loadingFeature": "Starting feature...",
+      "loadingRelease": "Starting release...",
+      "loadingHotfix": "Starting hotfix..."
     },
     "gitFlowFinish": {
       "titleFeature": "Finish Feature",
@@ -347,7 +358,22 @@
       "mergeIntoBoth": "Will merge into {{master}} and {{develop}}",
       "createTag": "Will create tag '{{tag}}'",
       "deleteBranch": "Delete branch after merge",
-      "finish": "Finish"
+      "finish": "Finish",
+      "loadingFeature": "Finishing feature...",
+      "loadingRelease": "Finishing release...",
+      "loadingHotfix": "Finishing hotfix..."
+    },
+    "gitFlowInit": {
+      "title": "Initialize Git Flow",
+      "description": "Configure Git Flow for this repository",
+      "productionBranch": "Production Branch",
+      "developmentBranch": "Development Branch",
+      "featurePrefix": "Feature Prefix",
+      "releasePrefix": "Release Prefix",
+      "hotfixPrefix": "Hotfix Prefix",
+      "versionTagPrefix": "Version Tag Prefix",
+      "loading": "Initializing...",
+      "initialize": "Initialize"
     },
     "divergentBranches": {
       "title": "Divergent Branches",
@@ -356,7 +382,9 @@
       "merge": "Merge",
       "mergeDescription": "Create a merge commit combining both histories",
       "rebase": "Rebase",
-      "rebaseDescription": "Reapply your commits on top of the remote branch"
+      "rebaseDescription": "Reapply your commits on top of the remote branch",
+      "loadingMerge": "Merging...",
+      "loadingRebase": "Rebasing..."
     }
   },
   "stashDropdown": {
@@ -366,12 +394,22 @@
     "yesterday": "Yesterday",
     "daysAgo": "days ago"
   },
+  "statusBar": {
+    "activityLog": "Activity Log"
+  },
   "activityLog": {
-    "title": "Git Activity Log",
-    "noActivity": "No activity yet",
-    "success": "Success",
-    "failed": "Failed",
-    "clearLog": "Clear Log"
+    "title": "Activity Log",
+    "empty": "No activity recorded",
+    "clear": "Clear",
+    "error": "Error",
+    "errors": "Errors",
+    "command": "Command",
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago",
+      "daysAgo": "{n}d ago"
+    }
   },
   "alerts": {
     "fetchFailed": "Fetch Failed",
@@ -398,7 +436,11 @@
     "rebaseSuccess": "Rebase Successful",
     "rebaseFailed": "Rebase Failed",
     "rebaseConflicts": "Rebase Conflicts",
-    "gitFlowFinishSuccess": "Git Flow Completed"
+    "gitFlowFinishSuccess": "Git Flow Completed",
+    "gitFlowInitSuccess": "Git Flow initialized successfully",
+    "gitFlowInitFailed": "Failed to initialize Git Flow",
+    "fastForwardSuccess": "Fast-forward successful",
+    "fastForwardFailed": "Fast-forward failed"
   },
   "welcome": {
     "title": "Forky",
@@ -517,5 +559,15 @@
       "message": "Git needs a name and email to create commits. Do you want to configure it now?",
       "openSettings": "Open Settings"
     }
+  },
+  "validation": {
+    "branchNameEmpty": "Name cannot be empty",
+    "branchNameInvalidStart": "Cannot start with '.' or '-'",
+    "branchNameInvalidEnd": "Cannot end with '.', '-' or '.lock'",
+    "branchNameInvalidChars": "Contains invalid characters",
+    "branchNameExists": "This name already exists",
+    "branchNameTooLong": "Name is too long",
+    "branchNameDoubleDots": "Cannot contain '..'",
+    "branchNameDoubleSlashes": "Cannot contain '//'"
   }
 }

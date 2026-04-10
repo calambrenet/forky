@@ -44,3 +44,7 @@ export { InteractiveRebaseModal } from './InteractiveRebaseModal';
 export { GitFlowStartModal } from './GitFlowStartModal';
 
 export { GitFlowFinishModal } from './GitFlowFinishModal';
+
+export { GitFlowInitModal } from './GitFlowInitModal';
+
+export { ModalLoadingIndicator } from './ModalLoadingIndicator';

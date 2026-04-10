@@ -209,6 +209,62 @@
   outline: none;
 }
 
+/* Select wrapper for branch selection */
+.modal-select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.modal-select-wrapper .select-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.modal-select-wrapper .select-chevron {
+  position: absolute;
+  right: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.modal-select {
+  width: 100%;
+  padding: 8px 32px 8px 36px;
+  font-size: 13px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.15s;
+}
+
+.modal-select:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+}
+
+.modal-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.modal-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-select option {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
 .modal-warning {
   display: flex;
   align-items: center;
@@ -672,4 +728,67 @@
 .divergent-option-btn .option-text span {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* =============================================
+   Modal Loading State Styles
+   ============================================= */
+
+/* Container wrapper for modal content when loading */
+.modal-content-loading {
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.2s ease;
+}
+
+/* Loading indicator in modal footer */
+.modal-loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  padding-right: 12px;
+}
+
+.modal-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: modal-spinner-spin 0.8s linear infinite;
+}
+
+@keyframes modal-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.modal-loading-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Disable all interactive elements when loading */
+.modal-body-loading input,
+.modal-body-loading select,
+.modal-body-loading textarea,
+.modal-body-loading button,
+.modal-body-loading .checkbox-container,
+.modal-body-loading .modal-select,
+.modal-body-loading .divergent-option-btn {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Footer buttons when loading */
+.modal-footer-loading .btn-primary,
+.modal-footer-loading .btn-secondary,
+.modal-footer-loading .btn-danger {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }

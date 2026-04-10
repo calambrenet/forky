@@ -175,3 +175,26 @@
     transform: scale(1) translateY(0);
   }
 }
+
+/* Focus styles (keyboard navigation only) */
+
+.modal-dialog *:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.modal-footer button:focus-visible {
+  box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.2);
+}
+
+.modal-body input:focus-visible,
+.modal-body textarea:focus-visible,
+.modal-body select:focus-visible {
+  outline-offset: -2px;
+  border-color: var(--accent-blue);
+}
+
+.modal-dialog *:focus:not(:focus-visible) {
+  outline: none;
+}

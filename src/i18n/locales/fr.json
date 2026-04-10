@@ -337,7 +337,15 @@
     "gitError": "Erreur Git",
     "mergeSuccess": "Merge Réussi",
     "mergeFailed": "Merge Échoué",
-    "mergeConflicts": "Conflits de Merge"
+    "mergeConflicts": "Conflits de Merge",
+    "rebaseSuccess": "Rebase Réussi",
+    "rebaseFailed": "Rebase Échoué",
+    "rebaseConflicts": "Conflits de Rebase",
+    "gitFlowFinishSuccess": "Git Flow Terminé",
+    "gitFlowInitSuccess": "Git Flow initialisé avec succès",
+    "gitFlowInitFailed": "Échec de l'initialisation de Git Flow",
+    "fastForwardSuccess": "Fast-forward réussi",
+    "fastForwardFailed": "Fast-forward échoué"
   },
   "welcome": {
     "title": "Forky",
@@ -448,5 +456,15 @@
       "message": "Git a besoin d'un nom et d'un email pour créer des commits. Voulez-vous le configurer maintenant ?",
       "openSettings": "Ouvrir les Paramètres"
     }
+  },
+  "validation": {
+    "branchNameEmpty": "Le nom ne peut pas être vide",
+    "branchNameInvalidStart": "Ne peut pas commencer par '.' ou '-'",
+    "branchNameInvalidEnd": "Ne peut pas se terminer par '.', '-' ou '.lock'",
+    "branchNameInvalidChars": "Contient des caractères invalides",
+    "branchNameExists": "Ce nom existe déjà",
+    "branchNameTooLong": "Le nom est trop long",
+    "branchNameDoubleDots": "Ne peut pas contenir '..'",
+    "branchNameDoubleSlashes": "Ne peut pas contenir '//'"
   }
 }
