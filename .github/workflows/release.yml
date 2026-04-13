@@ -25,8 +25,8 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
-          # macOS Intel (cross-compile desde arm64)
-          - platform: macos-latest
+          # macOS Intel
+          - platform: macos-15-intel
             target: x86_64-apple-darwin
             args: '--target x86_64-apple-darwin'
 
