@@ -21,14 +21,14 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             args: ''
-          # macOS Intel
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            args: '--target x86_64-apple-darwin'
           # macOS Apple Silicon
           - platform: macos-latest
             target: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
+          # macOS Intel
+          - platform: macos-13
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -37,7 +37,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install Rust
@@ -71,7 +71,6 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-  # Job adicional para crear AppImage
   build-appimage:
     permissions:
       contents: write
@@ -82,7 +81,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install Rust
