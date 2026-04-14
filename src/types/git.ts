@@ -125,6 +125,12 @@ export interface GitOperationResult {
   conflicting_files?: string[];
 }
 
+// Global Git identity (user.name / user.email)
+export interface GitIdentity {
+  name: string | null;
+  email: string | null;
+}
+
 // Merge preview for merge modal
 export interface MergePreview {
   source_branch: string;

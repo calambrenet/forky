@@ -438,6 +438,35 @@
     "createdBy": "Creato da",
     "license": "Licenza GPL-3.0"
   },
+  "settings": {
+    "title": "Impostazioni",
+    "tabs": {
+      "general": "Generale",
+      "git": "Git"
+    },
+    "general": {
+      "placeholder": "Opzioni generali in arrivo."
+    },
+    "git": {
+      "globalUserInfo": "Informazioni utente globali",
+      "name": "Nome",
+      "namePlaceholder": "Il tuo nome",
+      "email": "Email",
+      "emailPlaceholder": "tu@email.com",
+      "save": "Salva",
+      "saving": "Salvataggio...",
+      "saved": "Configurazione Git salvata",
+      "saveFailed": "Impossibile salvare la configurazione Git",
+      "loadFailed": "Impossibile leggere la configurazione Git",
+      "invalidEmail": "Email non valida",
+      "nameRequired": "Il nome è obbligatorio"
+    },
+    "missingIdentity": {
+      "title": "Identità Git non configurata",
+      "message": "Git ha bisogno di un nome e di un'email per creare i commit. Vuoi configurarlo ora?",
+      "openSettings": "Apri Impostazioni"
+    }
+  },
   "validation": {
     "branchNameEmpty": "Il nome non può essere vuoto",
     "branchNameInvalidStart": "Non può iniziare con '.' o '-'",

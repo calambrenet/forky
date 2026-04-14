@@ -65,6 +65,7 @@ interface ToolbarProps {
   onDismissOperation?: () => void;
   onFeedback?: () => void;
   onAbout?: () => void;
+  onOpenSettings?: () => void;
 }
 
 const ICON_SIZE = 16;
@@ -100,6 +101,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     onDismissOperation,
     onFeedback,
     onAbout,
+    onOpenSettings,
   }) => {
     const { t } = useTranslation();
     const appWindow = getCurrentWindow();
@@ -120,11 +122,15 @@ export const Toolbar: FC<ToolbarProps> = memo(
     };
 
     const handleSettings = () => {
-      // TODO: Open settings
+      onOpenSettings?.();
     };
 
     const handleKeyboardShortcuts = () => {
       // TODO: Show keyboard shortcuts
+    };
+
+    const handleAbout = () => {
+      // TODO: Show about dialog
     };
 
     const handleHelp = () => {
@@ -354,7 +360,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
             <MenuItem icon={<HelpCircle size={ICON_SIZE} />} shortcut="F1" onClick={handleHelp}>
               {t('menu.help')}
             </MenuItem>
-            <MenuItem icon={<Info size={ICON_SIZE} />} onClick={onAbout}>
+            <MenuItem icon={<Info size={ICON_SIZE} />} onClick={handleAbout}>
               {t('menu.about')}
             </MenuItem>
             <MenuSeparator />

@@ -99,6 +99,8 @@ const CreateBranchModal = lazy(() =>
 );
 const AboutModal = lazy(() =>
   import('./components/about-modal').then((m) => ({ default: m.AboutModal }))
+const SettingsModal = lazy(() =>
+  import('./components/settings-modal').then((m) => ({ default: m.SettingsModal }))
 );
 
 // Zustand stores
@@ -106,6 +108,7 @@ import {
   useRepositoryStore,
   useTabs,
   useActiveTab,
+  useActiveTabId,
   useActiveTabState,
   useActiveTabStashes,
   useIsRestoring,
@@ -197,6 +200,7 @@ function App() {
   // Repository store
   const tabs = useTabs();
   const activeTab = useActiveTab();
+  const activeTabId = useActiveTabId();
   const activeTabState = useActiveTabState();
   const stashes = useActiveTabStashes();
   const isRestoring = useIsRestoring();
@@ -262,6 +266,10 @@ function App() {
   const alerts = useAlerts();
   const panelSizes = usePanelSizes();
   const isResizing = useIsResizing();
+  const settingsOpen = useUIStore((state) => state.settingsOpen);
+  const settingsInitialPanel = useUIStore((state) => state.settingsInitialPanel);
+  const openSettings = useUIStore((state) => state.openSettings);
+  const closeSettings = useUIStore((state) => state.closeSettings);
   const { addAlert, removeAlert, setPanelSize, setIsResizing } = useUIStore();
 
   // Theme hook (for system theme detection)
@@ -1760,6 +1768,7 @@ function App() {
             onDismissOperation={clearOperation}
             onFeedback={() => setFeedbackModalOpen(true)}
             onAbout={() => setAboutModalOpen(true)}
+            onOpenSettings={() => openSettings()}
             gitFlowConfig={null}
             currentBranchFlowInfo={null}
             onNewBranch={handleNewBranch}
@@ -1805,6 +1814,7 @@ function App() {
           onDismissOperation={clearOperation}
           onFeedback={() => setFeedbackModalOpen(true)}
           onAbout={() => setAboutModalOpen(true)}
+          onOpenSettings={() => openSettings()}
           gitFlowConfig={gitFlowConfig}
           currentBranchFlowInfo={currentBranchFlowInfo}
           onNewBranch={handleNewBranch}
@@ -1819,7 +1829,7 @@ function App() {
       {hasOpenRepos && (
         <TabBar
           tabs={tabs}
-          activeTabId={useRepositoryStore.getState().activeTabId}
+          activeTabId={activeTabId}
           onTabSelect={selectTab}
           onTabClose={closeTab}
           onCloseOthers={closeOtherTabs}
@@ -2006,6 +2016,14 @@ function App() {
 
         {/* About Modal */}
         {aboutModalOpen && <AboutModal isOpen={true} onClose={() => setAboutModalOpen(false)} />}
+        {/* Settings Modal */}
+        {settingsOpen && (
+          <SettingsModal
+            isOpen={true}
+            initialPanel={settingsInitialPanel}
+            onClose={closeSettings}
+          />
+        )}
 
         {/* Save Stash Modal */}
         {saveStashModalOpen && (

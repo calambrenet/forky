@@ -5,6 +5,7 @@ mod watcher;
 use git::commands::{self as git_commands, AppState};
 use std::sync::Mutex;
 use system::commands as system_commands;
+#[cfg(not(target_os = "linux"))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 use watcher::commands as watcher_commands;
@@ -18,8 +19,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_decorum::init())
         .setup(|app| {
-            // Create native menu (macOS only)
-            #[cfg(target_os = "macos")]
+            // Create custom menu (skipped on Linux, where the native menu
+            // can be rendered outside the window by some desktop environments)
+            #[cfg(not(target_os = "linux"))]
             {
                 let open_repo = MenuItem::with_id(
                     app,
@@ -29,15 +31,14 @@ pub fn run() {
                     Some("CmdOrCtrl+O"),
                 )?;
 
-                let about_forky =
-                    MenuItem::with_id(app, "about_forky", "About Forky", true, None::<&str>)?;
-
+                // macOS app menu (required as first menu on macOS)
+                #[cfg(target_os = "macos")]
                 let app_menu = Submenu::with_items(
                     app,
                     "Forky",
                     true,
                     &[
-                        &about_forky,
+                        &PredefinedMenuItem::about(app, Some("About Forky"), None)?,
                         &PredefinedMenuItem::separator(app)?,
                         &PredefinedMenuItem::services(app, Some("Services"))?,
                         &PredefinedMenuItem::separator(app)?,
@@ -87,8 +88,12 @@ pub fn run() {
                     ],
                 )?;
 
+                #[cfg(target_os = "macos")]
                 let menu =
                     Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu])?;
+
+                #[cfg(not(target_os = "macos"))]
+                let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu])?;
 
                 app.set_menu(menu)?;
             }
@@ -108,10 +113,11 @@ pub fn run() {
                 });
             }
 
-            // On Linux and Windows, use frameless window with custom titlebar
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            // On Linux, use frameless window with custom titlebar
+            #[cfg(target_os = "linux")]
             {
-                let main_window = app.get_webview_window("main").unwrap();
+                use tauri::WebviewWindow;
+                let main_window: WebviewWindow = app.get_webview_window("main").unwrap();
                 main_window.set_decorations(false).unwrap();
             }
 
@@ -181,6 +187,8 @@ pub fn run() {
             git_commands::git_flow_init,
             git_commands::git_flow_start,
             git_commands::git_flow_finish,
+            git_commands::git_get_global_identity,
+            git_commands::git_set_global_identity,
             git_commands::git_fast_forward,
             system_commands::get_system_theme,
             system_commands::open_in_terminal,

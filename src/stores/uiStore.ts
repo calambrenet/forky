@@ -16,6 +16,8 @@ export interface AlertData {
 type Theme = 'system' | 'light' | 'dark';
 type ResolvedTheme = 'light' | 'dark';
 
+export type SettingsPanel = 'general' | 'git';
+
 const DEFAULT_PANEL_SIZES: PanelSizes = {
   sidebarWidth: 260,
   commitPanelHeight: 50,
@@ -52,6 +54,10 @@ interface UIStore {
   panelSizes: PanelSizes;
   isResizing: string | null;
 
+  // Settings modal state
+  settingsOpen: boolean;
+  settingsInitialPanel: SettingsPanel;
+
   // Activity Log Panel state
   activityLogPanelOpen: boolean;
   activityLogPanelHeight: number;
@@ -59,6 +65,10 @@ interface UIStore {
   // Theme actions
   setTheme: (theme: Theme) => void;
   setSystemTheme: (theme: ResolvedTheme) => void;
+
+  // Settings modal actions
+  openSettings: (panel?: SettingsPanel) => void;
+  closeSettings: () => void;
 
   // Alert actions
   addAlert: (type: AlertType, title: string, message: string, duration?: number) => void;
@@ -90,6 +100,8 @@ export const useUIStore = create<UIStore>()(
       alerts: [],
       panelSizes: DEFAULT_PANEL_SIZES,
       isResizing: null,
+      settingsOpen: false,
+      settingsInitialPanel: 'general',
       activityLogPanelOpen: false,
       activityLogPanelHeight: ACTIVITY_PANEL_DEFAULT_HEIGHT,
 
@@ -97,6 +109,11 @@ export const useUIStore = create<UIStore>()(
       setTheme: (theme) => set({ theme }),
 
       setSystemTheme: (systemTheme) => set({ systemTheme }),
+
+      // Settings modal actions
+      openSettings: (panel = 'general') =>
+        set({ settingsOpen: true, settingsInitialPanel: panel }),
+      closeSettings: () => set({ settingsOpen: false }),
 
       // Alert actions
       addAlert: (type, title, message, duration = 8000) => {
@@ -189,6 +206,8 @@ export const useResolvedTheme = () => {
 export const useAlerts = () => useUIStore((state) => state.alerts);
 export const usePanelSizes = () => useUIStore((state) => state.panelSizes);
 export const useIsResizing = () => useUIStore((state) => state.isResizing);
+export const useSettingsOpen = () => useUIStore((state) => state.settingsOpen);
+export const useSettingsInitialPanel = () => useUIStore((state) => state.settingsInitialPanel);
 
 // Activity Log Panel selector hooks
 export const useActivityLogPanelOpen = () => useUIStore((state) => state.activityLogPanelOpen);

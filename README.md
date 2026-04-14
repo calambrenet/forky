@@ -124,14 +124,14 @@ Built with:
 
 ### Pre-built Binaries
 
-Download the latest version from the [Releases](https://github.com/calambrenet/forky/releases) page.
+Pre-built binaries will be available in the [Releases](../../releases) section once we set up the official repository.
 
 | Platform | Format |
 |----------|--------|
 | Windows | `.msi`, `.exe` |
-| macOS Apple Silicon | `.dmg` |
+| macOS Intel | `.dmg` (x64) |
+| macOS Apple Silicon | `.dmg` (aarch64) |
 | Linux (Debian/Ubuntu) | `.deb` |
-| Linux (Fedora/openSUSE) | `.rpm` |
 | Linux (Universal) | `.AppImage` |
 
 ### Building from Source
@@ -278,9 +278,7 @@ forky/
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0**.
-
-See the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
