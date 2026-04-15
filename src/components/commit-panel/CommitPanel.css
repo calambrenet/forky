@@ -129,6 +129,9 @@
 }
 
 .commit-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 16px;
   background-color: var(--accent-blue);
   border: none;
@@ -149,4 +152,20 @@
 .commit-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.commit-button-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: commit-spinner-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes commit-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

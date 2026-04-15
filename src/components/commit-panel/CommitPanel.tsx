@@ -107,7 +107,14 @@ export const CommitPanel: FC<CommitPanelProps> = ({
           <span className="commit-amend-text">{t('localChanges.amendLastCommit')}</span>
         </label>
         <button className="commit-button" onClick={handleCommit} disabled={isCommitDisabled}>
-          {isLoading ? t('localChanges.committing') : buttonText}
+          {isLoading ? (
+            <>
+              <span className="commit-button-spinner" />
+              {t('localChanges.committing')}
+            </>
+          ) : (
+            buttonText
+          )}
         </button>
       </div>
     </div>

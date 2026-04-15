@@ -379,6 +379,8 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     const handleCommit = useCallback(
       async (subject: string, description: string, amend: boolean) => {
         setIsCommitLoading(true);
+        // Yield to let React flush the loading state before the blocking invoke
+        await new Promise((r) => setTimeout(r, 0));
 
         // Build the full commit message
         const fullMessage = description ? `${subject}\n\n${description}` : subject;
@@ -950,10 +952,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
           hunk={discardHunkModal.hunk}
           filePath={selectedFile?.path}
         />
-        <Modal
-          isOpen={missingIdentityOpen}
-          onClose={() => setMissingIdentityOpen(false)}
-        >
+        <Modal isOpen={missingIdentityOpen} onClose={() => setMissingIdentityOpen(false)}>
           <ModalHeader
             icon={<AlertTriangle size={24} />}
             title={t('settings.missingIdentity.title')}
