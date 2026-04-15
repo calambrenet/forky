@@ -99,6 +99,7 @@ const CreateBranchModal = lazy(() =>
 );
 const AboutModal = lazy(() =>
   import('./components/about-modal').then((m) => ({ default: m.AboutModal }))
+);
 const SettingsModal = lazy(() =>
   import('./components/settings-modal').then((m) => ({ default: m.SettingsModal }))
 );
