@@ -43,7 +43,6 @@ const IGNORED_PATHS: &[&str] = &[
     ".git/objects",
     ".git/logs",
     ".git/hooks",
-    ".git/refs",
     "node_modules",
     "target",
     ".next",
@@ -61,9 +60,27 @@ fn should_ignore_path(path: &Path) -> bool {
         .any(|ignored| path_str.contains(ignored))
 }
 
-/// Check if a path is the .git/HEAD file (indicates branch change)
+/// Check if a path is the .git/HEAD file (branch checkout)
 fn is_git_head_file(path: &Path) -> bool {
     path.ends_with(".git/HEAD") || path.ends_with(".git\\HEAD")
+}
+
+/// Check if a path is a git ref change that affects ahead/behind counts.
+/// This covers: fetch, push, pull from an external terminal.
+fn is_git_ref_change(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    // Remote tracking refs updated by fetch/pull/push
+    path_str.contains(".git/refs/remotes")
+        || path_str.contains(".git\\refs\\remotes")
+        // Local branch refs updated by pull/rebase/merge
+        || path_str.contains(".git/refs/heads")
+        || path_str.contains(".git\\refs\\heads")
+        // FETCH_HEAD written by every fetch/pull
+        || path_str.ends_with(".git/FETCH_HEAD")
+        || path_str.ends_with(".git\\FETCH_HEAD")
+        // packed-refs updated after a gc or manual pack
+        || path_str.ends_with(".git/packed-refs")
+        || path_str.ends_with(".git\\packed-refs")
 }
 
 /// Start watching a repository path for file changes
@@ -87,10 +104,14 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                         .unwrap_or_default()
                         .as_secs();
 
-                    // Check for branch changes (.git/HEAD)
-                    let has_branch_change = events
-                        .iter()
-                        .any(|e| e.kind == DebouncedEventKind::Any && is_git_head_file(&e.path));
+                    // Emit repo-branch-changed when:
+                    // - .git/HEAD changes (local checkout)
+                    // - remote tracking refs, FETCH_HEAD, or packed-refs change
+                    //   (push/pull/fetch from an external terminal)
+                    let has_branch_change = events.iter().any(|e| {
+                        e.kind == DebouncedEventKind::Any
+                            && (is_git_head_file(&e.path) || is_git_ref_change(&e.path))
+                    });
 
                     if has_branch_change {
                         let branch_event = BranchChangeEvent {
@@ -103,13 +124,14 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                         }
                     }
 
-                    // Filter out ignored paths for file changes
+                    // Filter out ignored paths and git internal files for file changes
                     let relevant_events: Vec<_> = events
                         .iter()
                         .filter(|e| {
                             e.kind == DebouncedEventKind::Any
                                 && !should_ignore_path(&e.path)
                                 && !is_git_head_file(&e.path)
+                                && !is_git_ref_change(&e.path)
                         })
                         .collect();
 

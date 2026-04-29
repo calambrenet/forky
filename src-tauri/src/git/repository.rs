@@ -180,7 +180,6 @@ pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
                     Ok(upstream_branch) => {
                         let upstream_name =
                             upstream_branch.name().ok().flatten().map(|s| s.to_string());
-
                         let (ahead, behind) =
                             calculate_ahead_behind(repo, &branch, &upstream_branch);
                         (upstream_name, ahead, behind)
