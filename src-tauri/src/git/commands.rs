@@ -36,7 +36,11 @@ fn path_from_state(state: &State<AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn open_repository(path: String, state: State<AppState>) -> Result<RepositoryInfo, String> {
+pub fn open_repository(
+    path: String,
+    state: State<AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<RepositoryInfo, String> {
     let repo = repository::open_repository(&path)?;
     let info = repository::get_repository_info(&repo)?;
 
@@ -44,9 +48,21 @@ pub fn open_repository(path: String, state: State<AppState>) -> Result<Repositor
         .current_repo_path
         .lock()
         .map_err(|e| format!("State mutex poisoned: {}", e))?;
-    *repo_path = Some(path);
+    *repo_path = Some(path.clone());
+
+    // Actualizar lista de repositorios recientes y reconstruir menú nativo
+    let updated = crate::git::recent::add(&app_handle, &path, &info.name);
+    #[cfg(not(target_os = "linux"))]
+    crate::rebuild_app_menu(&app_handle, &updated);
 
     Ok(info)
+}
+
+#[tauri::command]
+pub fn get_recent_repos(
+    app_handle: tauri::AppHandle,
+) -> Vec<crate::git::recent::RecentRepo> {
+    crate::git::recent::load(&app_handle)
 }
 
 #[tauri::command]

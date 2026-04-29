@@ -1,0 +1,88 @@
+.recent-repos-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 280px;
+  max-width: 380px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 20px var(--shadow-color),
+    0 0 1px var(--border-color);
+  z-index: 1000;
+  animation: recentReposFadeIn 0.15s ease-out;
+}
+
+@keyframes recentReposFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.recent-repos-dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.recent-repos-dropdown-list {
+  padding: 4px 0;
+}
+
+.recent-repos-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.recent-repos-dropdown-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.recent-repos-dropdown-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.recent-repos-dropdown-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recent-repos-dropdown-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-repos-dropdown-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-repos-dropdown-empty {
+  padding: 16px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}

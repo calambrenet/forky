@@ -283,6 +283,11 @@ function App() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isSshLoading, setIsSshLoading] = useState(false);
 
+  // Recent repositories (loaded from Rust, persisted to disk)
+  const [recentRepos, setRecentRepos] = useState<
+    Array<{ path: string; name: string; last_opened: number }>
+  >([]);
+
   // Track Remote Branch modal state
   const [trackBranchModalOpen, setTrackBranchModalOpen] = useState(false);
   const [selectedRemoteBranch, setSelectedRemoteBranch] = useState('');
@@ -644,6 +649,19 @@ function App() {
     [executeOperation, setTabCurrentBranch]
   );
 
+  // Load recent repos from Rust on mount
+  useEffect(() => {
+    invoke<Array<{ path: string; name: string; last_opened: number }>>('get_recent_repos')
+      .then(setRecentRepos)
+      .catch(() => {});
+  }, []);
+
+  const refreshRecentRepos = useCallback(() => {
+    invoke<Array<{ path: string; name: string; last_opened: number }>>('get_recent_repos')
+      .then(setRecentRepos)
+      .catch(() => {});
+  }, []);
+
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {
     try {
@@ -652,11 +670,25 @@ function App() {
 
       if (selected) {
         await openRepository(selected);
+        refreshRecentRepos();
       }
     } catch (error) {
       console.error('Error opening repository:', error);
     }
-  }, [openRepository]);
+  }, [openRepository, refreshRecentRepos]);
+
+  // Open a specific repository by path (used by recent repos dropdown and menu)
+  const handleOpenRecentRepo = useCallback(
+    async (path: string) => {
+      try {
+        await openRepository(path);
+        refreshRecentRepos();
+      } catch (error) {
+        console.error('Error opening recent repository:', error);
+      }
+    },
+    [openRepository, refreshRecentRepos]
+  );
 
   const handleBranchSelect = useCallback((_branch: BranchInfo) => {
     // Branch selection handled by sidebar
@@ -1723,6 +1755,25 @@ function App() {
     };
   }, []);
 
+  // Menu event: listen for "Open Recent" from native menu
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen<string>('menu-open-recent-repo', (event) => {
+        handleOpenRecentRepo(event.payload);
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [handleOpenRecentRepo]);
+
   // Check if Git is installed on startup
   useEffect(() => {
     const checkGitInstallation = async () => {
@@ -1752,6 +1803,8 @@ function App() {
         <TitleBar>
           <Toolbar
             onOpenRepo={handleOpenRepo}
+            recentRepos={recentRepos}
+            onOpenRecentRepo={handleOpenRecentRepo}
             onThemeChange={setTheme}
             currentTheme={theme}
             onFetch={openFetchModal}
@@ -1795,6 +1848,8 @@ function App() {
       <TitleBar>
         <Toolbar
           onOpenRepo={handleOpenRepo}
+          recentRepos={recentRepos}
+          onOpenRecentRepo={handleOpenRecentRepo}
           repoName={activeTab?.name}
           repoPath={activeTab?.path}
           currentBranch={activeTab?.currentBranch ?? undefined}

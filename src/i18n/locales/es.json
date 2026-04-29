@@ -394,6 +394,10 @@
     "yesterday": "Ayer",
     "daysAgo": "días atrás"
   },
+  "recentReposDropdown": {
+    "title": "Repositorios Recientes",
+    "noRecent": "No hay repositorios recientes"
+  },
   "statusBar": {
     "activityLog": "Activity Log"
   },

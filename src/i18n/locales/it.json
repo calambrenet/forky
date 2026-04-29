@@ -309,6 +309,10 @@
     "yesterday": "Ieri",
     "daysAgo": "giorni fa"
   },
+  "recentReposDropdown": {
+    "title": "Repository Recenti",
+    "noRecent": "Nessun repository recente"
+  },
   "activityLog": {
     "title": "Registro Attività Git",
     "noActivity": "Nessuna attività",

@@ -29,6 +29,8 @@ import { Menu, MenuItem, MenuSeparator, SubMenu, MenuHeader } from '../menu';
 import type { GitOperationState } from '../repository-info-box';
 import { RepositoryInfoBox } from '../repository-info-box';
 import { StashDropdown } from './StashDropdown';
+import { RecentReposDropdown } from './RecentReposDropdown';
+import type { RecentRepo } from './RecentReposDropdown';
 import { MergeDropdown } from './MergeDropdown';
 import { BranchDropdown } from './BranchDropdown';
 import type { BranchInfo, StashInfo, GitFlowConfig, CurrentBranchFlowInfo } from '../../types/git';
@@ -36,6 +38,8 @@ import './Toolbar.css';
 
 interface ToolbarProps {
   onOpenRepo: () => void;
+  recentRepos?: RecentRepo[];
+  onOpenRecentRepo?: (path: string) => void;
   repoName?: string;
   repoPath?: string;
   currentBranch?: string;
@@ -73,6 +77,8 @@ const ICON_SIZE = 16;
 export const Toolbar: FC<ToolbarProps> = memo(
   ({
     onOpenRepo,
+    recentRepos = [],
+    onOpenRecentRepo,
     repoName,
     repoPath,
     currentBranch,
@@ -105,6 +111,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
   }) => {
     const { t } = useTranslation();
     const appWindow = getCurrentWindow();
+    const [openDropdownOpen, setOpenDropdownOpen] = useState(false);
     const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
     const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false);
     const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
@@ -149,10 +156,30 @@ export const Toolbar: FC<ToolbarProps> = memo(
       <div className="toolbar">
         {/* Left section: Open, Fetch, Pull, Push, Stash */}
         <div className="toolbar-left">
-          <button className="toolbar-btn" onClick={onOpenRepo} title={t('toolbar.openRepository')}>
-            <FolderOpen size={ICON_SIZE} />
-            <span className="btn-label">{t('toolbar.open')}</span>
-          </button>
+          <div className="toolbar-split-btn">
+            <button
+              className="toolbar-btn split-main"
+              onClick={onOpenRepo}
+              title={t('toolbar.openRepository')}
+            >
+              <FolderOpen size={ICON_SIZE} />
+              <span className="btn-label">{t('toolbar.open')}</span>
+            </button>
+            <button
+              className="toolbar-btn split-dropdown-trigger"
+              onClick={() => setOpenDropdownOpen(!openDropdownOpen)}
+              title={t('recentReposDropdown.title')}
+            >
+              <ChevronDown size={10} />
+            </button>
+            {openDropdownOpen && (
+              <RecentReposDropdown
+                repos={recentRepos}
+                onRepoClick={(path) => onOpenRecentRepo?.(path)}
+                onClose={() => setOpenDropdownOpen(false)}
+              />
+            )}
+          </div>
           <div className="toolbar-separator" />
           <button
             className="toolbar-btn"
