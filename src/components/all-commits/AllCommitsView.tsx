@@ -39,24 +39,27 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       return commits.find((c) => c.id === selectedCommitId) || null;
     }, [selectedCommitId, commits]);
 
-    const loadCommits = useCallback(async (limit: number = 100) => {
-      try {
-        const result = await invoke<CommitInfo[]>('get_commits', { limit });
-        setCommits(result);
-        setHasMore(result.length >= limit);
-      } catch (error) {
-        console.error('Error loading commits:', error);
-      }
-    }, []);
+    const loadCommits = useCallback(
+      async (limit: number = 100) => {
+        try {
+          const result = await invoke<CommitInfo[]>('get_commits', { repoPath, limit });
+          setCommits(result);
+          setHasMore(result.length >= limit);
+        } catch (error) {
+          console.error('Error loading commits:', error);
+        }
+      },
+      [repoPath]
+    );
 
     const loadBranchHeads = useCallback(async () => {
       try {
-        const result = await invoke<BranchHead[]>('get_branch_heads');
+        const result = await invoke<BranchHead[]>('get_branch_heads', { repoPath });
         setBranchHeads(result);
       } catch (error) {
         console.error('Error loading branch heads:', error);
       }
-    }, []);
+    }, [repoPath]);
 
     useEffect(() => {
       loadCommits();
@@ -67,42 +70,52 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       if (!hasMore) return;
       const newLimit = commits.length + 100;
       try {
-        const result = await invoke<CommitInfo[]>('get_commits', { limit: newLimit });
+        const result = await invoke<CommitInfo[]>('get_commits', { repoPath, limit: newLimit });
         setCommits(result);
         setHasMore(result.length >= newLimit);
       } catch (error) {
         console.error('Error loading more commits:', error);
       }
-    }, [commits.length, hasMore]);
+    }, [repoPath, commits.length, hasMore]);
 
-    const loadCommitFiles = useCallback(async (commit: CommitInfo) => {
-      setIsLoadingFiles(true);
-      try {
-        const files = await invoke<FileStatus[]>('get_commit_files', { commitId: commit.id });
-        setCommitFiles(files);
-      } catch (error) {
-        console.error('Error loading commit files:', error);
-        setCommitFiles([]);
-      } finally {
-        setIsLoadingFiles(false);
-      }
-    }, []);
+    const loadCommitFiles = useCallback(
+      async (commit: CommitInfo) => {
+        setIsLoadingFiles(true);
+        try {
+          const files = await invoke<FileStatus[]>('get_commit_files', {
+            repoPath,
+            commitId: commit.id,
+          });
+          setCommitFiles(files);
+        } catch (error) {
+          console.error('Error loading commit files:', error);
+          setCommitFiles([]);
+        } finally {
+          setIsLoadingFiles(false);
+        }
+      },
+      [repoPath]
+    );
 
-    const loadDiff = useCallback(async (commit: CommitInfo, file: FileStatus) => {
-      setIsLoadingDiff(true);
-      try {
-        const diff = await invoke<DiffInfo>('get_commit_diff', {
-          commitId: commit.id,
-          filePath: file.path,
-        });
-        setDiffInfo(diff);
-      } catch (error) {
-        console.error('Error loading diff:', error);
-        setDiffInfo(null);
-      } finally {
-        setIsLoadingDiff(false);
-      }
-    }, []);
+    const loadDiff = useCallback(
+      async (commit: CommitInfo, file: FileStatus) => {
+        setIsLoadingDiff(true);
+        try {
+          const diff = await invoke<DiffInfo>('get_commit_diff', {
+            repoPath,
+            commitId: commit.id,
+            filePath: file.path,
+          });
+          setDiffInfo(diff);
+        } catch (error) {
+          console.error('Error loading diff:', error);
+          setDiffInfo(null);
+        } finally {
+          setIsLoadingDiff(false);
+        }
+      },
+      [repoPath]
+    );
 
     const handleCommitClick = (commit: CommitInfo) => {
       onCommitSelect?.(commit.id);

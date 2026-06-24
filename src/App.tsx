@@ -908,6 +908,7 @@ function App() {
 
       try {
         const preview = await invoke<MergePreview>('get_merge_preview', {
+          repoPath: activeTab.path,
           sourceBranch: branch.name,
         });
         setMergePreview(preview);
@@ -958,6 +959,7 @@ function App() {
 
       try {
         const preview = await invoke<RebasePreview>('get_rebase_preview', {
+          repoPath: activeTab.path,
           targetBranch: branch.name,
         });
         setRebasePreview(preview);
@@ -1008,6 +1010,7 @@ function App() {
 
       try {
         const commits = await invoke<InteractiveRebaseEntry[]>('get_interactive_rebase_commits', {
+          repoPath: activeTab.path,
           targetBranch: branch.name,
         });
         setInteractiveRebaseCommits(commits);
@@ -1057,11 +1060,15 @@ function App() {
     if (!activeTab?.path) return;
 
     try {
-      const config = await invoke<GitFlowConfig>('get_gitflow_config');
+      const config = await invoke<GitFlowConfig>('get_gitflow_config', {
+        repoPath: activeTab.path,
+      });
       setGitFlowConfig(config);
 
       if (config.initialized) {
-        const flowInfo = await invoke<CurrentBranchFlowInfo>('get_current_branch_flow_info');
+        const flowInfo = await invoke<CurrentBranchFlowInfo>('get_current_branch_flow_info', {
+          repoPath: activeTab.path,
+        });
         setCurrentBranchFlowInfo(flowInfo);
       } else {
         setCurrentBranchFlowInfo(null);

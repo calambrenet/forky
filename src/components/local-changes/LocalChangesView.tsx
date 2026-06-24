@@ -99,7 +99,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     const loadFileStatus = useCallback(async () => {
       try {
-        const result = await invoke<FileStatusSeparated>('get_file_status_separated');
+        const result = await invoke<FileStatusSeparated>('get_file_status_separated', { repoPath });
         setUnstaged(result.unstaged);
         setStaged(result.staged);
 
@@ -116,59 +116,81 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       } catch (error) {
         console.error('Error loading file status:', error);
       }
-    }, [setTabHasPendingChanges, updateTabState]);
+    }, [repoPath, setTabHasPendingChanges, updateTabState]);
 
     useEffect(() => {
       loadFileStatus();
     }, [loadFileStatus, repoPath, refreshKey]);
 
-    const loadImageContent = useCallback(async (file: FileStatus) => {
-      setImageDiff({ oldImage: null, newImage: null, isLoading: true });
+    const loadImageContent = useCallback(
+      async (file: FileStatus) => {
+        setImageDiff({ oldImage: null, newImage: null, isLoading: true });
 
-      try {
-        let oldImage: ImageContent | null = null;
-        let newImage: ImageContent | null = null;
+        try {
+          let oldImage: ImageContent | null = null;
+          let newImage: ImageContent | null = null;
 
-        // Determine what images to load based on file status
-        if (file.status === 'untracked' || file.status === 'new') {
-          // New file: only show new image
-          newImage = await invoke<ImageContent>('get_image_content', { filePath: file.path });
-        } else if (file.status === 'deleted') {
-          // Deleted file: only show old image from HEAD
-          oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
-        } else if (file.status === 'modified') {
-          // Modified file: show both old and new
-          // For staged files, get old from HEAD, new from index
-          // For unstaged files, get old from index (or HEAD if not staged), new from working dir
-          if (file.staged) {
-            try {
-              oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
-            } catch {
-              // File might be new in this branch
+          // Determine what images to load based on file status
+          if (file.status === 'untracked' || file.status === 'new') {
+            // New file: only show new image
+            newImage = await invoke<ImageContent>('get_image_content', {
+              repoPath,
+              filePath: file.path,
+            });
+          } else if (file.status === 'deleted') {
+            // Deleted file: only show old image from HEAD
+            oldImage = await invoke<ImageContent>('get_image_from_head', {
+              repoPath,
+              filePath: file.path,
+            });
+          } else if (file.status === 'modified') {
+            // Modified file: show both old and new
+            // For staged files, get old from HEAD, new from index
+            // For unstaged files, get old from index (or HEAD if not staged), new from working dir
+            if (file.staged) {
+              try {
+                oldImage = await invoke<ImageContent>('get_image_from_head', {
+                  repoPath,
+                  filePath: file.path,
+                });
+              } catch {
+                // File might be new in this branch
+              }
+              newImage = await invoke<ImageContent>('get_image_from_index', {
+                repoPath,
+                filePath: file.path,
+              });
+            } else {
+              try {
+                oldImage = await invoke<ImageContent>('get_image_from_head', {
+                  repoPath,
+                  filePath: file.path,
+                });
+              } catch {
+                // File might be new
+              }
+              newImage = await invoke<ImageContent>('get_image_content', {
+                repoPath,
+                filePath: file.path,
+              });
             }
-            newImage = await invoke<ImageContent>('get_image_from_index', { filePath: file.path });
-          } else {
-            try {
-              oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
-            } catch {
-              // File might be new
-            }
-            newImage = await invoke<ImageContent>('get_image_content', { filePath: file.path });
           }
-        }
 
-        setImageDiff({ oldImage, newImage, isLoading: false });
-      } catch (error) {
-        console.error('Error loading image content:', error);
-        setImageDiff({ oldImage: null, newImage: null, isLoading: false });
-      }
-    }, []);
+          setImageDiff({ oldImage, newImage, isLoading: false });
+        } catch (error) {
+          console.error('Error loading image content:', error);
+          setImageDiff({ oldImage: null, newImage: null, isLoading: false });
+        }
+      },
+      [repoPath]
+    );
 
     const loadDiff = useCallback(
       async (file: FileStatus) => {
         setIsLoadingDiff(true);
         try {
           const diff = await invoke<DiffInfo>('get_working_diff', {
+            repoPath,
             filePath: file.path,
             staged: file.staged,
             fileStatus: file.status,
@@ -365,7 +387,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     const handleAmendChange = useCallback(async (amend: boolean) => {
       if (amend) {
         try {
-          const message = await invoke<CommitMessage>('get_last_commit_message');
+          const message = await invoke<CommitMessage>('get_last_commit_message', { repoPath });
           setLastCommitMessage(message);
         } catch (error) {
           console.error('Error loading last commit message:', error);

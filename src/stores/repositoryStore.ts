@@ -290,6 +290,10 @@ export const useRepositoryStore = create<RepositoryStore>()(
         // Internal actions
         _loadRepositoryData: async (tabId: string, persistedData?: PersistedTabData) => {
           try {
+            const tab = get().tabs.find((t) => t.id === tabId);
+            if (!tab) return;
+            const repoPath = tab.path;
+
             const [
               branchesData,
               branchHeadsData,
@@ -299,13 +303,13 @@ export const useRepositoryStore = create<RepositoryStore>()(
               commitsData,
               statusData,
             ] = await Promise.all([
-              invoke<BranchInfo[]>('get_branches'),
-              invoke<BranchHead[]>('get_branch_heads'),
-              invoke<TagInfo[]>('get_tags'),
-              invoke<StashInfo[]>('get_stashes'),
-              invoke<string[]>('get_remotes'),
-              invoke<CommitInfo[]>('get_commits', { limit: 100 }),
-              invoke<FileStatus[]>('get_file_status'),
+              invoke<BranchInfo[]>('get_branches', { repoPath }),
+              invoke<BranchHead[]>('get_branch_heads', { repoPath }),
+              invoke<TagInfo[]>('get_tags', { repoPath }),
+              invoke<StashInfo[]>('get_stashes', { repoPath }),
+              invoke<string[]>('get_remotes', { repoPath }),
+              invoke<CommitInfo[]>('get_commits', { repoPath, limit: 100 }),
+              invoke<FileStatus[]>('get_file_status', { repoPath }),
             ]);
 
             set((state) => {

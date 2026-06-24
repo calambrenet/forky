@@ -3,6 +3,7 @@ use crate::git::repository::{
     GitIdentity, GitOperationResult, HunkData, ImageContent, InteractiveRebaseEntry, PullOptions,
     PushOptions, RepositoryInfo, StashInfo, TagInfo,
 };
+use crate::git::validation::open_validated_repo;
 use git2::Repository;
 use std::sync::Mutex;
 use tauri::State;
@@ -50,47 +51,47 @@ pub fn open_repository(path: String, state: State<AppState>) -> Result<Repositor
 }
 
 #[tauri::command]
-pub fn get_branches(state: State<AppState>) -> Result<Vec<BranchInfo>, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_branches(repo_path: String) -> Result<Vec<BranchInfo>, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_branches(&repo)
 }
 
 #[tauri::command]
-pub fn get_branch_heads(state: State<AppState>) -> Result<Vec<BranchHead>, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_branch_heads(repo_path: String) -> Result<Vec<BranchHead>, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_branch_heads(&repo)
 }
 
 #[tauri::command]
 pub fn get_commits(
+    repo_path: String,
     limit: Option<usize>,
-    state: State<AppState>,
 ) -> Result<Vec<CommitInfo>, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_commits(&repo, limit.unwrap_or(100))
 }
 
 #[tauri::command]
-pub fn get_file_status(state: State<AppState>) -> Result<Vec<FileStatus>, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_file_status(repo_path: String) -> Result<Vec<FileStatus>, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_file_status(&repo)
 }
 
 #[tauri::command]
-pub fn get_tags(state: State<AppState>) -> Result<Vec<TagInfo>, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_tags(repo_path: String) -> Result<Vec<TagInfo>, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_tags(&repo)
 }
 
 #[tauri::command]
-pub fn get_remotes(state: State<AppState>) -> Result<Vec<String>, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_remotes(repo_path: String) -> Result<Vec<String>, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_remotes(&repo)
 }
 
 #[tauri::command]
-pub fn get_repository_info(state: State<AppState>) -> Result<RepositoryInfo, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_repository_info(repo_path: String) -> Result<RepositoryInfo, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_repository_info(&repo)
 }
 
@@ -101,20 +102,22 @@ pub struct FileStatusSeparated {
 }
 
 #[tauri::command]
-pub fn get_file_status_separated(state: State<AppState>) -> Result<FileStatusSeparated, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_file_status_separated(
+    repo_path: String,
+) -> Result<FileStatusSeparated, String> {
+    let repo = open_validated_repo(&repo_path)?;
     let (unstaged, staged) = repository::get_file_status_separated(&repo)?;
     Ok(FileStatusSeparated { unstaged, staged })
 }
 
 #[tauri::command]
 pub fn get_working_diff(
+    repo_path: String,
     file_path: String,
     staged: bool,
     file_status: String,
-    state: State<AppState>,
 ) -> Result<DiffInfo, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
 
     // Handle untracked files - read the file content directly
     if file_status == "untracked" {
@@ -142,20 +145,20 @@ pub fn get_working_diff(
 
 #[tauri::command]
 pub fn get_commit_diff(
+    repo_path: String,
     commit_id: String,
     file_path: String,
-    state: State<AppState>,
 ) -> Result<DiffInfo, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_commit_diff(&repo, &commit_id, &file_path)
 }
 
 #[tauri::command]
 pub fn get_commit_files(
+    repo_path: String,
     commit_id: String,
-    state: State<AppState>,
 ) -> Result<Vec<FileStatus>, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_commit_files(&repo, &commit_id)
 }
 
@@ -267,8 +270,8 @@ pub fn git_commit(
 }
 
 #[tauri::command]
-pub fn get_last_commit_message(state: State<AppState>) -> Result<CommitMessage, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_last_commit_message(repo_path: String) -> Result<CommitMessage, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_last_commit_message(&repo)
 }
 
@@ -386,9 +389,8 @@ pub fn git_delete_branch(
 // ============================================================================
 
 #[tauri::command]
-pub fn get_stashes(state: State<AppState>) -> Result<Vec<StashInfo>, String> {
-    let path = path_from_state(&state)?;
-    repository::get_stashes(&path)
+pub fn get_stashes(repo_path: String) -> Result<Vec<StashInfo>, String> {
+    repository::get_stashes(&repo_path)
 }
 
 #[tauri::command]
@@ -435,28 +437,28 @@ pub fn git_stash_drop(
 
 #[tauri::command]
 pub fn get_image_content(
+    repo_path: String,
     file_path: String,
-    state: State<AppState>,
 ) -> Result<ImageContent, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_image_content(&repo, &file_path)
 }
 
 #[tauri::command]
 pub fn get_image_from_head(
+    repo_path: String,
     file_path: String,
-    state: State<AppState>,
 ) -> Result<ImageContent, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_image_from_head(&repo, &file_path)
 }
 
 #[tauri::command]
 pub fn get_image_from_index(
+    repo_path: String,
     file_path: String,
-    state: State<AppState>,
 ) -> Result<ImageContent, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_image_from_index(&repo, &file_path)
 }
 
@@ -496,11 +498,10 @@ pub fn discard_hunk(
 
 #[tauri::command]
 pub fn get_merge_preview(
+    repo_path: String,
     source_branch: String,
-    state: State<AppState>,
 ) -> Result<repository::MergePreview, String> {
-    let path = path_from_state(&state)?;
-    repository::get_merge_preview(&path, &source_branch)
+    repository::get_merge_preview(&repo_path, &source_branch)
 }
 
 #[tauri::command]
@@ -525,11 +526,10 @@ pub fn git_merge_abort(state: State<AppState>) -> Result<repository::GitOperatio
 
 #[tauri::command]
 pub fn get_rebase_preview(
+    repo_path: String,
     target_branch: String,
-    state: State<AppState>,
 ) -> Result<repository::RebasePreview, String> {
-    let path = path_from_state(&state)?;
-    repository::get_rebase_preview(&path, &target_branch)
+    repository::get_rebase_preview(&repo_path, &target_branch)
 }
 
 #[tauri::command]
@@ -563,11 +563,10 @@ pub fn git_rebase_continue(
 
 #[tauri::command]
 pub fn get_interactive_rebase_commits(
+    repo_path: String,
     target_branch: String,
-    state: State<AppState>,
 ) -> Result<Vec<InteractiveRebaseEntry>, String> {
-    let path = path_from_state(&state)?;
-    repository::get_interactive_rebase_commits(&path, &target_branch)
+    repository::get_interactive_rebase_commits(&repo_path, &target_branch)
 }
 
 #[tauri::command]
@@ -584,16 +583,16 @@ pub fn git_interactive_rebase(
 // ==================== Git Flow Commands ====================
 
 #[tauri::command]
-pub fn get_gitflow_config(state: State<AppState>) -> Result<repository::GitFlowConfig, String> {
-    let repo = repo_from_state(&state)?;
+pub fn get_gitflow_config(repo_path: String) -> Result<repository::GitFlowConfig, String> {
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_gitflow_config(&repo)
 }
 
 #[tauri::command]
 pub fn get_current_branch_flow_info(
-    state: State<AppState>,
+    repo_path: String,
 ) -> Result<repository::CurrentBranchFlowInfo, String> {
-    let repo = repo_from_state(&state)?;
+    let repo = open_validated_repo(&repo_path)?;
     repository::get_current_branch_flow_info(&repo)
 }
 
