@@ -221,7 +221,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     const handleStageFile = async (file: FileStatus) => {
       try {
-        await invoke('stage_file', { filePath: file.path });
+        await invoke('stage_file', { repoPath, filePath: file.path });
         await loadFileStatus();
         if (selectedFile?.path === file.path) {
           const newFile = { ...file, staged: true };
@@ -235,7 +235,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     const handleUnstageFile = async (file: FileStatus) => {
       try {
-        await invoke('unstage_file', { filePath: file.path });
+        await invoke('unstage_file', { repoPath, filePath: file.path });
         await loadFileStatus();
         if (selectedFile?.path === file.path) {
           const newFile = { ...file, staged: false };
@@ -250,7 +250,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     const handleStageAll = async () => {
       try {
         for (const file of unstaged) {
-          await invoke('stage_file', { filePath: file.path });
+          await invoke('stage_file', { repoPath, filePath: file.path });
         }
         await loadFileStatus();
       } catch (error) {
@@ -261,7 +261,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     const handleUnstageAll = async () => {
       try {
         for (const file of staged) {
-          await invoke('unstage_file', { filePath: file.path });
+          await invoke('unstage_file', { repoPath, filePath: file.path });
         }
         await loadFileStatus();
       } catch (error) {
@@ -278,6 +278,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
       try {
         await invoke('discard_file', {
+          repoPath,
           filePath: file.path,
           isUntracked,
         });
@@ -315,6 +316,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
       try {
         await invoke('stage_hunk', {
+          repoPath,
           filePath,
           hunk: hunkData,
         });
@@ -336,6 +338,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
       try {
         await invoke('unstage_hunk', {
+          repoPath,
           filePath,
           hunk: hunkData,
         });
@@ -361,6 +364,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
       try {
         await invoke('discard_hunk', {
+          repoPath,
           filePath,
           hunk: hunkData,
         });
@@ -416,6 +420,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             message: string;
             error_type?: string;
           }>('git_commit', {
+            repoPath,
             message: fullMessage,
             amend,
           });

@@ -2,8 +2,7 @@ mod git;
 mod system;
 mod watcher;
 
-use git::commands::{self as git_commands, AppState};
-use std::sync::Mutex;
+use git::commands::{self as git_commands};
 use system::commands as system_commands;
 #[cfg(not(target_os = "linux"))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -122,9 +121,6 @@ pub fn run() {
             }
 
             Ok(())
-        })
-        .manage(AppState {
-            current_repo_path: Mutex::new(None),
         })
         .manage(WatcherState::default())
         .invoke_handler(tauri::generate_handler![

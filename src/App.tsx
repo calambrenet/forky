@@ -443,7 +443,10 @@ function App() {
       startOperation('Checkout', branchName);
 
       try {
-        const result = await invoke<GitOperationResult>('git_checkout', { branchName });
+        const result = await invoke<GitOperationResult>('git_checkout', {
+          repoPath: activeTab.path,
+          branchName,
+        });
 
         completeOperation(result);
         addLogEntry(
@@ -522,6 +525,7 @@ function App() {
 
       try {
         const result = await invoke<GitOperationResult>('git_checkout_with_stash', {
+          repoPath: activeTab.path,
           branchName: checkoutConflictBranch,
           restoreChanges,
         });
@@ -776,10 +780,15 @@ function App() {
   // Add Remote handler
   const handleAddRemote = useCallback(
     async (name: string, url: string) => {
+      if (!activeTab?.path) return;
       const command = `git remote add ${name} ${url}`;
 
       try {
-        const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
+        const result = await invoke<GitOperationResult>('git_add_remote', {
+          repoPath: activeTab.path,
+          name,
+          url,
+        });
         addLogEntry(
           activeTab?.path || '',
           'Other',
@@ -1239,6 +1248,7 @@ function App() {
       const doFetch = async () => {
         try {
           const result = await invoke<GitOperationResult>('git_fetch_with_options', {
+            repoPath: activeTab.path,
             remote: options.all ? null : options.remote,
             all: options.all,
           });
@@ -1314,6 +1324,7 @@ function App() {
       const doPull = async () => {
         try {
           const result = await invoke<GitOperationResult>('git_pull_with_options', {
+            repoPath: activeTab.path,
             remote: options.remote,
             branch: options.branch,
             rebase: options.rebase,
@@ -1405,6 +1416,7 @@ function App() {
       const doPush = async () => {
         try {
           const result = await invoke<GitOperationResult>('git_push_with_options', {
+            repoPath: activeTab.path,
             branch: options.branch,
             remote: options.remote,
             remoteBranch: options.remoteBranch,
