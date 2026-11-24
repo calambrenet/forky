@@ -17,6 +17,7 @@ const FILE_ITEM_HEIGHT = 42;
 interface AllCommitsViewProps {
   repoPath: string;
   selectedCommitId?: string | null;
+  navigationSeq?: number;
   onCommitSelect?: (commitId: string) => void;
 }
 
@@ -84,7 +85,7 @@ const VirtualCommitFileRow = ({
 };
 
 export const AllCommitsView: FC<AllCommitsViewProps> = memo(
-  ({ repoPath, selectedCommitId, onCommitSelect }) => {
+  ({ repoPath, selectedCommitId, navigationSeq = 0, onCommitSelect }) => {
     const { t } = useTranslation();
     const [commits, setCommits] = useState<CommitInfo[]>([]);
     const [branchHeads, setBranchHeads] = useState<BranchHead[]>([]);
@@ -105,7 +106,13 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
     const filesPanelRef = useRef<HTMLDivElement>(null);
     const graphRef = useRef<CommitGraphHandle>(null);
     const commitsReqIdRef = useRef(0);
+    const isInitialLoadingRef = useRef(false);
     const isLoadingMoreRef = useRef(false);
+    const selectedCommitIdRef = useRef(selectedCommitId);
+    selectedCommitIdRef.current = selectedCommitId;
+    const attemptedTargetCommitRef = useRef<string | null>(null);
+    const pendingScrollCommitRef = useRef<string | null>(selectedCommitId ?? null);
+    const prevNavSeqRef = useRef(navigationSeq);
     const branchHeadsReqIdRef = useRef(0);
     const filesReqIdRef = useRef(0);
     const diffReqIdRef = useRef(0);
@@ -118,21 +125,31 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
 
     const loadCommits = useCallback(async () => {
       const reqId = ++commitsReqIdRef.current;
+      isInitialLoadingRef.current = true;
       isLoadingMoreRef.current = false;
+      const initialTarget = selectedCommitIdRef.current ?? null;
       try {
         const result = await invoke<CommitInfo[]>('get_commits', {
           repoPath,
           limit: COMMITS_PAGE_SIZE,
           offset: 0,
+          targetCommitId: initialTarget,
         });
         if (reqId !== commitsReqIdRef.current) return;
+        if (initialTarget && !result.some((c) => c.id === initialTarget)) {
+          attemptedTargetCommitRef.current = initialTarget;
+        }
         setCommits(result);
-        setHasMore(result.length === COMMITS_PAGE_SIZE);
+        setHasMore(result.length > 0 && result.length % COMMITS_PAGE_SIZE === 0);
       } catch (error) {
         if (reqId !== commitsReqIdRef.current) return;
         console.error('Error loading commits:', error);
         setCommits([]);
         setHasMore(false);
+      } finally {
+        if (reqId === commitsReqIdRef.current) {
+          isInitialLoadingRef.current = false;
+        }
       }
     }, [repoPath]);
 
@@ -153,6 +170,8 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       // Clear stale view state when switching repositories
       filesReqIdRef.current += 1;
       diffReqIdRef.current += 1;
+      attemptedTargetCommitRef.current = null;
+      pendingScrollCommitRef.current = selectedCommitIdRef.current ?? null;
       setCommits([]);
       setBranchHeads([]);
       setCommitFiles([]);
@@ -160,13 +179,14 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       setDiffInfo(null);
       setIsLoadingFiles(false);
       setIsLoadingDiff(false);
+      setHasMore(true);
       void loadCommits();
       void loadBranchHeads();
     }, [loadCommits, loadBranchHeads, repoPath]);
 
-    // Incremental pagination: fetch only the next page using offset instead of re-fetching 0..N
+    // Incremental infinite-scroll pagination: fetch the next page when nearing the bottom
     const loadMore = useCallback(async () => {
-      if (!hasMore || isLoadingMoreRef.current) return;
+      if (!hasMore || isInitialLoadingRef.current || isLoadingMoreRef.current) return;
       isLoadingMoreRef.current = true;
       const offset = commits.length;
       const reqId = ++commitsReqIdRef.current;
@@ -175,6 +195,7 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
           repoPath,
           limit: COMMITS_PAGE_SIZE,
           offset,
+          targetCommitId: null,
         });
         if (reqId !== commitsReqIdRef.current) return;
         setCommits((prev) => {
@@ -192,6 +213,77 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
         }
       }
     }, [commits.length, hasMore, repoPath]);
+
+    // Mark explicit sidebar navigation (branch/tag click) as pending scroll
+    useEffect(() => {
+      if (prevNavSeqRef.current !== navigationSeq) {
+        prevNavSeqRef.current = navigationSeq;
+        if (selectedCommitId) {
+          pendingScrollCommitRef.current = selectedCommitId;
+          attemptedTargetCommitRef.current = null;
+        }
+      }
+    }, [navigationSeq, selectedCommitId]);
+
+    // Auto-load as many pages as needed when navigating to a branch/tag commit not yet in the list,
+    // and scroll to it once loaded (without yanking scroll position on bottom infinite-scroll loads).
+    useEffect(() => {
+      if (!selectedCommitId) return;
+
+      const isLoaded = commits.some((c) => c.id === selectedCommitId);
+      if (isLoaded) {
+        if (pendingScrollCommitRef.current === selectedCommitId && graphRef.current) {
+          pendingScrollCommitRef.current = null;
+          graphRef.current.scrollToCommit(selectedCommitId);
+        }
+        return;
+      }
+
+      pendingScrollCommitRef.current = selectedCommitId;
+
+      if (
+        !hasMore ||
+        isInitialLoadingRef.current ||
+        attemptedTargetCommitRef.current === selectedCommitId
+      ) {
+        return;
+      }
+
+      const offset = commits.length;
+      const reqId = ++commitsReqIdRef.current;
+      isLoadingMoreRef.current = true;
+
+      void (async () => {
+        try {
+          const pages = await invoke<CommitInfo[]>('get_commits', {
+            repoPath,
+            limit: COMMITS_PAGE_SIZE,
+            offset,
+            targetCommitId: selectedCommitId,
+          });
+          if (reqId !== commitsReqIdRef.current) return;
+
+          if (!pages.some((c) => c.id === selectedCommitId)) {
+            attemptedTargetCommitRef.current = selectedCommitId;
+          }
+
+          setCommits((prev) => {
+            const existingIds = new Set(prev.map((c) => c.id));
+            const uniqueNew = pages.filter((c) => !existingIds.has(c.id));
+            return uniqueNew.length > 0 ? [...prev, ...uniqueNew] : prev;
+          });
+          setHasMore(pages.length > 0 && pages.length % COMMITS_PAGE_SIZE === 0);
+        } catch (error) {
+          if (reqId !== commitsReqIdRef.current) return;
+          console.error('Error loading commits up to target branch:', error);
+          attemptedTargetCommitRef.current = selectedCommitId;
+        } finally {
+          if (reqId === commitsReqIdRef.current) {
+            isLoadingMoreRef.current = false;
+          }
+        }
+      })();
+    }, [selectedCommitId, navigationSeq, commits, hasMore, repoPath]);
 
     const loadCommitFiles = useCallback(
       async (commit: CommitInfo) => {
@@ -264,13 +356,6 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
         setIsLoadingFiles(false);
       }
     }, [selectedCommit, loadCommitFiles]);
-
-    // Scroll to commit when selectedCommitId changes or commits finish loading
-    useEffect(() => {
-      if (selectedCommitId && commits.length > 0 && graphRef.current) {
-        graphRef.current.scrollToCommit(selectedCommitId);
-      }
-    }, [selectedCommitId, commits.length]);
 
     const handleFileSelect = useCallback(
       (file: FileStatus) => {
@@ -444,17 +529,11 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
               branchHeads={branchHeads}
               selectedCommitId={selectedCommitId}
               onCommitClick={handleCommitClick}
+              onReachBottom={loadMore}
             />
           ) : (
             <div className="graph-empty">
               <span>{t('commits.noCommits')}</span>
-            </div>
-          )}
-          {hasMore && (
-            <div className="load-more-container">
-              <button className="load-more-btn" onClick={loadMore}>
-                {t('commits.loadMore')}
-              </button>
             </div>
           )}
         </div>

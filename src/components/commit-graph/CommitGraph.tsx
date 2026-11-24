@@ -18,6 +18,7 @@ interface CommitGraphProps {
   selectedCommitId?: string | null;
   onCommitClick?: (commit: CommitInfo) => void;
   onCommitDoubleClick?: (commit: CommitInfo) => void;
+  onReachBottom?: () => void;
 }
 
 export interface CommitGraphHandle {
@@ -32,6 +33,8 @@ const MIN_GRAPH_WIDTH = 40;
 const VISIBLE_BUFFER = 15;
 const SCROLL_QUANTUM_ROWS = 5;
 const LANE_PADDING = 16; // Extra padding after the node
+const LOAD_MORE_THRESHOLD_PX = 200;
+const SMOOTH_SCROLL_MAX_DISTANCE_PX = 2500;
 
 interface VisibleRange {
   startRow: number;
@@ -60,7 +63,10 @@ function computeVisibleRange(
 }
 
 export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
-  ({ commits, branchHeads, selectedCommitId, onCommitClick, onCommitDoubleClick }, ref) => {
+  (
+    { commits, branchHeads, selectedCommitId, onCommitClick, onCommitDoubleClick, onReachBottom },
+    ref
+  ) => {
     const { t, i18n } = useTranslation();
     const scrollRef = useRef<HTMLDivElement>(null);
     const scrollTopRef = useRef(0);
@@ -132,24 +138,38 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       []
     );
 
-    // Keep visibleRange in sync when commits.length changes
+    const checkNearBottom = useCallback(
+      (el: HTMLDivElement | null) => {
+        if (!el || !onReachBottom || commits.length === 0) return;
+        const remainingPx = el.scrollHeight - (el.scrollTop + el.clientHeight);
+        if (remainingPx <= LOAD_MORE_THRESHOLD_PX) {
+          onReachBottom();
+        }
+      },
+      [onReachBottom, commits.length]
+    );
+
+    // Keep visibleRange in sync when commits.length changes and auto-fill tall viewports
     useEffect(() => {
       updateVisibleRange(scrollTopRef.current, containerHeightRef.current, commits.length);
-    }, [commits.length, updateVisibleRange]);
+      checkNearBottom(scrollRef.current);
+    }, [commits.length, updateVisibleRange, checkNearBottom]);
 
     // Calculate the graph width for a specific row based on its lane
     const getRowGraphWidth = useCallback((lane: number) => {
       return Math.max(MIN_GRAPH_WIDTH, GRAPH_PADDING + (lane + 1) * LANE_WIDTH + LANE_PADDING);
     }, []);
 
-    // Handle scroll with quantized range updates (only re-renders when row quantum shifts)
+    // Handle scroll with quantized range updates and bottom infinite-scroll trigger
     const handleScroll = useCallback(
       (e: React.UIEvent<HTMLDivElement>) => {
-        const nextScrollTop = e.currentTarget.scrollTop;
+        const el = e.currentTarget;
+        const nextScrollTop = el.scrollTop;
         scrollTopRef.current = nextScrollTop;
         updateVisibleRange(nextScrollTop, containerHeightRef.current, commits.length);
+        checkNearBottom(el);
       },
-      [commits.length, updateVisibleRange]
+      [commits.length, updateVisibleRange, checkNearBottom]
     );
 
     // Update container height on resize
@@ -161,6 +181,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
         if (height <= 0 || height === containerHeightRef.current) return;
         containerHeightRef.current = height;
         updateVisibleRange(scrollTopRef.current, height, commits.length);
+        checkNearBottom(scrollEl);
       };
 
       const resizeObserver = new ResizeObserver((entries) => {
@@ -173,7 +194,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       handleHeightChange(scrollEl.clientHeight);
 
       return () => resizeObserver.disconnect();
-    }, [commits.length, updateVisibleRange]);
+    }, [commits.length, updateVisibleRange, checkNearBottom]);
 
     // Expose scrollToCommit method via ref
     useImperativeHandle(
@@ -181,17 +202,27 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       () => ({
         scrollToCommit: (commitId: string) => {
           const commitIndex = commits.findIndex((c) => c.id === commitId);
-          if (commitIndex !== -1 && scrollRef.current) {
-            const targetScrollTop =
-              commitIndex * ROW_HEIGHT - containerHeightRef.current / 2 + ROW_HEIGHT / 2;
-            scrollRef.current.scrollTo({
-              top: Math.max(0, targetScrollTop),
-              behavior: 'smooth',
+          const scrollEl = scrollRef.current;
+          if (commitIndex !== -1 && scrollEl) {
+            const targetScrollTop = Math.max(
+              0,
+              commitIndex * ROW_HEIGHT - containerHeightRef.current / 2 + ROW_HEIGHT / 2
+            );
+            const distance = Math.abs(targetScrollTop - scrollEl.scrollTop);
+            const behavior: ScrollBehavior =
+              distance > SMOOTH_SCROLL_MAX_DISTANCE_PX ? 'auto' : 'smooth';
+            scrollEl.scrollTo({
+              top: targetScrollTop,
+              behavior,
             });
+            if (behavior === 'auto') {
+              scrollTopRef.current = targetScrollTop;
+              updateVisibleRange(targetScrollTop, containerHeightRef.current, commits.length);
+            }
           }
         },
       }),
-      [commits]
+      [commits, updateVisibleRange]
     );
 
     const startRow = Math.min(visibleRange.startRow, commits.length);

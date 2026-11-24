@@ -69,10 +69,16 @@ pub async fn get_commits(
     repo_path: String,
     limit: Option<usize>,
     offset: Option<usize>,
+    target_commit_id: Option<String>,
 ) -> Result<Vec<CommitInfo>, String> {
     run_blocking(move || {
         let repo = open_validated_repo(&repo_path)?;
-        repository::get_commits(&repo, limit.unwrap_or(100), offset.unwrap_or(0))
+        repository::get_commits(
+            &repo,
+            limit.unwrap_or(100),
+            offset.unwrap_or(0),
+            target_commit_id.as_deref(),
+        )
     })
     .await
 }

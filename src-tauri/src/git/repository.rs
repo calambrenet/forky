@@ -599,12 +599,24 @@ pub fn get_branches_and_heads(
         }
     }
 
-    // Remote branches (no ahead/behind needed)
+    // Remote branches (no ahead/behind needed; skip symbolic refs like origin/HEAD)
     if let Ok(remote_branches) = repo.branches(Some(BranchType::Remote)) {
         for branch in remote_branches.flatten() {
             let (branch, _) = branch;
-            if let Ok(name) = branch.name() {
-                let name = name.unwrap_or("").to_string();
+            if branch.get().symbolic_target().is_some() {
+                continue;
+            }
+            if let Ok(name_opt) = branch.name() {
+                let name = name_opt.unwrap_or("").to_string();
+                if let (Some(non_empty_name), Ok(commit)) =
+                    (name_opt, branch.get().peel_to_commit())
+                {
+                    heads.push(BranchHead {
+                        name: non_empty_name.to_string(),
+                        commit_sha: commit.id().to_string(),
+                        is_head: false,
+                    });
+                }
                 branches.push(BranchInfo {
                     name,
                     is_head: false,
@@ -626,24 +638,7 @@ pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
 }
 
 pub fn get_branch_heads(repo: &Repository) -> Result<Vec<BranchHead>, String> {
-    let mut heads = Vec::new();
-
-    // Local branches
-    if let Ok(local_branches) = repo.branches(Some(BranchType::Local)) {
-        for branch in local_branches.flatten() {
-            let (branch, _) = branch;
-            if let Ok(Some(name)) = branch.name() {
-                if let Ok(reference) = branch.get().peel_to_commit() {
-                    heads.push(BranchHead {
-                        name: name.to_string(),
-                        commit_sha: reference.id().to_string(),
-                        is_head: branch.is_head(),
-                    });
-                }
-            }
-        }
-    }
-
+    let (_, heads) = get_branches_and_heads(repo)?;
     Ok(heads)
 }
 
@@ -667,10 +662,14 @@ pub fn get_repository_snapshot(repo_path: &str) -> Result<RepositorySnapshot, St
     })
 }
 
+const MAX_AUTO_PAGINATED_COMMITS: usize = 50_000;
+const TARGET_COMMIT_TRAILING_BUFFER: usize = 20;
+
 pub fn get_commits(
     repo: &Repository,
     limit: usize,
     offset: usize,
+    target_commit_id: Option<&str>,
 ) -> Result<Vec<CommitInfo>, String> {
     if repo.is_empty().unwrap_or(false) {
         return Ok(Vec::new());
@@ -678,13 +677,27 @@ pub fn get_commits(
 
     let mut revwalk = repo.revwalk().map_err(|e| e.message().to_string())?;
 
-    // Push all local branches and always push HEAD (covers detached HEAD commits)
+    // Push local branches, remote branches, tags, and HEAD so every sidebar ref is reachable
     let mut pushed_any = false;
-    if let Ok(local_branches) = repo.branches(Some(BranchType::Local)) {
-        for branch in local_branches.flatten() {
-            let (branch, _) = branch;
-            if let Ok(reference) = branch.get().peel_to_commit() {
-                if revwalk.push(reference.id()).is_ok() {
+    for branch_type in [BranchType::Local, BranchType::Remote] {
+        if let Ok(branches) = repo.branches(Some(branch_type)) {
+            for (branch, _) in branches.flatten() {
+                if branch.get().symbolic_target().is_some() {
+                    continue;
+                }
+                if let Ok(commit) = branch.get().peel_to_commit() {
+                    if revwalk.push(commit.id()).is_ok() {
+                        pushed_any = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(tag_refs) = repo.references_glob("refs/tags/*") {
+        for reference in tag_refs.flatten() {
+            if let Ok(commit) = reference.peel_to_commit() {
+                if revwalk.push(commit.id()).is_ok() {
                     pushed_any = true;
                 }
             }
@@ -704,30 +717,60 @@ pub fn get_commits(
         .set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)
         .map_err(|e| e.message().to_string())?;
 
-    let commits: Vec<CommitInfo> = revwalk
-        .skip(offset)
-        .take(limit)
-        .filter_map(|oid| oid.ok())
-        .filter_map(|oid| repo.find_commit(oid).ok())
-        .map(|commit| {
-            let time = commit.time();
-            let datetime: DateTime<Utc> = Utc
-                .timestamp_opt(time.seconds(), 0)
-                .single()
-                .unwrap_or(DateTime::UNIX_EPOCH);
-            let id = commit.id().to_string();
+    let page_size = limit.max(1);
+    let target = target_commit_id.map(str::trim).filter(|s| !s.is_empty());
+    let mut found_target_at: Option<usize> = None;
+    let mut commits = Vec::with_capacity(page_size);
 
-            CommitInfo {
-                short_id: id.chars().take(7).collect(),
-                id,
-                message: commit.message().unwrap_or("").trim().to_string(),
-                author: commit.author().name().unwrap_or("Unknown").to_string(),
-                author_email: commit.author().email().unwrap_or("").to_string(),
-                date: datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
-                parent_ids: commit.parent_ids().map(|id| id.to_string()).collect(),
+    for oid in revwalk.skip(offset).flatten() {
+        let Ok(commit) = repo.find_commit(oid) else {
+            continue;
+        };
+
+        let time = commit.time();
+        let datetime: DateTime<Utc> = Utc
+            .timestamp_opt(time.seconds(), 0)
+            .single()
+            .unwrap_or(DateTime::UNIX_EPOCH);
+        let id = commit.id().to_string();
+
+        if target == Some(id.as_str()) {
+            found_target_at = Some(commits.len());
+        }
+
+        commits.push(CommitInfo {
+            short_id: id.chars().take(7).collect(),
+            id,
+            message: commit.message().unwrap_or("").trim().to_string(),
+            author: commit.author().name().unwrap_or("Unknown").to_string(),
+            author_email: commit.author().email().unwrap_or("").to_string(),
+            date: datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
+            parent_ids: commit.parent_ids().map(|id| id.to_string()).collect(),
+        });
+
+        match target {
+            None => {
+                if commits.len() >= page_size {
+                    break;
+                }
             }
-        })
-        .collect();
+            Some(_) => {
+                if let Some(target_idx) = found_target_at {
+                    let trailing = commits.len().saturating_sub(target_idx + 1);
+                    let min_trailing = TARGET_COMMIT_TRAILING_BUFFER.min(page_size / 2);
+                    if commits.len() >= page_size
+                        && commits.len() % page_size == 0
+                        && trailing >= min_trailing
+                    {
+                        break;
+                    }
+                }
+                if commits.len() >= MAX_AUTO_PAGINATED_COMMITS {
+                    break;
+                }
+            }
+        }
+    }
 
     Ok(commits)
 }
@@ -4618,13 +4661,13 @@ mod tests {
             commit_file(&repo, "log.txt", &format!("v{}\n", i), &format!("commit {}", i));
         }
 
-        let all = get_commits(&repo, 10, 0).unwrap();
+        let all = get_commits(&repo, 10, 0, None).unwrap();
         assert_eq!(all.len(), 5);
 
-        let page1 = get_commits(&repo, 2, 0).unwrap();
-        let page2 = get_commits(&repo, 2, 2).unwrap();
-        let page3 = get_commits(&repo, 2, 4).unwrap();
-        let page4 = get_commits(&repo, 2, 6).unwrap();
+        let page1 = get_commits(&repo, 2, 0, None).unwrap();
+        let page2 = get_commits(&repo, 2, 2, None).unwrap();
+        let page3 = get_commits(&repo, 2, 4, None).unwrap();
+        let page4 = get_commits(&repo, 2, 6, None).unwrap();
 
         assert_eq!(page1.len(), 2);
         assert_eq!(page2.len(), 2);
@@ -4639,6 +4682,12 @@ mod tests {
             .collect();
         let all_ids: Vec<String> = all.into_iter().map(|c| c.id).collect();
         assert_eq!(combined_ids, all_ids);
+
+        // Auto-load multiple pages until an older branch commit is reached
+        let oldest_id = all_ids.last().unwrap().clone();
+        let until_oldest = get_commits(&repo, 2, 0, Some(&oldest_id)).unwrap();
+        assert_eq!(until_oldest.len(), 5);
+        assert!(until_oldest.iter().any(|c| c.id == oldest_id));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

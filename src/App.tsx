@@ -359,6 +359,7 @@ function App() {
 
   // Local changes refresh key - increment to force reload
   const [localChangesRefreshKey, setLocalChangesRefreshKey] = useState(0);
+  const [commitNavigationSeq, setCommitNavigationSeq] = useState(0);
 
   // Divergent branches modal state
   const [divergentBranchesModalOpen, setDivergentBranchesModalOpen] = useState(false);
@@ -726,11 +727,22 @@ function App() {
     [updateTabState]
   );
 
+  const handleSelectCommit = useCallback(
+    (commitSha: string) => {
+      const activeTabId = useRepositoryStore.getState().activeTabId;
+      if (activeTabId) {
+        updateTabState(activeTabId, { selectedCommitId: commitSha });
+      }
+    },
+    [updateTabState]
+  );
+
   const handleNavigateToCommit = useCallback(
     (commitSha: string) => {
       const activeTabId = useRepositoryStore.getState().activeTabId;
       if (activeTabId) {
         updateTabState(activeTabId, { selectedCommitId: commitSha });
+        setCommitNavigationSeq((seq) => seq + 1);
       }
     },
     [updateTabState]
@@ -2021,7 +2033,8 @@ function App() {
             <AllCommitsView
               repoPath={activeTab?.path ?? ''}
               selectedCommitId={activeTabState.selectedCommitId}
-              onCommitSelect={handleNavigateToCommit}
+              navigationSeq={commitNavigationSeq}
+              onCommitSelect={handleSelectCommit}
             />
           )}
         </div>
