@@ -90,7 +90,7 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
             .args(["-a", "Terminal", &path])
             .spawn()
             .map_err(|e| format!("Failed to open Terminal: {}", e))?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "windows")]
@@ -106,7 +106,7 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
             .current_dir(target_dir)
             .spawn()
             .map_err(|e| format!("Failed to open terminal: {}", e))?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]

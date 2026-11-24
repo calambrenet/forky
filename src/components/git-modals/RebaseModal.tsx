@@ -11,7 +11,7 @@ import './GitModals.css';
 interface RebaseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRebase: (preserveMerges: boolean, autostash: boolean) => void;
+  onRebase: (preserveMerges: boolean, autostash: boolean) => Promise<void> | void;
   targetBranch: BranchInfo | null;
   currentBranch: string;
   preview: RebasePreview | null;
@@ -33,19 +33,15 @@ export const RebaseModal: FC<RebaseModalProps> = memo(
       }
     }, [isOpen]);
 
-    const handleRebase = useCallback(() => {
+    const handleRebase = useCallback(async () => {
       if (isLoading || !preview) return;
 
-      // Set loading state immediately
       setIsLoading(true);
-
-      // Use requestAnimationFrame to allow React to render the loading state
-      // before the blocking git operation starts
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          onRebase(preserveMerges, autostash);
-        });
-      });
+      try {
+        await onRebase(preserveMerges, autostash);
+      } finally {
+        setIsLoading(false);
+      }
     }, [isLoading, preview, onRebase, preserveMerges, autostash]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -320,13 +320,11 @@ function App() {
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [mergeBranch, setMergeBranch] = useState<BranchInfo | null>(null);
   const [mergePreview, setMergePreview] = useState<MergePreview | null>(null);
-  const [_isMergePreviewLoading, setIsMergePreviewLoading] = useState(false);
 
   // Rebase modal state
   const [rebaseModalOpen, setRebaseModalOpen] = useState(false);
   const [rebaseBranch, setRebaseBranch] = useState<BranchInfo | null>(null);
   const [rebasePreview, setRebasePreview] = useState<RebasePreview | null>(null);
-  const [_isRebasePreviewLoading, setIsRebasePreviewLoading] = useState(false);
 
   // Interactive rebase modal state
   const [interactiveRebaseModalOpen, setInteractiveRebaseModalOpen] = useState(false);
@@ -965,7 +963,6 @@ function App() {
 
       const repoPath = activeTab.path;
       setMergeBranch(branch);
-      setIsMergePreviewLoading(true);
       setMergeModalOpen(true);
 
       try {
@@ -978,8 +975,6 @@ function App() {
         console.error('Error getting merge preview:', error);
         addAlert('error', t('alerts.gitError'), String(error));
         setMergeModalOpen(false);
-      } finally {
-        setIsMergePreviewLoading(false);
       }
     },
     [activeTab?.path, isGitLoading, addAlert, t]
@@ -1004,6 +999,12 @@ function App() {
             setLocalChangesRefreshKey((k) => k + 1);
             handleCloseMergeModal();
           },
+          onError: (result) => {
+            if (result.error_type === 'merge_conflicts') {
+              setLocalChangesRefreshKey((k) => k + 1);
+              handleCloseMergeModal();
+            }
+          },
         }
       );
     },
@@ -1017,7 +1018,6 @@ function App() {
 
       const repoPath = activeTab.path;
       setRebaseBranch(branch);
-      setIsRebasePreviewLoading(true);
       setRebaseModalOpen(true);
 
       try {
@@ -1030,8 +1030,6 @@ function App() {
         console.error('Error getting rebase preview:', error);
         addAlert('error', t('alerts.gitError'), String(error));
         setRebaseModalOpen(false);
-      } finally {
-        setIsRebasePreviewLoading(false);
       }
     },
     [activeTab?.path, isGitLoading, addAlert, t]
@@ -1055,6 +1053,12 @@ function App() {
           onSuccess: () => {
             setLocalChangesRefreshKey((k) => k + 1);
             handleCloseRebaseModal();
+          },
+          onError: (result) => {
+            if (result.error_type === 'rebase_conflicts') {
+              setLocalChangesRefreshKey((k) => k + 1);
+              handleCloseRebaseModal();
+            }
           },
         }
       );
@@ -1107,6 +1111,12 @@ function App() {
           onSuccess: () => {
             setLocalChangesRefreshKey((k) => k + 1);
             handleCloseInteractiveRebaseModal();
+          },
+          onError: (result) => {
+            if (result.error_type === 'rebase_conflicts' || result.error_type === 'rebase_paused') {
+              setLocalChangesRefreshKey((k) => k + 1);
+              handleCloseInteractiveRebaseModal();
+            }
           },
         }
       );

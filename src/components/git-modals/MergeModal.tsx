@@ -11,7 +11,7 @@ import './GitModals.css';
 interface MergeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onMerge: (mergeType: MergeType) => void;
+  onMerge: (mergeType: MergeType) => Promise<void> | void;
   sourceBranch: BranchInfo | null;
   targetBranch: string;
   preview: MergePreview | null;
@@ -31,19 +31,15 @@ export const MergeModal: FC<MergeModalProps> = memo(
       }
     }, [isOpen]);
 
-    const handleMerge = useCallback(() => {
+    const handleMerge = useCallback(async () => {
       if (isLoading || !preview || preview.has_conflicts) return;
 
-      // Set loading state immediately
       setIsLoading(true);
-
-      // Use requestAnimationFrame to allow React to render the loading state
-      // before the blocking git operation starts
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          onMerge(mergeType);
-        });
-      });
+      try {
+        await onMerge(mergeType);
+      } finally {
+        setIsLoading(false);
+      }
     }, [isLoading, preview, onMerge, mergeType]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

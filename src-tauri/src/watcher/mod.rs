@@ -95,13 +95,10 @@ fn is_git_head_file(repo_root: &Path, path: &Path) -> bool {
 fn is_git_ref_change(repo_root: &Path, path: &Path) -> bool {
     let comps = relative_components(repo_root, path);
     let names: Vec<&str> = comps.iter().filter_map(|c| c.to_str()).collect();
-    match names.as_slice() {
-        [".git", "refs", "remotes", ..] => true,
-        [".git", "refs", "heads", ..] => true,
-        [".git", "FETCH_HEAD"] => true,
-        [".git", "packed-refs"] => true,
-        _ => false,
-    }
+    matches!(
+        names.as_slice(),
+        [".git", "refs", "remotes" | "heads", ..] | [".git", "FETCH_HEAD" | "packed-refs"]
+    )
 }
 
 fn is_relevant_kind(kind: DebouncedEventKind) -> bool {
@@ -124,7 +121,10 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
 
     let app_handle_clone = app_handle.clone();
     let repo_path_clone = repo_path.clone();
-    let repo_root = PathBuf::from(&repo_path);
+    // Canonicalize so strip_prefix matches real OS paths emitted by FSEvents/ReadDirectoryChangesW
+    let repo_root =
+        std::fs::canonicalize(&repo_path).unwrap_or_else(|_| PathBuf::from(&repo_path));
+    let watch_target = repo_root.clone();
 
     let mut debouncer = new_debouncer(
         Duration::from_millis(500),
@@ -182,7 +182,7 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
     // Start watching BEFORE storing so an error never leaves stale state
     debouncer
         .watcher()
-        .watch(Path::new(&repo_path), notify::RecursiveMode::Recursive)
+        .watch(&watch_target, notify::RecursiveMode::Recursive)
         .map_err(|e| format!("Failed to watch path: {}", e))?;
 
     *guard = Some(ActiveWatcher {

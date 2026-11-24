@@ -21,7 +21,7 @@ import './GitModals.css';
 interface InteractiveRebaseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRebase: (entries: InteractiveRebaseEntry[], autostash: boolean) => void;
+  onRebase: (entries: InteractiveRebaseEntry[], autostash: boolean) => Promise<void> | void;
   targetBranch: BranchInfo | null;
   currentBranch: string;
   commits: InteractiveRebaseEntry[];
@@ -209,17 +209,16 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
       setDragOverIndex(null);
     }, [dragIndex, dragOverIndex]);
 
-    const handleRebase = useCallback(() => {
+    const handleRebase = useCallback(async () => {
       if (isLoading || isLoadingCommits || entries.length === 0) return;
 
       setOpenDropdown(null);
       setIsLoading(true);
-
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          onRebase(entries, autostash);
-        });
-      });
+      try {
+        await onRebase(entries, autostash);
+      } finally {
+        setIsLoading(false);
+      }
     }, [isLoading, isLoadingCommits, entries, autostash, onRebase]);
 
     const targetBranchName = targetBranch?.name || '';

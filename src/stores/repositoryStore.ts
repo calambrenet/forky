@@ -368,6 +368,8 @@ export const useRepositoryStore = create<RepositoryStore>()(
         },
 
         _restoreRepositories: async () => {
+          let backgroundLoads: Promise<void>[] = [];
+
           try {
             const initialTabs = get().tabs;
             const initialTabStates = get().tabStates;
@@ -376,24 +378,30 @@ export const useRepositoryStore = create<RepositoryStore>()(
               return;
             }
 
-            const validTabs: RepositoryTab[] = [];
-            const validTabIds = new Set<string>();
+            // Validate saved tabs in parallel without rewriting recent_repos.json or rebuilding the OS menu
+            const results = await Promise.all(
+              initialTabs.map(async (tab) => {
+                try {
+                  const info = await invoke<RepositoryInfo>('open_repository', {
+                    path: tab.path,
+                    recordRecent: false,
+                  });
+                  return {
+                    ...tab,
+                    path: info.path,
+                    name: info.name,
+                    currentBranch: info.current_branch,
+                    hasPendingChanges: false,
+                  } as RepositoryTab;
+                } catch (error) {
+                  console.error(`Failed to restore repository: ${tab.path}`, error);
+                  return null;
+                }
+              })
+            );
 
-            for (const tab of initialTabs) {
-              try {
-                const info = await invoke<RepositoryInfo>('open_repository', { path: tab.path });
-                validTabs.push({
-                  ...tab,
-                  path: info.path,
-                  name: info.name,
-                  currentBranch: info.current_branch,
-                  hasPendingChanges: false,
-                });
-                validTabIds.add(tab.id);
-              } catch (error) {
-                console.error(`Failed to restore repository: ${tab.path}`, error);
-              }
-            }
+            const validTabs = results.filter((t): t is RepositoryTab => t !== null);
+            const validTabIds = new Set(validTabs.map((t) => t.id));
 
             // Prune invalid tabs and orphaned tabStates before loading data
             const prunedTabStates: Record<string, TabState> = {};
@@ -412,8 +420,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
               tabStates: prunedTabStates,
             });
 
-            // Load repository data after setting tabs so `hasPendingChanges` & `currentBranch` are preserved
-            for (const tab of validTabs) {
+            const loadTab = (tab: RepositoryTab) => {
               const existingState = prunedTabStates[tab.id];
               const persistedData: PersistedTabData | undefined = existingState
                 ? {
@@ -421,10 +428,22 @@ export const useRepositoryStore = create<RepositoryStore>()(
                     selectedCommitId: existingState.selectedCommitId,
                   }
                 : undefined;
-              await get()._loadRepositoryData(tab.id, tab.path, persistedData);
+              return get()._loadRepositoryData(tab.id, tab.path, persistedData);
+            };
+
+            // Load active tab eagerly before showing UI; load inactive tabs in parallel in background
+            const activeTab = validTabs.find((t) => t.id === activeTabId);
+            if (activeTab) {
+              await loadTab(activeTab);
             }
+
+            backgroundLoads = validTabs.filter((t) => t.id !== activeTabId).map(loadTab);
           } finally {
             set({ isRestoring: false });
+          }
+
+          if (backgroundLoads.length > 0) {
+            await Promise.all(backgroundLoads);
           }
         },
       }),

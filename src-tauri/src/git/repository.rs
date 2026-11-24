@@ -29,17 +29,170 @@ fn git_cmd(repo_path: Option<&str>) -> Command {
     cmd
 }
 
-/// Network git CLI command: preserves user `GIT_SSH_COMMAND` if set; otherwise disables password prompts
-/// while keeping `StrictHostKeyChecking=ask` so unknown host fingerprints still appear in stderr.
+/// Network git CLI command: always non-interactive (`BatchMode=yes`, `SSH_ASKPASS_REQUIRE=never`)
+/// so OpenSSH never opens `/dev/tty` and hangs the process. Preserves user `GIT_SSH_COMMAND` if set.
 fn git_network_cmd(repo_path: Option<&str>) -> Command {
     let mut cmd = git_cmd(repo_path);
+    cmd.env("SSH_ASKPASS_REQUIRE", "never");
     if std::env::var_os("GIT_SSH_COMMAND").is_none() {
         cmd.env(
             "GIT_SSH_COMMAND",
-            "ssh -o StrictHostKeyChecking=ask -o NumberOfPasswordPrompts=0 -o PasswordAuthentication=no",
+            "ssh -o BatchMode=yes -o KbdInteractiveAuthentication=no -o StrictHostKeyChecking=ask",
         );
     }
     cmd
+}
+
+/// Extract SSH host (or `[host]:port`) from an SSH git URL (`git@host:repo` or `ssh://user@host:port/repo`).
+pub(crate) fn extract_ssh_host_from_url(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if let Some(rest) = trimmed.strip_prefix("ssh://") {
+        let authority = rest.split('/').next()?;
+        let host_port = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+        if host_port.is_empty() {
+            return None;
+        }
+        if let Some((h, p)) = host_port.rsplit_once(':') {
+            if !h.is_empty() && !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) {
+                return Some(format!("[{}]:{}", h.trim_matches(['[', ']']), p));
+            }
+        }
+        return Some(host_port.trim_matches(['[', ']']).to_string());
+    }
+    // SCP-like syntax: [user@]host:path (exclude http://, https://, file://, Windows C:\)
+    if !trimmed.contains("://") {
+        if let Some((left, _right)) = trimmed.split_once(':') {
+            if left.len() > 1 {
+                let host = left.rsplit_once('@').map(|(_, h)| h).unwrap_or(left);
+                if !host.is_empty() && !host.contains('/') && !host.contains('\\') {
+                    return Some(host.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Probe an unknown SSH host via `ssh-keyscan` + `ssh-keygen -lf -` to obtain `(key_type, fingerprint)`.
+fn scan_ssh_host_fingerprint(host: &str) -> Option<(String, String)> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let (scan_host, port) = parse_ssh_host_port(host.trim());
+    validate_non_flag(scan_host, "SSH host").ok()?;
+
+    let mut keyscan = Command::new("ssh-keyscan");
+    keyscan.args(["-T", "5", "-t", "ed25519,rsa,ecdsa"]);
+    if let Some(p) = port {
+        keyscan.arg("-p").arg(p);
+    }
+    keyscan.arg("--").arg(scan_host);
+    apply_no_window(&mut keyscan);
+
+    let scan_out = keyscan.output().ok()?;
+    if !scan_out.status.success() || scan_out.stdout.is_empty() {
+        return None;
+    }
+
+    let mut keygen = Command::new("ssh-keygen");
+    keygen
+        .args(["-lf", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    apply_no_window(&mut keygen);
+
+    let mut child = keygen.spawn().ok()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(&scan_out.stdout);
+    }
+    let fp_out = child.wait_with_output().ok()?;
+    if !fp_out.status.success() {
+        return None;
+    }
+
+    // ssh-keygen -lf output: "<bits> SHA256:<hash> <host> (<KEYTYPE>)"
+    for line in String::from_utf8_lossy(&fp_out.stdout).lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if let Some(fp) = parts
+            .iter()
+            .find(|p| p.starts_with("SHA256:") || p.starts_with("MD5:"))
+        {
+            let key_type = line
+                .rsplit_once('(')
+                .and_then(|(_, rest)| rest.strip_suffix(')'))
+                .unwrap_or("SSH")
+                .to_string();
+            return Some((key_type, (*fp).to_string()));
+        }
+    }
+    None
+}
+
+/// When `BatchMode=yes` fails with `Host key verification failed` (without a changed-key warning),
+/// probe the remote SSH host so the UI can still show `SshHostVerificationModal` without hanging `/dev/tty`.
+fn maybe_probe_ssh_verification(
+    mut res: GitOperationResult,
+    repo_path: Option<&str>,
+    remote_or_url: Option<&str>,
+) -> GitOperationResult {
+    if res.success
+        || res.requires_ssh_verification.is_some()
+        || !res.message.contains("Host key verification failed")
+        || res.message.contains("REMOTE HOST IDENTIFICATION HAS CHANGED")
+    {
+        return res;
+    }
+
+    let candidate_url: Option<String> = if let Some(val) = remote_or_url {
+        if extract_ssh_host_from_url(val).is_some() {
+            Some(val.to_string())
+        } else if let Some(rp) = repo_path {
+            open_repository(rp)
+                .ok()
+                .and_then(|repo| repo.find_remote(val).ok().and_then(|r| r.url().map(String::from)))
+        } else {
+            None
+        }
+    } else if let Some(rp) = repo_path {
+        open_repository(rp).ok().and_then(|repo| {
+            repo.find_remote("origin")
+                .ok()
+                .and_then(|r| r.url().map(String::from))
+                .or_else(|| {
+                    repo.remotes().ok().and_then(|remotes| {
+                        remotes
+                            .iter()
+                            .flatten()
+                            .find_map(|name| repo.find_remote(name).ok().and_then(|r| r.url().map(String::from)))
+                    })
+                })
+        })
+    } else {
+        None
+    };
+
+    if let Some(host) = candidate_url.as_deref().and_then(extract_ssh_host_from_url) {
+        if let Some((key_type, fingerprint)) = scan_ssh_host_fingerprint(&host) {
+            res.message = "SSH host verification required".to_string();
+            res.error_type = Some("ssh_host_verification".to_string());
+            res.requires_ssh_verification = Some(SshHostVerification {
+                host,
+                key_type,
+                fingerprint,
+            });
+        }
+    }
+
+    res
+}
+
+/// Validate a commit hash / short_id contains only ASCII hex digits (prevents rebase-todo command injection).
+pub(crate) fn validate_commit_hex_id(id: &str) -> Result<(), String> {
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("Invalid commit id: '{}'", id));
+    }
+    Ok(())
 }
 
 /// Reject empty, NUL-containing, or flag-like (`-...`) CLI arguments to prevent option injection.
@@ -403,15 +556,13 @@ pub fn get_branch_heads(repo: &Repository) -> Result<Vec<BranchHead>, String> {
     if let Ok(local_branches) = repo.branches(Some(BranchType::Local)) {
         for branch in local_branches.flatten() {
             let (branch, _) = branch;
-            if let Ok(name) = branch.name() {
-                if let Some(name) = name {
-                    if let Ok(reference) = branch.get().peel_to_commit() {
-                        heads.push(BranchHead {
-                            name: name.to_string(),
-                            commit_sha: reference.id().to_string(),
-                            is_head: branch.is_head(),
-                        });
-                    }
+            if let Ok(Some(name)) = branch.name() {
+                if let Ok(reference) = branch.get().peel_to_commit() {
+                    heads.push(BranchHead {
+                        name: name.to_string(),
+                        commit_sha: reference.id().to_string(),
+                        is_head: branch.is_head(),
+                    });
                 }
             }
         }
@@ -764,18 +915,17 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
     })
 }
 
-/// Read content of an untracked file and create diff info showing all lines as additions
-pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
-    let workdir = repo.workdir().ok_or("No working directory")?;
-    let full_path = resolve_repo_path(workdir, file_path)?;
-
-    // Read the file
-    let content = std::fs::read(&full_path).map_err(|e| e.to_string())?;
+/// Build a whole-file `DiffInfo` (all additions or all deletions) from raw bytes.
+fn diff_from_bytes(
+    file_path: &str,
+    content: &[u8],
+    is_addition: bool,
+    known_binary: bool,
+) -> DiffInfo {
     let file_size = content.len() as u64;
 
-    // Check if binary
-    if is_binary_content(&content) {
-        return Ok(DiffInfo {
+    if known_binary || is_binary_content(content) {
+        return DiffInfo {
             file_path: file_path.to_string(),
             old_content: None,
             new_content: None,
@@ -783,33 +933,37 @@ pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<Dif
             is_binary: true,
             binary_type: get_binary_type(file_path),
             file_size: Some(file_size),
-        });
+        };
     }
 
-    // Convert to string and create diff lines
-    let text = String::from_utf8_lossy(&content);
+    let text = String::from_utf8_lossy(content);
     let lines: Vec<&str> = text.lines().collect();
+    let line_type = if is_addition { "add" } else { "delete" };
 
     let diff_lines: Vec<DiffLine> = lines
         .iter()
         .enumerate()
-        .map(|(i, line)| DiffLine {
-            content: format!("{}\n", line),
-            line_type: "add".to_string(),
-            old_line_no: None,
-            new_line_no: Some((i + 1) as u32),
+        .map(|(i, line)| {
+            let line_no = Some((i + 1) as u32);
+            DiffLine {
+                content: format!("{}\n", line),
+                line_type: line_type.to_string(),
+                old_line_no: if is_addition { None } else { line_no },
+                new_line_no: if is_addition { line_no } else { None },
+            }
         })
         .collect();
 
+    let count = lines.len() as u32;
     let hunk = DiffHunk {
-        old_start: 0,
-        old_lines: 0,
-        new_start: 1,
-        new_lines: lines.len() as u32,
+        old_start: if is_addition { 0 } else { 1 },
+        old_lines: if is_addition { 0 } else { count },
+        new_start: if is_addition { 1 } else { 0 },
+        new_lines: if is_addition { count } else { 0 },
         lines: diff_lines,
     };
 
-    Ok(DiffInfo {
+    DiffInfo {
         file_path: file_path.to_string(),
         old_content: None,
         new_content: None,
@@ -817,7 +971,15 @@ pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<Dif
         is_binary: false,
         binary_type: None,
         file_size: Some(file_size),
-    })
+    }
+}
+
+/// Read content of an untracked file and create diff info showing all lines as additions
+pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
+    let workdir = repo.workdir().ok_or("No working directory")?;
+    let full_path = resolve_repo_path(workdir, file_path)?;
+    let content = std::fs::read(&full_path).map_err(|e| e.to_string())?;
+    Ok(diff_from_bytes(file_path, &content, true, false))
 }
 
 /// Get diff for a newly staged file directly from the index blob (fallback to working dir).
@@ -825,46 +987,12 @@ pub fn get_staged_new_file_diff(repo: &Repository, file_path: &str) -> Result<Di
     if let Ok(index) = repo.index() {
         if let Some(entry) = index.get_path(Path::new(file_path), 0) {
             if let Ok(blob) = repo.find_blob(entry.id) {
-                let content = blob.content();
-                let file_size = content.len() as u64;
-                if blob.is_binary() || is_binary_content(content) {
-                    return Ok(DiffInfo {
-                        file_path: file_path.to_string(),
-                        old_content: None,
-                        new_content: None,
-                        hunks: Vec::new(),
-                        is_binary: true,
-                        binary_type: get_binary_type(file_path),
-                        file_size: Some(file_size),
-                    });
-                }
-                let text = String::from_utf8_lossy(content);
-                let lines: Vec<&str> = text.lines().collect();
-                let diff_lines: Vec<DiffLine> = lines
-                    .iter()
-                    .enumerate()
-                    .map(|(i, line)| DiffLine {
-                        content: format!("{}\n", line),
-                        line_type: "add".to_string(),
-                        old_line_no: None,
-                        new_line_no: Some((i + 1) as u32),
-                    })
-                    .collect();
-                return Ok(DiffInfo {
-                    file_path: file_path.to_string(),
-                    old_content: None,
-                    new_content: None,
-                    hunks: vec![DiffHunk {
-                        old_start: 0,
-                        old_lines: 0,
-                        new_start: 1,
-                        new_lines: lines.len() as u32,
-                        lines: diff_lines,
-                    }],
-                    is_binary: false,
-                    binary_type: None,
-                    file_size: Some(file_size),
-                });
+                return Ok(diff_from_bytes(
+                    file_path,
+                    blob.content(),
+                    true,
+                    blob.is_binary(),
+                ));
             }
         }
     }
@@ -888,98 +1016,74 @@ pub fn get_deleted_file_diff(repo: &Repository, file_path: &str) -> Result<DiffI
     let blob = repo
         .find_blob(blob_id)
         .map_err(|e| e.message().to_string())?;
-    let content = blob.content();
-    let file_size = content.len() as u64;
-
-    // Check if binary
-    if blob.is_binary() || is_binary_content(content) {
-        return Ok(DiffInfo {
-            file_path: file_path.to_string(),
-            old_content: None,
-            new_content: None,
-            hunks: Vec::new(),
-            is_binary: true,
-            binary_type: get_binary_type(file_path),
-            file_size: Some(file_size),
-        });
-    }
-
-    // Convert to string and create diff lines
-    let text = String::from_utf8_lossy(content);
-    let lines: Vec<&str> = text.lines().collect();
-
-    let diff_lines: Vec<DiffLine> = lines
-        .iter()
-        .enumerate()
-        .map(|(i, line)| DiffLine {
-            content: format!("{}\n", line),
-            line_type: "delete".to_string(),
-            old_line_no: Some((i + 1) as u32),
-            new_line_no: None,
-        })
-        .collect();
-
-    let hunk = DiffHunk {
-        old_start: 1,
-        old_lines: lines.len() as u32,
-        new_start: 0,
-        new_lines: 0,
-        lines: diff_lines,
-    };
-
-    Ok(DiffInfo {
-        file_path: file_path.to_string(),
-        old_content: None,
-        new_content: None,
-        hunks: vec![hunk],
-        is_binary: false,
-        binary_type: None,
-        file_size: Some(file_size),
-    })
+    Ok(diff_from_bytes(
+        file_path,
+        blob.content(),
+        false,
+        blob.is_binary(),
+    ))
 }
 
-/// Stage a file
-pub fn stage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
+/// Stage multiple files in a single index write
+pub fn stage_files(repo: &Repository, file_paths: &[String]) -> Result<(), String> {
+    if file_paths.is_empty() {
+        return Ok(());
+    }
     let mut index = repo.index().map_err(|e| e.message().to_string())?;
-
-    // Validate path stays inside repo workdir and handle broken symlinks via symlink_metadata
     let workdir = repo.workdir().ok_or("No working directory")?;
-    let full_path = resolve_repo_path(workdir, file_path)?;
 
-    if full_path.symlink_metadata().is_ok() {
-        index
-            .add_path(Path::new(file_path))
-            .map_err(|e| e.message().to_string())?;
-    } else {
-        // File was deleted, remove from index
-        index
-            .remove_path(Path::new(file_path))
-            .map_err(|e| e.message().to_string())?;
+    for file_path in file_paths {
+        let full_path = resolve_repo_path(workdir, file_path)?;
+        if full_path.symlink_metadata().is_ok() {
+            index
+                .add_path(Path::new(file_path))
+                .map_err(|e| e.message().to_string())?;
+        } else {
+            index
+                .remove_path(Path::new(file_path))
+                .map_err(|e| e.message().to_string())?;
+        }
     }
 
     index.write().map_err(|e| e.message().to_string())?;
     Ok(())
 }
 
-/// Unstage a file (also supports unborn branch before the initial commit)
-pub fn unstage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
+/// Stage a single file
+pub fn stage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
+    stage_files(repo, &[file_path.to_string()])
+}
+
+/// Unstage multiple files in a single reset/index write (supports unborn branch)
+pub fn unstage_files(repo: &Repository, file_paths: &[String]) -> Result<(), String> {
+    if file_paths.is_empty() {
+        return Ok(());
+    }
     match repo.head() {
         Ok(head) => {
             let head_commit = head.peel_to_commit().map_err(|e| e.message().to_string())?;
-            repo.reset_default(Some(head_commit.as_object()), &[Path::new(file_path)])
+            let paths: Vec<&Path> = file_paths.iter().map(Path::new).collect();
+            repo.reset_default(Some(head_commit.as_object()), paths)
                 .map_err(|e| e.message().to_string())?;
         }
         Err(e) if e.code() == ErrorCode::UnbornBranch => {
             let mut index = repo.index().map_err(|e| e.message().to_string())?;
-            index
-                .remove_path(Path::new(file_path))
-                .map_err(|e| e.message().to_string())?;
+            for file_path in file_paths {
+                index
+                    .remove_path(Path::new(file_path))
+                    .map_err(|e| e.message().to_string())?;
+            }
             index.write().map_err(|e| e.message().to_string())?;
         }
         Err(e) => return Err(e.message().to_string()),
     }
 
     Ok(())
+}
+
+/// Unstage a single file
+pub fn unstage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
+    unstage_files(repo, &[file_path.to_string()])
 }
 
 /// Discard unstaged changes in a file (restore from index without wiping staged changes, or delete if untracked)
@@ -1039,8 +1143,20 @@ pub(crate) fn generate_patch(file_path: &str, hunk: &HunkData) -> String {
     let a_path = quote_git_path("a/", file_path);
     let b_path = quote_git_path("b/", file_path);
     patch.push_str(&format!("diff --git {} {}\n", a_path, b_path));
-    patch.push_str(&format!("--- {}\n", a_path));
-    patch.push_str(&format!("+++ {}\n", b_path));
+
+    // Emit new/deleted file headers so `git apply` removes or adds index entries cleanly instead of 0-byte blobs
+    if hunk.old_start == 0 && hunk.old_lines == 0 {
+        patch.push_str("new file mode 100644\n");
+        patch.push_str("--- /dev/null\n");
+        patch.push_str(&format!("+++ {}\n", b_path));
+    } else if hunk.new_start == 0 && hunk.new_lines == 0 {
+        patch.push_str("deleted file mode 100644\n");
+        patch.push_str(&format!("--- {}\n", a_path));
+        patch.push_str("+++ /dev/null\n");
+    } else {
+        patch.push_str(&format!("--- {}\n", a_path));
+        patch.push_str(&format!("+++ {}\n", b_path));
+    }
 
     patch.push_str(&format!(
         "@@ -{},{} +{},{} @@\n",
@@ -1610,7 +1726,11 @@ pub fn git_pull(repo_path: &str) -> Result<GitOperationResult, String> {
         };
         Ok(create_success_result(message))
     } else {
-        Ok(create_error_result(&stderr, &stdout))
+        Ok(maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            Some(repo_path),
+            None,
+        ))
     }
 }
 
@@ -1635,7 +1755,11 @@ pub fn git_push(repo_path: &str) -> Result<GitOperationResult, String> {
         };
         Ok(create_success_result(message))
     } else {
-        Ok(create_error_result(&stderr, &stdout))
+        Ok(maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            Some(repo_path),
+            None,
+        ))
     }
 }
 
@@ -1658,7 +1782,11 @@ pub fn git_fetch(repo_path: &str) -> Result<GitOperationResult, String> {
         };
         Ok(create_success_result(message))
     } else {
-        Ok(create_error_result(&stderr, &stdout))
+        Ok(maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            Some(repo_path),
+            None,
+        ))
     }
 }
 
@@ -1697,14 +1825,17 @@ pub fn git_fetch_with_options(
     let mut cmd = git_network_cmd(Some(repo_path));
     cmd.arg("fetch");
 
-    if options.all {
+    let remote_hint = if options.all {
         cmd.arg("--all");
+        None
     } else if let Some(remote) = &options.remote {
         validate_non_flag(remote, "remote")?;
         cmd.arg("--").arg(remote);
+        Some(remote.as_str())
     } else {
         cmd.arg("--").arg("origin");
-    }
+        Some("origin")
+    };
 
     let output = cmd
         .output()
@@ -1721,7 +1852,11 @@ pub fn git_fetch_with_options(
         };
         Ok(create_success_result(message))
     } else {
-        Ok(create_error_result(&stderr, &stdout))
+        Ok(maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            Some(repo_path),
+            remote_hint,
+        ))
     }
 }
 
@@ -1763,7 +1898,11 @@ pub fn git_pull_with_options(
         };
         Ok(create_success_result(message))
     } else {
-        Ok(create_error_result(&stderr, &stdout))
+        Ok(maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            Some(repo_path),
+            Some(&options.remote),
+        ))
     }
 }
 
@@ -1807,7 +1946,11 @@ pub fn git_push_with_options(
         };
         Ok(create_success_result(message))
     } else {
-        Ok(create_error_result(&stderr, &stdout))
+        Ok(maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            Some(repo_path),
+            Some(&options.remote),
+        ))
     }
 }
 
@@ -2170,8 +2313,12 @@ pub fn git_test_remote_connection(url: &str) -> Result<GitOperationResult, Strin
     if output.status.success() {
         Ok(create_success_result("Connection successful".to_string()))
     } else {
-        // Parse SSH verification/credentials from real stderr first
-        let mut res = create_error_result(&stderr, &stdout);
+        // Parse SSH verification/credentials from real stderr first (probing host if BatchMode suppressed fingerprint)
+        let mut res = maybe_probe_ssh_verification(
+            create_error_result(&stderr, &stdout),
+            None,
+            Some(url),
+        );
         if res.requires_ssh_verification.is_some() || res.requires_credential.is_some() {
             return Ok(res);
         }
@@ -2272,33 +2419,60 @@ pub fn git_create_tag(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // Push only the newly created tag (not unrelated local tags)
+    // Push only the newly created tag to every configured remote (no hardcoded "origin")
     if push_to_remotes {
-        let tag_ref = format!("refs/tags/{}", tag_name);
-        let push_output = git_network_cmd(Some(repo_path))
-            .args(["push", "origin", "--", &tag_ref])
-            .output()
-            .map_err(|e| format!("Failed to execute git push tag: {}", e))?;
-
-        let push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
-        let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
-
-        if push_output.status.success() {
-            Ok(create_success_result(format!(
-                "Tag '{}' created and pushed",
+        let remotes = get_remotes(&open_repository(repo_path)?)?;
+        if remotes.is_empty() {
+            return Ok(create_success_result(format!(
+                "Tag '{}' created (no remotes configured)",
                 tag_name
+            )));
+        }
+
+        let tag_ref = format!("refs/tags/{}", tag_name);
+        let mut failures: Vec<String> = Vec::new();
+
+        for remote in &remotes {
+            validate_non_flag(remote, "remote")?;
+            let push_output = git_network_cmd(Some(repo_path))
+                .args(["push", "--", remote, &tag_ref])
+                .output()
+                .map_err(|e| format!("Failed to execute git push tag to '{}': {}", remote, e))?;
+
+            if !push_output.status.success() {
+                let push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
+                let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
+                let res = maybe_probe_ssh_verification(
+                    create_error_result(&push_stderr, &push_stdout),
+                    Some(repo_path),
+                    Some(remote),
+                );
+                if res.requires_ssh_verification.is_some() || res.requires_credential.is_some() {
+                    return Ok(res);
+                }
+                failures.push(format!("{}: {}", remote, res.message));
+            }
+        }
+
+        if failures.is_empty() {
+            Ok(create_success_result(format!(
+                "Tag '{}' created and pushed to {}",
+                tag_name,
+                remotes.join(", ")
             )))
         } else {
-            let mut res = create_error_result(&push_stderr, &push_stdout);
-            if res.requires_ssh_verification.is_none() && res.requires_credential.is_none() {
-                res.message = format!(
-                    "Tag '{}' created but push failed: {}",
+            Ok(GitOperationResult {
+                success: false,
+                message: format!(
+                    "Tag '{}' created but push failed ({})",
                     tag_name,
-                    res.message
-                );
-                res.error_type = Some("push_failed".to_string());
-            }
-            Ok(res)
+                    failures.join("; ")
+                ),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("push_failed".to_string()),
+                conflicting_files: None,
+            })
         }
     } else {
         Ok(create_success_result(format!("Tag '{}' created", tag_name)))
@@ -3286,6 +3460,11 @@ pub fn git_interactive_rebase(
 
     validate_non_flag(target_branch, "target branch")?;
 
+    // Validate every commit short_id is strict ASCII hex so newline/exec directives cannot be injected
+    for entry in &entries {
+        validate_commit_hex_id(&entry.short_id)?;
+    }
+
     let todo_content: String = entries
         .iter()
         .map(|entry| {
@@ -4069,5 +4248,55 @@ mod tests {
         assert!(patch.contains("\n\\ No newline at end of file\n"));
         assert!(!patch.contains(" \\ No newline"));
         assert!(patch.contains("+new\r\n"));
+    }
+
+    #[test]
+    fn generate_patch_handles_new_and_deleted_file_headers() {
+        let new_hunk = HunkData {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: 1,
+            lines: vec![HunkLineData {
+                content: "hello\n".to_string(),
+                line_type: "add".to_string(),
+            }],
+        };
+        let new_patch = generate_patch("added.txt", &new_hunk);
+        assert!(new_patch.contains("new file mode 100644\n--- /dev/null\n+++ b/added.txt\n"));
+
+        let del_hunk = HunkData {
+            old_start: 1,
+            old_lines: 1,
+            new_start: 0,
+            new_lines: 0,
+            lines: vec![HunkLineData {
+                content: "bye\n".to_string(),
+                line_type: "delete".to_string(),
+            }],
+        };
+        let del_patch = generate_patch("removed.txt", &del_hunk);
+        assert!(del_patch.contains("deleted file mode 100644\n--- a/removed.txt\n+++ /dev/null\n"));
+    }
+
+    #[test]
+    fn validate_commit_hex_id_blocks_rebase_todo_injection() {
+        assert!(validate_commit_hex_id("abc1234").is_ok());
+        assert!(validate_commit_hex_id("abc1234\nexec calc").is_err());
+        assert!(validate_commit_hex_id("").is_err());
+        assert!(validate_commit_hex_id("zzzzzz").is_err());
+    }
+
+    #[test]
+    fn extract_ssh_host_handles_scp_and_ssh_urls() {
+        assert_eq!(
+            extract_ssh_host_from_url("git@github.com:org/repo.git").as_deref(),
+            Some("github.com")
+        );
+        assert_eq!(
+            extract_ssh_host_from_url("ssh://git@git.example.com:2222/org/repo.git").as_deref(),
+            Some("[git.example.com]:2222")
+        );
+        assert_eq!(extract_ssh_host_from_url("https://github.com/org/repo.git"), None);
     }
 }

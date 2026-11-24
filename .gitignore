@@ -26,3 +26,7 @@ dist-ssr
 
 # Auto Claude data directory
 .auto-claude/
+
+# Alternate package manager lockfiles (project uses npm)
+bun.lock
+bun.lockb

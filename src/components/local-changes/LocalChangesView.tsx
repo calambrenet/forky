@@ -177,13 +177,21 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
                 filePath: file.path,
               });
             } else {
+              // Unstaged modified file: compare against index first, falling back to HEAD
               try {
-                oldImage = await invoke<ImageContent>('get_image_from_head', {
+                oldImage = await invoke<ImageContent>('get_image_from_index', {
                   repoPath,
                   filePath: file.path,
                 });
               } catch {
-                // File might be new
+                try {
+                  oldImage = await invoke<ImageContent>('get_image_from_head', {
+                    repoPath,
+                    filePath: file.path,
+                  });
+                } catch {
+                  // File might be new
+                }
               }
               newImage = await invoke<ImageContent>('get_image_content', {
                 repoPath,
@@ -295,10 +303,12 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     };
 
     const handleStageAll = async () => {
+      if (unstaged.length === 0) return;
       try {
-        for (const file of unstaged) {
-          await invoke('stage_file', { repoPath, filePath: file.path });
-        }
+        await invoke('stage_files', {
+          repoPath,
+          filePaths: unstaged.map((f) => f.path),
+        });
         const fresh = await loadFileStatus();
         if (selectedFile) {
           reconcileSelection(fresh, selectedFile.path, true);
@@ -309,10 +319,12 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     };
 
     const handleUnstageAll = async () => {
+      if (staged.length === 0) return;
       try {
-        for (const file of staged) {
-          await invoke('unstage_file', { repoPath, filePath: file.path });
-        }
+        await invoke('unstage_files', {
+          repoPath,
+          filePaths: staged.map((f) => f.path),
+        });
         const fresh = await loadFileStatus();
         if (selectedFile) {
           reconcileSelection(fresh, selectedFile.path, false);
@@ -1037,6 +1049,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         <div className="diff-panel">
           {renderDiffContent()}
           <CommitPanel
+            key={repoPath}
             stagedCount={staged.length}
             onCommit={handleCommit}
             isLoading={isCommitLoading}
