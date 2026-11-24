@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, FileEdit, GitMerge, Search, X } from 'lucide-react';
 import type {
@@ -168,8 +168,9 @@ export const Sidebar: FC<SidebarProps> = memo(
     const localBranches = useMemo(() => branches.filter((b) => !b.is_remote), [branches]);
     const remoteBranches = useMemo(() => branches.filter((b) => b.is_remote), [branches]);
 
-    // Filter state
+    // Filter state (deferred for responsive typing with thousands of branches/tags)
     const [filter, setFilter] = useState('');
+    const deferredFilter = useDeferredValue(filter);
     const filterInputRef = useRef<HTMLInputElement>(null);
 
     // Remote sorting preference (persisted)
@@ -251,13 +252,19 @@ export const Sidebar: FC<SidebarProps> = memo(
     );
     const tagTree = useMemo(() => buildTagTree(tags), [tags]);
 
-    // Filter trees
+    // Filter trees using deferredFilter so typing stays instant
     const filteredLocalBranchTree = useMemo(
-      () => filterTree(localBranchTree, filter),
-      [localBranchTree, filter]
+      () => filterTree(localBranchTree, deferredFilter),
+      [localBranchTree, deferredFilter]
     );
-    const filteredRemoteTree = useMemo(() => filterTree(remoteTree, filter), [remoteTree, filter]);
-    const filteredTagTree = useMemo(() => filterTree(tagTree, filter), [tagTree, filter]);
+    const filteredRemoteTree = useMemo(
+      () => filterTree(remoteTree, deferredFilter),
+      [remoteTree, deferredFilter]
+    );
+    const filteredTagTree = useMemo(
+      () => filterTree(tagTree, deferredFilter),
+      [tagTree, deferredFilter]
+    );
 
     // Create a map of branch names to their commit SHAs
     const branchToCommit = useMemo(() => {
@@ -284,7 +291,7 @@ export const Sidebar: FC<SidebarProps> = memo(
 
     // Derive expanded folders while filtering purely in memo (avoids infinite effect loop & preserves saved state)
     const effectiveExpandedPaths = useMemo(() => {
-      if (!filter.trim()) return expandedPaths;
+      if (!deferredFilter.trim()) return expandedPaths;
 
       const combined = new Set(expandedPaths);
       const collectPaths = (nodes: TreeNode[]) => {
@@ -300,7 +307,13 @@ export const Sidebar: FC<SidebarProps> = memo(
       collectPaths(filteredRemoteTree);
       collectPaths(filteredTagTree);
       return combined;
-    }, [filter, expandedPaths, filteredLocalBranchTree, filteredRemoteTree, filteredTagTree]);
+    }, [
+      deferredFilter,
+      expandedPaths,
+      filteredLocalBranchTree,
+      filteredRemoteTree,
+      filteredTagTree,
+    ]);
 
     const handleBranchClick = useCallback(
       (branch: BranchInfo) => {

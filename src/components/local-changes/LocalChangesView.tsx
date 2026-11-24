@@ -1,7 +1,8 @@
 import type { FC } from 'react';
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { List, type RowComponentProps } from 'react-window';
 import type {
   FileStatus,
   FileStatusSeparated,
@@ -12,12 +13,84 @@ import type {
 } from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { CommitPanel } from '../commit-panel';
+import { VirtualDiffViewer } from '../virtual-diff/VirtualDiffViewer';
 import { DiscardChangesModal, DiscardHunkModal } from '../git-modals';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '../modal';
 import { AlertTriangle } from 'lucide-react';
-import { useGitOperationStore, useRepositoryStore } from '../../stores';
+import {
+  useGitOperationStore,
+  useRepositoryStore,
+  useActiveTabUnstaged,
+  useActiveTabStaged,
+} from '../../stores';
 import { useUIStore } from '../../stores/uiStore';
 import './LocalChangesView.css';
+
+const VIRTUALIZE_FILES_THRESHOLD = 100;
+const FILE_ITEM_HEIGHT = 42;
+
+interface LocalFileRowExtraProps {
+  files: FileStatus[];
+  isStaged: boolean;
+  selectedFile: FileStatus | null;
+  getStatusIcon: (status: string) => { icon: string; color: string; label: string };
+  getFileName: (path: string) => string;
+  getFileDir: (path: string) => string;
+  onSelect: (file: FileStatus) => void;
+  onContextMenu: (e: React.MouseEvent, file: FileStatus) => void;
+  onAction: (file: FileStatus) => void;
+  actionTitle: string;
+}
+
+const VirtualLocalFileRow = ({
+  index,
+  style,
+  ariaAttributes,
+  files,
+  isStaged,
+  selectedFile,
+  getStatusIcon,
+  getFileName,
+  getFileDir,
+  onSelect,
+  onContextMenu,
+  onAction,
+  actionTitle,
+}: RowComponentProps<LocalFileRowExtraProps>) => {
+  const file = files[index];
+  if (!file) return <div style={style} {...ariaAttributes} />;
+
+  const { icon, color } = getStatusIcon(file.status);
+  const isSelected = selectedFile?.path === file.path && selectedFile?.staged === file.staged;
+
+  return (
+    <div
+      style={{ ...style, boxSizing: 'border-box' }}
+      {...ariaAttributes}
+      className={`file-item ${isSelected ? 'selected' : ''}`}
+      onClick={() => onSelect(file)}
+      onContextMenu={(e) => onContextMenu(e, file)}
+    >
+      <span className="file-status-icon" style={{ color }}>
+        {icon}
+      </span>
+      <span className="file-info">
+        <span className="file-name">{getFileName(file.path)}</span>
+        <span className="file-dir">{getFileDir(file.path)}</span>
+      </span>
+      <button
+        className="action-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          onAction(file);
+        }}
+        title={actionTitle}
+      >
+        {isStaged ? '−' : '+'}
+      </button>
+    </div>
+  );
+};
 
 interface ImageContent {
   base64: string;
@@ -47,10 +120,12 @@ interface ContextMenuState {
 export const LocalChangesView: FC<LocalChangesViewProps> = memo(
   ({ repoPath, refreshKey, onRefreshRepository }) => {
     const { t } = useTranslation();
-    // Git operation store
-    const { startOperation, completeOperation, addLogEntry } = useGitOperationStore();
-    const [unstaged, setUnstaged] = useState<FileStatus[]>([]);
-    const [staged, setStaged] = useState<FileStatus[]>([]);
+    // Atomic store selectors (read unstaged/staged directly from repositoryStore snapshot)
+    const startOperation = useGitOperationStore((s) => s.startOperation);
+    const completeOperation = useGitOperationStore((s) => s.completeOperation);
+    const addLogEntry = useGitOperationStore((s) => s.addLogEntry);
+    const unstaged = useActiveTabUnstaged();
+    const staged = useActiveTabStaged();
     const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
     const [diffInfo, setDiffInfo] = useState<DiffInfo | null>(null);
     const [isLoadingDiff, setIsLoadingDiff] = useState(false);
@@ -75,6 +150,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     });
     const contextMenuRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const changesSidebarRef = useRef<HTMLDivElement>(null);
 
     // Commit panel state
     const [lastCommitMessage, setLastCommitMessage] = useState<CommitMessage | null>(null);
@@ -91,42 +167,26 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       isLoading: false,
     });
 
-    // Hunk hover & in-flight state
-    const [hoveredHunkIndex, setHoveredHunkIndex] = useState<number | null>(null);
+    // Hunk in-flight state (hover is handled purely via CSS in VirtualDiffViewer.css)
     const [busyHunkKey, setBusyHunkKey] = useState<string | null>(null);
 
-    const statusReqIdRef = useRef(0);
     const diffReqIdRef = useRef(0);
     const imageReqIdRef = useRef(0);
-
-    // Get store actions for updating pending changes indicator and file statuses
-    const { setTabHasPendingChanges, updateTabState } = useRepositoryStore.getState();
+    const prevRefreshKeyRef = useRef(refreshKey);
 
     const loadFileStatus = useCallback(async (): Promise<FileStatusSeparated | null> => {
-      const reqId = ++statusReqIdRef.current;
+      const state = useRepositoryStore.getState();
+      const matchingTab = state.tabs.find((t) => t.path === repoPath);
+      if (matchingTab) {
+        return state.refreshTabStatus(matchingTab.id);
+      }
       try {
-        const result = await invoke<FileStatusSeparated>('get_file_status_separated', {
-          repoPath,
-        });
-        if (reqId !== statusReqIdRef.current) return null;
-
-        setUnstaged(result.unstaged);
-        setStaged(result.staged);
-
-        const state = useRepositoryStore.getState();
-        const matchingTab = state.tabs.find((t) => t.path === repoPath);
-        if (matchingTab) {
-          const allFiles = [...result.unstaged, ...result.staged];
-          updateTabState(matchingTab.id, { fileStatuses: allFiles });
-          setTabHasPendingChanges(matchingTab.id, allFiles.length > 0);
-        }
-        return result;
+        return await invoke<FileStatusSeparated>('get_file_status_separated', { repoPath });
       } catch (error) {
-        if (reqId !== statusReqIdRef.current) return null;
         console.error('Error loading file status:', error);
         return null;
       }
-    }, [repoPath, setTabHasPendingChanges, updateTabState]);
+    }, [repoPath]);
 
     useEffect(() => {
       // Reset view state on repository switch so previous repo's diff/file never leaks
@@ -138,10 +198,6 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       setLastCommitMessage(null);
       setIsLoadingDiff(false);
     }, [repoPath]);
-
-    useEffect(() => {
-      loadFileStatus();
-    }, [loadFileStatus, refreshKey]);
 
     const loadImageContent = useCallback(
       async (file: FileStatus) => {
@@ -273,10 +329,29 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       [loadDiff]
     );
 
-    const handleFileSelect = (file: FileStatus) => {
-      setSelectedFile(file);
-      void loadDiff(file);
-    };
+    // When an external Git operation bumps refreshKey, re-diff the active file if still present
+    // without issuing a duplicate `get_file_status_separated` (the store snapshot is already updated).
+    useEffect(() => {
+      if (refreshKey === prevRefreshKeyRef.current) return;
+      prevRefreshKeyRef.current = refreshKey;
+      if (!selectedFile) return;
+
+      const tabState = useRepositoryStore.getState().getActiveTabState();
+      if (!tabState) return;
+      reconcileSelection(
+        { unstaged: tabState.unstaged, staged: tabState.staged },
+        selectedFile.path,
+        selectedFile.staged
+      );
+    }, [refreshKey, selectedFile, reconcileSelection]);
+
+    const handleFileSelect = useCallback(
+      (file: FileStatus) => {
+        setSelectedFile(file);
+        void loadDiff(file);
+      },
+      [loadDiff]
+    );
 
     const handleStageFile = async (file: FileStatus) => {
       try {
@@ -627,20 +702,40 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
-    const handleResizeStart = () => setIsResizing(true);
+    const handleResizeStart = useCallback(() => setIsResizing(true), []);
 
     useEffect(() => {
       if (!isResizing) return;
+
+      let pendingWidth: number | null = null;
+      let rafId: number | null = null;
 
       const handleMouseMove = (e: MouseEvent) => {
         if (!containerRef.current) return;
         const containerRect = containerRef.current.getBoundingClientRect();
         const relativeX = e.clientX - containerRect.left;
         const newWidth = Math.max(200, Math.min(500, relativeX));
-        setSidebarWidth(newWidth);
+        pendingWidth = newWidth;
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            if (changesSidebarRef.current && pendingWidth !== null) {
+              changesSidebarRef.current.style.width = `${pendingWidth}px`;
+            }
+          });
+        }
       };
 
-      const handleMouseUp = () => setIsResizing(false);
+      const handleMouseUp = () => {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        if (pendingWidth !== null) {
+          setSidebarWidth(pendingWidth);
+        }
+        setIsResizing(false);
+      };
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
@@ -652,15 +747,51 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         document.removeEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        if (rafId !== null) cancelAnimationFrame(rafId);
       };
     }, [isResizing]);
+
+    const unstagedRowProps = useMemo<LocalFileRowExtraProps>(
+      () => ({
+        files: unstaged,
+        isStaged: false,
+        selectedFile,
+        getStatusIcon,
+        getFileName,
+        getFileDir,
+        onSelect: handleFileSelect,
+        onContextMenu: handleContextMenu,
+        onAction: handleStageFile,
+        actionTitle: t('localChanges.stage'),
+      }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [unstaged, selectedFile, handleFileSelect, t]
+    );
+
+    const stagedRowProps = useMemo<LocalFileRowExtraProps>(
+      () => ({
+        files: staged,
+        isStaged: true,
+        selectedFile,
+        getStatusIcon,
+        getFileName,
+        getFileDir,
+        onSelect: handleFileSelect,
+        onContextMenu: handleContextMenu,
+        onAction: handleUnstageFile,
+        actionTitle: t('localChanges.unstage'),
+      }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [staged, selectedFile, handleFileSelect, t]
+    );
 
     const renderFileList = (
       files: FileStatus[],
       title: string,
       isStaged: boolean,
       onAction: (file: FileStatus) => void,
-      onActionAll: () => void
+      onActionAll: () => void,
+      virtualRowProps: LocalFileRowExtraProps
     ) => (
       <div className="file-panel">
         <div className="file-panel-header">
@@ -681,6 +812,15 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             <div className="empty-message">
               {isStaged ? t('localChanges.noStagedChanges') : t('localChanges.noUnstagedChanges')}
             </div>
+          ) : files.length > VIRTUALIZE_FILES_THRESHOLD ? (
+            <List<LocalFileRowExtraProps>
+              rowComponent={VirtualLocalFileRow}
+              rowCount={files.length}
+              rowHeight={FILE_ITEM_HEIGHT}
+              rowProps={virtualRowProps}
+              overscanCount={10}
+              style={{ height: '100%', width: '100%' }}
+            />
           ) : (
             files.map((file) => {
               const { icon, color } = getStatusIcon(file.status);
@@ -841,8 +981,8 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         );
       }
 
-      // No diff info or empty hunks
-      if (!diffInfo || diffInfo.hunks.length === 0) {
+      // No diff info or empty hunks (unless truncated due to file size limit)
+      if (!diffInfo || (diffInfo.hunks.length === 0 && !diffInfo.is_truncated)) {
         const { label } = getStatusIcon(selectedFile.status);
         return (
           <div className="diff-empty">
@@ -855,92 +995,18 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       const isUntracked = selectedFile.status === 'untracked' || selectedFile.status === 'new';
 
       return (
-        <div className="diff-content">
-          <div className="diff-file-header">
-            <span className="diff-file-path">{selectedFile.path}</span>
-            <span className="diff-file-status">{getStatusIcon(selectedFile.status).label}</span>
-          </div>
-          <div className="diff-hunks">
-            {diffInfo.hunks.map((hunk, hunkIndex) => {
-              const hunkKey = getHunkKey(hunk);
-              const isHunkBusy = busyHunkKey === hunkKey;
-              return (
-                <div
-                  key={`${hunkKey}-${hunkIndex}`}
-                  className="diff-hunk"
-                  onMouseEnter={() => setHoveredHunkIndex(hunkIndex)}
-                  onMouseLeave={() => setHoveredHunkIndex(null)}
-                >
-                  <div className="diff-hunk-header">
-                    <span className="hunk-info">
-                      @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
-                    </span>
-                    {hoveredHunkIndex === hunkIndex && (
-                      <div className="hunk-actions">
-                        {isStaged ? (
-                          <button
-                            className="hunk-action-btn"
-                            disabled={isHunkBusy}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleUnstageHunk(hunk);
-                            }}
-                            title={t('localChanges.unstageHunk')}
-                          >
-                            {t('localChanges.unstage')}
-                          </button>
-                        ) : !isUntracked ? (
-                          <>
-                            <button
-                              className="hunk-action-btn stage"
-                              disabled={isHunkBusy}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleStageHunk(hunk);
-                              }}
-                              title={t('localChanges.stageHunk')}
-                            >
-                              {t('localChanges.stage')}
-                            </button>
-                            <button
-                              className="hunk-action-btn discard"
-                              disabled={isHunkBusy}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDiscardHunk(hunk);
-                              }}
-                              title={t('localChanges.discardHunk')}
-                            >
-                              {t('localChanges.discard')}
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                  <div className="diff-lines">
-                    {hunk.lines.map((line, lineIndex) => (
-                      <div key={lineIndex} className={`diff-line ${line.line_type}`}>
-                        <span className="line-number old">{line.old_line_no ?? ''}</span>
-                        <span className="line-number new">{line.new_line_no ?? ''}</span>
-                        <span className="line-prefix">
-                          {line.line_type === 'add'
-                            ? '+'
-                            : line.line_type === 'delete'
-                              ? '-'
-                              : line.line_type === 'no_newline'
-                                ? '\\'
-                                : ' '}
-                        </span>
-                        <span className="line-content">{line.content}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <VirtualDiffViewer
+          diffInfo={diffInfo}
+          filePath={selectedFile.path}
+          statusLabel={getStatusIcon(selectedFile.status).label}
+          isStaged={isStaged}
+          isUntracked={isUntracked}
+          busyHunkKey={busyHunkKey}
+          getHunkKey={getHunkKey}
+          onStageHunk={(hunk) => void handleStageHunk(hunk)}
+          onUnstageHunk={(hunk) => void handleUnstageHunk(hunk)}
+          onDiscardHunk={handleDiscardHunk}
+        />
       );
     };
 
@@ -1029,20 +1095,22 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     return (
       <div className="local-changes-view" ref={containerRef}>
-        <div className="changes-sidebar" style={{ width: sidebarWidth }}>
+        <div ref={changesSidebarRef} className="changes-sidebar" style={{ width: sidebarWidth }}>
           {renderFileList(
             unstaged,
             t('localChanges.unstaged'),
             false,
             handleStageFile,
-            handleStageAll
+            handleStageAll,
+            unstagedRowProps
           )}
           {renderFileList(
             staged,
             t('localChanges.staged'),
             true,
             handleUnstageFile,
-            handleUnstageAll
+            handleUnstageAll,
+            stagedRowProps
           )}
         </div>
         <Resizer direction="horizontal" onMouseDown={handleResizeStart} isResizing={isResizing} />

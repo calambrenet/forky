@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { useShallow } from 'zustand/react/shallow';
 import type { GitOperationState, GitOperationResult, GitLogEntry } from '../types/git';
 
 type OperationType =
@@ -218,10 +217,8 @@ export const useCurrentOperation = () => useGitOperationStore((state) => state.c
 export const useActivityLogsByRepo = () =>
   useGitOperationStore((state) => state.activityLogsByRepo);
 
-// Hook to get activity log for a specific repo (with shallow equality for optimization)
+// Hook to get activity log for a specific repo (Object.is preserves stability per repoPath)
 export const useActivityLogForRepo = (repoPath: string | undefined) =>
-  useGitOperationStore(
-    useShallow((state) =>
-      repoPath ? (state.activityLogsByRepo[repoPath] ?? EMPTY_LOG) : EMPTY_LOG
-    )
+  useGitOperationStore((state) =>
+    repoPath ? (state.activityLogsByRepo[repoPath] ?? EMPTY_LOG) : EMPTY_LOG
   );

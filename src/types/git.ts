@@ -79,6 +79,16 @@ export interface DiffLine {
   new_line_no: number | null;
 }
 
+export interface RepositorySnapshot {
+  branches: BranchInfo[];
+  branch_heads: BranchHead[];
+  tags: TagInfo[];
+  remotes: string[];
+  stashes: StashInfo[];
+  unstaged: FileStatus[];
+  staged: FileStatus[];
+}
+
 export interface DiffInfo {
   file_path: string;
   old_content: string | null;
@@ -87,6 +97,7 @@ export interface DiffInfo {
   is_binary: boolean;
   binary_type: string | null; // "image", "pdf", "other"
   file_size: number | null;
+  is_truncated?: boolean;
 }
 
 export interface RepositoryTab {
@@ -268,11 +279,13 @@ export interface TabState {
   tags: TagInfo[];
   stashes: StashInfo[];
   remotes: string[];
-  commits: CommitInfo[];
+  unstaged: FileStatus[];
+  staged: FileStatus[];
   fileStatuses: FileStatus[];
   selectedCommitId: string | null;
   selectedFile: FileStatus | null;
   viewMode: ViewMode;
+  loaded: boolean;
 }
 
 // Git Flow types

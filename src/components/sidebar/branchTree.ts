@@ -11,24 +11,25 @@ export interface TreeNode {
   isHead?: boolean; // Is current branch
 }
 
-// Build a tree structure from flat branch list
+// Build a tree structure from flat branch list in O(N) using a path Map
 export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
   const root: TreeNode[] = [];
+  const nodeByPath = new Map<string, TreeNode>();
 
   for (const branch of branches) {
     const parts = branch.name.split('/');
     let currentLevel = root;
+    let fullPath = '';
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const isLast = i === parts.length - 1;
-      const fullPath = parts.slice(0, i + 1).join('/');
+      fullPath = i === 0 ? part : `${fullPath}/${part}`;
 
-      let existing = currentLevel.find((node) => node.name === part && node.fullPath === fullPath);
+      let existing = nodeByPath.get(fullPath);
 
       if (!existing) {
         if (isLast) {
-          // This is the branch itself
           existing = {
             name: part,
             fullPath: branch.name,
@@ -38,7 +39,6 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
             isHead: branch.is_head,
           };
         } else {
-          // This is a folder
           existing = {
             name: part,
             fullPath,
@@ -46,6 +46,7 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
             children: [],
           };
         }
+        nodeByPath.set(fullPath, existing);
         currentLevel.push(existing);
       }
 
@@ -58,22 +59,26 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
   return root;
 }
 
-// Build tree for remote branches grouped by remote name
+// Build tree for remote branches grouped by remote name in O(N) using a path Map
 export function buildRemoteTree(
   branches: BranchInfo[],
   remotes: string[],
   sortOrder: RemoteSortOrder = 'alphabetically'
 ): TreeNode[] {
   const root: TreeNode[] = [];
+  const remoteMap = new Map<string, TreeNode>();
+  const nodeByPath = new Map<string, TreeNode>();
 
   // Create remote folder nodes first
   for (const remote of remotes) {
-    root.push({
+    const remoteNode: TreeNode = {
       name: remote,
       fullPath: remote,
       type: 'remote',
       children: [],
-    });
+    };
+    root.push(remoteNode);
+    remoteMap.set(remote, remoteNode);
   }
 
   // Add branches to their respective remotes
@@ -83,19 +88,18 @@ export function buildRemoteTree(
     if (parts.length < 2) continue;
 
     const remoteName = parts[0];
-    const branchPath = parts.slice(1); // Everything after remote name
-
-    const remoteNode = root.find((node) => node.name === remoteName);
+    const remoteNode = remoteMap.get(remoteName);
     if (!remoteNode) continue;
 
     let currentLevel = remoteNode.children;
+    let fullPath = remoteName;
 
-    for (let i = 0; i < branchPath.length; i++) {
-      const part = branchPath[i];
-      const isLast = i === branchPath.length - 1;
-      const fullPath = [remoteName, ...branchPath.slice(0, i + 1)].join('/');
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      fullPath = `${fullPath}/${part}`;
 
-      let existing = currentLevel.find((node) => node.name === part && node.fullPath === fullPath);
+      let existing = nodeByPath.get(fullPath);
 
       if (!existing) {
         if (isLast) {
@@ -114,6 +118,7 @@ export function buildRemoteTree(
             children: [],
           };
         }
+        nodeByPath.set(fullPath, existing);
         currentLevel.push(existing);
       }
 
@@ -129,20 +134,22 @@ export function buildRemoteTree(
   return root;
 }
 
-// Build tree for tags
+// Build tree for tags in O(N) using a path Map
 export function buildTagTree(tags: TagInfo[]): TreeNode[] {
   const root: TreeNode[] = [];
+  const nodeByPath = new Map<string, TreeNode>();
 
   for (const tag of tags) {
     const parts = tag.name.split('/');
     let currentLevel = root;
+    let fullPath = '';
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const isLast = i === parts.length - 1;
-      const fullPath = parts.slice(0, i + 1).join('/');
+      fullPath = i === 0 ? part : `${fullPath}/${part}`;
 
-      let existing = currentLevel.find((node) => node.name === part && node.fullPath === fullPath);
+      let existing = nodeByPath.get(fullPath);
 
       if (!existing) {
         if (isLast) {
@@ -161,6 +168,7 @@ export function buildTagTree(tags: TagInfo[]): TreeNode[] {
             children: [],
           };
         }
+        nodeByPath.set(fullPath, existing);
         currentLevel.push(existing);
       }
 

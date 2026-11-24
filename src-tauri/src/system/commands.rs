@@ -30,7 +30,16 @@ pub struct GitStatus {
 
 /// Checks if Git is installed on the system
 #[tauri::command]
-pub fn check_git_installed() -> GitStatus {
+pub async fn check_git_installed() -> GitStatus {
+    tauri::async_runtime::spawn_blocking(check_git_installed_sync)
+        .await
+        .unwrap_or(GitStatus {
+            installed: false,
+            version: None,
+        })
+}
+
+fn check_git_installed_sync() -> GitStatus {
     let mut cmd = Command::new("git");
     cmd.arg("--version");
     apply_no_window(&mut cmd);
@@ -78,8 +87,14 @@ fn find_in_path(binary: &str) -> Option<std::path::PathBuf> {
 
 /// Opens a terminal emulator in the specified directory
 #[tauri::command]
-pub fn open_in_terminal(path: String) -> Result<(), String> {
-    let target_dir = std::path::Path::new(&path);
+pub async fn open_in_terminal(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || open_in_terminal_sync(&path))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+fn open_in_terminal_sync(path: &str) -> Result<(), String> {
+    let target_dir = std::path::Path::new(path);
     if !target_dir.is_dir() {
         return Err(format!("Directory does not exist: {}", path));
     }
@@ -87,7 +102,7 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
-            .args(["-a", "Terminal", &path])
+            .args(["-a", "Terminal", path])
             .spawn()
             .map_err(|e| format!("Failed to open Terminal: {}", e))?;
         Ok(())
@@ -96,7 +111,7 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let mut wt = Command::new("wt");
-        wt.args(["-d", &path]);
+        wt.args(["-d", path]);
         if wt.spawn().is_ok() {
             return Ok(());
         }
@@ -131,7 +146,7 @@ pub fn open_in_terminal(path: String) -> Result<(), String> {
                 let mut cmd = Command::new(bin_path);
                 cmd.current_dir(target_dir);
                 if !flag_args.is_empty() {
-                    cmd.args(*flag_args).arg(&path);
+                    cmd.args(*flag_args).arg(path);
                 }
                 match cmd.spawn() {
                     Ok(_) => return Ok(()),
@@ -175,14 +190,23 @@ fn get_macos_theme() -> SystemTheme {
 /// Returns "dark" if dark mode, "light" otherwise.
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub fn get_system_theme() -> Result<SystemTheme, String> {
-    Ok(get_macos_theme())
+pub async fn get_system_theme() -> Result<SystemTheme, String> {
+    tauri::async_runtime::spawn_blocking(get_macos_theme)
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))
 }
 
 /// Windows: detects system theme via registry `AppsUseLightTheme`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub fn get_system_theme() -> Result<SystemTheme, String> {
+pub async fn get_system_theme() -> Result<SystemTheme, String> {
+    tauri::async_runtime::spawn_blocking(get_windows_theme)
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))
+}
+
+#[cfg(target_os = "windows")]
+fn get_windows_theme() -> SystemTheme {
     let mut cmd = Command::new("reg");
     cmd.args([
         "query",
@@ -197,23 +221,30 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
             let stdout = String::from_utf8_lossy(&output.stdout);
             // 0x0 = dark, 0x1 = light
             let theme = if stdout.contains("0x0") { "dark" } else { "light" };
-            return Ok(SystemTheme {
+            return SystemTheme {
                 theme: theme.to_string(),
                 source: "windows-registry".to_string(),
-            });
+            };
         }
     }
 
-    Ok(SystemTheme {
+    SystemTheme {
         theme: "light".to_string(),
         source: "default".to_string(),
-    })
+    }
 }
 
 /// Linux / other: detects system theme via GNOME settings, GTK theme, XDG portal, or env vars.
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 #[tauri::command]
-pub fn get_system_theme() -> Result<SystemTheme, String> {
+pub async fn get_system_theme() -> Result<SystemTheme, String> {
+    tauri::async_runtime::spawn_blocking(get_linux_theme)
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+fn get_linux_theme() -> SystemTheme {
     // Try GNOME color-scheme first (GNOME 42+, Ubuntu, Pop!_OS…)
     if let Ok(output) = Command::new("gsettings")
         .args(["get", "org.gnome.desktop.interface", "color-scheme"])
@@ -222,10 +253,10 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
         if output.status.success() {
             let result = String::from_utf8_lossy(&output.stdout);
             let theme = if result.contains("dark") { "dark" } else { "light" };
-            return Ok(SystemTheme {
+            return SystemTheme {
                 theme: theme.to_string(),
                 source: "gnome-color-scheme".to_string(),
-            });
+            };
         }
     }
 
@@ -237,10 +268,10 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
         if output.status.success() {
             let result = String::from_utf8_lossy(&output.stdout).to_lowercase();
             let theme = if result.contains("dark") { "dark" } else { "light" };
-            return Ok(SystemTheme {
+            return SystemTheme {
                 theme: theme.to_string(),
                 source: "gtk-theme".to_string(),
-            });
+            };
         }
     }
 
@@ -261,32 +292,32 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
             let result = String::from_utf8_lossy(&output.stdout);
             // uint32 1 = dark, uint32 0 = no preference, uint32 2 = light
             let theme = if result.contains("uint32 1") { "dark" } else { "light" };
-            return Ok(SystemTheme {
+            return SystemTheme {
                 theme: theme.to_string(),
                 source: "xdg-portal".to_string(),
-            });
+            };
         }
     }
 
     // GTK_THEME env var as last resort
     if let Ok(gtk_theme) = std::env::var("GTK_THEME") {
         let theme = if gtk_theme.to_lowercase().contains("dark") { "dark" } else { "light" };
-        return Ok(SystemTheme {
+        return SystemTheme {
             theme: theme.to_string(),
             source: "env-gtk-theme".to_string(),
-        });
+        };
     }
 
-    Ok(SystemTheme {
+    SystemTheme {
         theme: "light".to_string(),
         source: "default".to_string(),
-    })
+    }
 }
 
 /// Opens a folder picker dialog with proper parent window on macOS
 #[tauri::command]
 pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
+    let (tx, mut rx) = tauri::async_runtime::channel(1);
 
     let mut dialog = app.dialog().file().set_title("Select Git Repository");
     if let Some(window) = app.get_webview_window("main") {
@@ -295,12 +326,12 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String
 
     dialog.pick_folder(move |folder_path| {
         let result = folder_path.map(|p| p.to_string());
-        let _ = tx.send(result);
+        let _ = tx.try_send(result);
     });
 
-    match tauri::async_runtime::spawn_blocking(move || rx.recv()).await {
-        Ok(Ok(Some(path))) => Ok(Some(path)),
-        Ok(Ok(None)) => Ok(None),
-        _ => Err("Dialog was cancelled or failed".to_string()),
+    match rx.recv().await {
+        Some(Some(path)) => Ok(Some(path)),
+        Some(None) => Ok(None),
+        None => Err("Dialog was cancelled or failed".to_string()),
     }
 }

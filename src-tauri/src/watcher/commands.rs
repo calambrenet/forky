@@ -4,14 +4,18 @@ use super::{get_watched_path, start_watching, stop_watching};
 
 /// Start watching a repository for file changes
 #[tauri::command]
-pub fn start_file_watcher(app_handle: AppHandle, path: String) -> Result<(), String> {
-    start_watching(app_handle, path)
+pub async fn start_file_watcher(app_handle: AppHandle, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || start_watching(app_handle, path))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
 }
 
 /// Stop the file watcher
 #[tauri::command]
-pub fn stop_file_watcher(app_handle: AppHandle) -> Result<(), String> {
-    stop_watching(&app_handle)
+pub async fn stop_file_watcher(app_handle: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || stop_watching(&app_handle))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
 }
 
 /// Get the currently watched repository path

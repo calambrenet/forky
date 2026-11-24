@@ -1,0 +1,62 @@
+.virtual-diff-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.virtual-diff-list {
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.diff-truncated-banner {
+  padding: 8px 16px;
+  background-color: rgba(210, 153, 34, 0.14);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--accent-yellow, #d29922);
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* Pure-CSS hunk actions hover (zero React re-renders, no layout shift) */
+.hunk-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.diff-hunk:hover .hunk-actions,
+.diff-hunk:focus-within .hunk-actions,
+.diff-hunk-header:hover .hunk-actions,
+.diff-hunk-header:focus-within .hunk-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.virtual-hunk-header {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 12px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.virtual-diff-line {
+  box-sizing: border-box;
+  height: 20px;
+  line-height: 20px;
+  font-family: monospace;
+  font-size: 13px;
+  overflow: hidden;
+}

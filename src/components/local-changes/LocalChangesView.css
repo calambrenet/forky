@@ -249,12 +249,6 @@
   flex: 1;
 }
 
-.hunk-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: 16px;
-}
-
 .hunk-action-btn {
   padding: 4px 12px;
   border: 1px solid var(--border-color);

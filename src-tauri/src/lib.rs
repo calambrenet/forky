@@ -241,6 +241,7 @@ pub fn run() {
             git_commands::get_recent_repos,
             git_commands::get_branches,
             git_commands::get_branch_heads,
+            git_commands::get_repository_snapshot,
             git_commands::get_commits,
             git_commands::get_file_status,
             git_commands::get_file_status_separated,

@@ -1,7 +1,7 @@
 use crate::git::repository::{
     self, BranchHead, BranchInfo, CommitInfo, CommitMessage, DiffInfo, FetchOptions, FileStatus,
     GitIdentity, GitOperationResult, HunkData, ImageContent, InteractiveRebaseEntry, PullOptions,
-    PushOptions, RepositoryInfo, StashInfo, TagInfo,
+    PushOptions, RepositoryInfo, RepositorySnapshot, StashInfo, TagInfo,
 };
 
 async fn run_blocking<T: Send + 'static>(
@@ -34,8 +34,10 @@ pub async fn open_repository(
 }
 
 #[tauri::command]
-pub fn get_recent_repos(app_handle: tauri::AppHandle) -> Vec<crate::git::recent::RecentRepo> {
-    crate::git::recent::load(&app_handle)
+pub async fn get_recent_repos(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<crate::git::recent::RecentRepo>, String> {
+    run_blocking(move || Ok(crate::git::recent::load(&app_handle))).await
 }
 
 #[tauri::command]
@@ -57,13 +59,19 @@ pub async fn get_branch_heads(repo_path: String) -> Result<Vec<BranchHead>, Stri
 }
 
 #[tauri::command]
+pub async fn get_repository_snapshot(repo_path: String) -> Result<RepositorySnapshot, String> {
+    run_blocking(move || repository::get_repository_snapshot(&repo_path)).await
+}
+
+#[tauri::command]
 pub async fn get_commits(
     repo_path: String,
     limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<Vec<CommitInfo>, String> {
     run_blocking(move || {
         let repo = repository::open_repository(&repo_path)?;
-        repository::get_commits(&repo, limit.unwrap_or(100))
+        repository::get_commits(&repo, limit.unwrap_or(100), offset.unwrap_or(0))
     })
     .await
 }

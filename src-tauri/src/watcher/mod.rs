@@ -1,7 +1,7 @@
 pub mod commands;
 
 use notify_debouncer_mini::{
-    new_debouncer, notify::RecommendedWatcher, DebouncedEventKind, Debouncer,
+    new_debouncer, notify::RecommendedWatcher, notify::Watcher, DebouncedEventKind, Debouncer,
 };
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
@@ -108,6 +108,123 @@ fn is_relevant_kind(kind: DebouncedEventKind) -> bool {
     )
 }
 
+const MAX_SELECTIVE_WATCH_DEPTH: usize = 2;
+const MAX_PROBE_ENTRIES: usize = 64;
+
+/// Returns true if `dir` contains an ignored directory (e.g. `node_modules`, `target`)
+/// within `remaining_depth` levels so we can watch selectively instead of blindly recursing.
+fn contains_ignored_subdir(dir: &Path, remaining_depth: usize) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+
+    for entry in entries.take(MAX_PROBE_ENTRIES).flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() || file_type.is_symlink() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        if name_str == ".git" {
+            continue;
+        }
+        if IGNORED_COMPONENTS.contains(&name_str) {
+            return true;
+        }
+        if remaining_depth > 1 && contains_ignored_subdir(&entry.path(), remaining_depth - 1) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn collect_subdir_watches(
+    dir: &Path,
+    depth: usize,
+    targets: &mut Vec<(PathBuf, notify::RecursiveMode)>,
+) {
+    if depth >= MAX_SELECTIVE_WATCH_DEPTH || !contains_ignored_subdir(dir, MAX_SELECTIVE_WATCH_DEPTH - depth) {
+        targets.push((dir.to_path_buf(), notify::RecursiveMode::Recursive));
+        return;
+    }
+
+    targets.push((dir.to_path_buf(), notify::RecursiveMode::NonRecursive));
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() || file_type.is_symlink() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        if name_str == ".git" || IGNORED_COMPONENTS.contains(&name_str) {
+            continue;
+        }
+        collect_subdir_watches(&entry.path(), depth + 1, targets);
+    }
+}
+
+/// Build the selective list of `(path, mode)` watches for a repository root,
+/// omitting `node_modules`, `target`, build outputs, `.git/objects`, and `.git/logs`.
+pub(crate) fn collect_watch_targets(repo_root: &Path) -> Vec<(PathBuf, notify::RecursiveMode)> {
+    let mut targets = vec![(repo_root.to_path_buf(), notify::RecursiveMode::NonRecursive)];
+
+    let git_dir = repo_root.join(".git");
+    if git_dir.is_dir() {
+        targets.push((git_dir.clone(), notify::RecursiveMode::NonRecursive));
+        let git_refs = git_dir.join("refs");
+        if git_refs.is_dir() {
+            targets.push((git_refs, notify::RecursiveMode::Recursive));
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(repo_root) {
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() || file_type.is_symlink() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name_str) = name.to_str() else {
+                continue;
+            };
+            if name_str == ".git" || IGNORED_COMPONENTS.contains(&name_str) {
+                continue;
+            }
+            collect_subdir_watches(&entry.path(), 0, &mut targets);
+        }
+    }
+
+    targets
+}
+
+fn register_repo_watches(watcher: &mut dyn Watcher, repo_root: &Path) -> Result<(), String> {
+    let targets = collect_watch_targets(repo_root);
+    for (idx, (path, mode)) in targets.into_iter().enumerate() {
+        if let Err(e) = watcher.watch(&path, mode) {
+            if idx == 0 {
+                return Err(format!("Failed to watch path: {}", e));
+            }
+            eprintln!("Warning: failed to watch {:?}: {}", path, e);
+        }
+    }
+    Ok(())
+}
+
 /// Start watching a repository path for file changes
 pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), String> {
     let watcher_state = app_handle.state::<WatcherState>();
@@ -179,11 +296,8 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
     )
     .map_err(|e| format!("Failed to create debouncer: {}", e))?;
 
-    // Start watching BEFORE storing so an error never leaves stale state
-    debouncer
-        .watcher()
-        .watch(&watch_target, notify::RecursiveMode::Recursive)
-        .map_err(|e| format!("Failed to watch path: {}", e))?;
+    // Start selective watching BEFORE storing so an error never leaves stale state
+    register_repo_watches(debouncer.watcher(), &watch_target)?;
 
     *guard = Some(ActiveWatcher {
         _debouncer: debouncer,
@@ -248,5 +362,43 @@ mod tests {
             root,
             Path::new("/Users/dev/builds/my-app/.git/HEAD")
         ));
+    }
+
+    #[test]
+    fn collect_watch_targets_omits_node_modules_target_and_git_objects() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "forky_watcher_test_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        std::fs::create_dir_all(root.join(".git/objects")).unwrap();
+        std::fs::create_dir_all(root.join(".git/logs")).unwrap();
+        std::fs::create_dir_all(root.join(".git/refs/heads")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        std::fs::create_dir_all(root.join("target/debug")).unwrap();
+        std::fs::create_dir_all(root.join("src/components")).unwrap();
+        std::fs::create_dir_all(root.join("src-tauri/target/debug")).unwrap();
+        std::fs::create_dir_all(root.join("src-tauri/src")).unwrap();
+
+        let targets = collect_watch_targets(&root);
+
+        assert!(targets.contains(&(root.clone(), notify::RecursiveMode::NonRecursive)));
+        assert!(targets.contains(&(root.join(".git"), notify::RecursiveMode::NonRecursive)));
+        assert!(targets.contains(&(root.join(".git/refs"), notify::RecursiveMode::Recursive)));
+        assert!(targets.contains(&(root.join("src"), notify::RecursiveMode::Recursive)));
+        assert!(targets.contains(&(root.join("src-tauri"), notify::RecursiveMode::NonRecursive)));
+        assert!(targets.contains(&(root.join("src-tauri/src"), notify::RecursiveMode::Recursive)));
+
+        // Never watch node_modules, target, nested target, or .git/objects / .git/logs
+        assert!(!targets.iter().any(|(p, _)| p.ends_with("node_modules")));
+        assert!(!targets.iter().any(|(p, _)| p.ends_with("target")));
+        assert!(!targets.iter().any(|(p, _)| p.ends_with("objects")));
+        assert!(!targets.iter().any(|(p, _)| p.ends_with("logs")));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

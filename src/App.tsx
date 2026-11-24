@@ -128,6 +128,8 @@ import {
   usePanelSizes,
   useIsResizing,
   useActivityLogPanelOpen,
+  MIN_SIZES,
+  MAX_SIZES,
 } from './stores';
 
 import { useTheme } from './hooks/useTheme';
@@ -171,6 +173,10 @@ import type {
 import './styles/global.css';
 import './App.css';
 
+const EMPTY_BRANCHES: BranchInfo[] = [];
+const EMPTY_REMOTES: string[] = [];
+const EMPTY_STASHES: StashInfo[] = [];
+
 function App() {
   const { t } = useTranslation();
 
@@ -198,7 +204,7 @@ function App() {
     },
     [t]
   );
-  // Repository store
+  // Repository store (atomic state selectors + stable action references via getState)
   const tabs = useTabs();
   const activeTab = useActiveTab();
   const activeTabId = useActiveTabId();
@@ -206,42 +212,40 @@ function App() {
   const stashes = useActiveTabStashes();
   const isRestoring = useIsRestoring();
   const localChangesCount = useLocalChangesCount();
-  const {
-    openRepository,
-    selectTab,
-    closeTab,
-    closeOtherTabs,
-    closeAllTabs,
-    closeTabsToRight,
-    closeTabsToLeft,
-    updateTabState,
-    refreshActiveTab,
-    setTabHasPendingChanges,
-    setTabCurrentBranch,
-  } = useRepositoryStore();
+  const openRepository = useRepositoryStore((s) => s.openRepository);
+  const selectTab = useRepositoryStore((s) => s.selectTab);
+  const closeTab = useRepositoryStore((s) => s.closeTab);
+  const closeOtherTabs = useRepositoryStore((s) => s.closeOtherTabs);
+  const closeAllTabs = useRepositoryStore((s) => s.closeAllTabs);
+  const closeTabsToRight = useRepositoryStore((s) => s.closeTabsToRight);
+  const closeTabsToLeft = useRepositoryStore((s) => s.closeTabsToLeft);
+  const updateTabState = useRepositoryStore((s) => s.updateTabState);
+  const refreshActiveTab = useRepositoryStore((s) => s.refreshActiveTab);
+  const setTabCurrentBranch = useRepositoryStore((s) => s.setTabCurrentBranch);
 
   // Git operation store
   const isGitLoading = useIsGitLoading();
   const currentOperation = useCurrentOperation();
   const activityLog = useActivityLogForRepo(activeTab?.path);
-  const { startOperation, completeOperation, clearOperation, addLogEntry } = useGitOperationStore();
+  const startOperation = useGitOperationStore((s) => s.startOperation);
+  const completeOperation = useGitOperationStore((s) => s.completeOperation);
+  const clearOperation = useGitOperationStore((s) => s.clearOperation);
+  const addLogEntry = useGitOperationStore((s) => s.addLogEntry);
 
   // Modal store
   const activeModal = useActiveModal();
   const isAddRemoteModalOpen = useIsAddRemoteModalOpen();
   const sshVerification = useSshVerification();
   const credentialModal = useCredentialModal();
-  const {
-    openFetchModal,
-    openPullModal,
-    openPushModal,
-    closeModal,
-    openAddRemoteModal,
-    closeAddRemoteModal,
-    showSshVerification,
-    closeSshVerification,
-    closeCredentialModal,
-  } = useModalStore();
+  const openFetchModal = useModalStore((s) => s.openFetchModal);
+  const openPullModal = useModalStore((s) => s.openPullModal);
+  const openPushModal = useModalStore((s) => s.openPushModal);
+  const closeModal = useModalStore((s) => s.closeModal);
+  const openAddRemoteModal = useModalStore((s) => s.openAddRemoteModal);
+  const closeAddRemoteModal = useModalStore((s) => s.closeAddRemoteModal);
+  const showSshVerification = useModalStore((s) => s.showSshVerification);
+  const closeSshVerification = useModalStore((s) => s.closeSshVerification);
+  const closeCredentialModal = useModalStore((s) => s.closeCredentialModal);
 
   // Activity Log Panel (from uiStore)
   const isActivityLogPanelOpen = useActivityLogPanelOpen();
@@ -263,7 +267,7 @@ function App() {
     }
   }, [activeTab?.path, clearActivityLog]);
 
-  // UI store
+  // UI store (atomic selectors)
   const alerts = useAlerts();
   const panelSizes = usePanelSizes();
   const isResizing = useIsResizing();
@@ -271,7 +275,10 @@ function App() {
   const settingsInitialPanel = useUIStore((state) => state.settingsInitialPanel);
   const openSettings = useUIStore((state) => state.openSettings);
   const closeSettings = useUIStore((state) => state.closeSettings);
-  const { addAlert, removeAlert, setPanelSize, setIsResizing } = useUIStore();
+  const addAlert = useUIStore((state) => state.addAlert);
+  const removeAlert = useUIStore((state) => state.removeAlert);
+  const setPanelSize = useUIStore((state) => state.setPanelSize);
+  const setIsResizing = useUIStore((state) => state.setIsResizing);
 
   // Theme hook (for system theme detection)
   const { theme, setTheme } = useTheme();
@@ -281,6 +288,9 @@ function App() {
 
   // Panel resize logic
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarContainerRef = useRef<HTMLDivElement | null>(null);
+  const pendingSidebarWidthRef = useRef<number | null>(null);
+  const sidebarRafRef = useRef<number | null>(null);
   const [isSshLoading, setIsSshLoading] = useState(false);
 
   // Recent repositories (loaded from Rust, persisted to disk)
@@ -1625,28 +1635,57 @@ function App() {
     setPushModalPreset(null);
   }, [closeModal]);
 
-  // Panel resize handlers
+  // Panel resize handlers (rAF DOM updates during drag; persist to uiStore once on mouseup)
   const startResize = useCallback(
     (panel: string) => {
+      pendingSidebarWidthRef.current = null;
       setIsResizing(panel);
     },
     [setIsResizing]
   );
 
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isResizing) return;
+  const handleStartSidebarResize = useCallback(() => {
+    startResize('sidebar');
+  }, [startResize]);
 
-      if (isResizing === 'sidebar') {
-        setPanelSize('sidebarWidth', e.clientX);
-      }
-    },
-    [isResizing, setPanelSize]
-  );
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    const clamped = Math.min(MAX_SIZES.sidebarWidth, Math.max(MIN_SIZES.sidebarWidth, e.clientX));
+    pendingSidebarWidthRef.current = clamped;
+    if (sidebarRafRef.current === null) {
+      sidebarRafRef.current = requestAnimationFrame(() => {
+        sidebarRafRef.current = null;
+        if (sidebarContainerRef.current && pendingSidebarWidthRef.current !== null) {
+          sidebarContainerRef.current.style.width = `${pendingSidebarWidthRef.current}px`;
+        }
+      });
+    }
+  }, []);
 
   const stopResize = useCallback(() => {
+    if (sidebarRafRef.current !== null) {
+      cancelAnimationFrame(sidebarRafRef.current);
+      sidebarRafRef.current = null;
+    }
+    if (pendingSidebarWidthRef.current !== null) {
+      setPanelSize('sidebarWidth', pendingSidebarWidthRef.current);
+      pendingSidebarWidthRef.current = null;
+    }
     setIsResizing(null);
-  }, [setIsResizing]);
+  }, [setIsResizing, setPanelSize]);
+
+  // Memoized Toolbar/Modal callbacks and derived branch slices to preserve React.memo
+  const handleToolbarPull = useCallback(() => handleOpenPullModal(), [handleOpenPullModal]);
+  const handleToolbarPush = useCallback(() => handleOpenPushModal(), [handleOpenPushModal]);
+  const handleOpenFeedback = useCallback(() => setFeedbackModalOpen(true), []);
+  const handleCloseFeedback = useCallback(() => setFeedbackModalOpen(false), []);
+  const handleOpenAbout = useCallback(() => setAboutModalOpen(true), []);
+  const handleCloseAbout = useCallback(() => setAboutModalOpen(false), []);
+  const handleOpenSettingsModal = useCallback(() => openSettings(), [openSettings]);
+
+  const activeBranches = activeTabState?.branches ?? EMPTY_BRANCHES;
+  const activeRemotes = activeTabState?.remotes ?? EMPTY_REMOTES;
+  const localBranches = useMemo(() => activeBranches.filter((b) => !b.is_remote), [activeBranches]);
+  const headBranch = useMemo(() => activeBranches.find((b) => b.is_head) ?? null, [activeBranches]);
 
   // Add/remove resize event listeners (scoped to sidebar so it never collides with ActivityLogPanel)
   useEffect(() => {
@@ -1661,6 +1700,10 @@ function App() {
         document.removeEventListener('mouseup', stopResize);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        if (sidebarRafRef.current !== null) {
+          cancelAnimationFrame(sidebarRafRef.current);
+          sidebarRafRef.current = null;
+        }
       };
     }
   }, [isResizing, handleMouseMove, stopResize]);
@@ -1686,7 +1729,7 @@ function App() {
     };
   }, []);
 
-  // File watcher: listen for file change events
+  // File watcher: listen for file change events (single IPC refresh into store, no duplicate LocalChangesView fetch)
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -1696,20 +1739,7 @@ function App() {
       const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
 
       if (matchingTab) {
-        try {
-          const result = await invoke<{ unstaged: unknown[]; staged: unknown[] }>(
-            'get_file_status_separated',
-            { repoPath: matchingTab.path }
-          );
-          const hasChanges = result.unstaged.length > 0 || result.staged.length > 0;
-          setTabHasPendingChanges(matchingTab.id, hasChanges);
-        } catch (error) {
-          console.error('Error checking file status:', error);
-        }
-
-        if (matchingTab.id === useRepositoryStore.getState().activeTabId) {
-          setLocalChangesRefreshKey((k) => k + 1);
-        }
+        await state.refreshTabStatus(matchingTab.id);
       }
     }).then((fn) => {
       if (disposed) {
@@ -1723,7 +1753,7 @@ function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [setTabHasPendingChanges]);
+  }, []);
 
   // Branch watcher: listen for branch change events (when .git/HEAD or refs change)
   useEffect(() => {
@@ -1857,15 +1887,15 @@ function App() {
             onSaveSnapshot={handleOpenSaveSnapshotModal}
             onStashSelect={handleStashSelect}
             onMergeSelect={handleMergeSelect}
-            stashes={[]}
+            stashes={EMPTY_STASHES}
             isLoading={isGitLoading}
-            branches={[]}
+            branches={EMPTY_BRANCHES}
             onBranchChange={handleBranchChange}
             gitOperation={currentOperation}
             onDismissOperation={clearOperation}
-            onFeedback={() => setFeedbackModalOpen(true)}
-            onAbout={() => setAboutModalOpen(true)}
-            onOpenSettings={() => openSettings()}
+            onFeedback={handleOpenFeedback}
+            onAbout={handleOpenAbout}
+            onOpenSettings={handleOpenSettingsModal}
             gitFlowConfig={null}
             currentBranchFlowInfo={null}
             onNewBranch={handleNewBranch}
@@ -1896,14 +1926,14 @@ function App() {
           repoName={activeTab?.name}
           repoPath={activeTab?.path}
           currentBranch={activeTab?.currentBranch ?? undefined}
-          branches={activeTabState?.branches ?? []}
+          branches={activeBranches}
           stashes={stashes}
           onBranchChange={handleBranchChange}
           onThemeChange={setTheme}
           currentTheme={theme}
           onFetch={openFetchModal}
-          onPull={() => handleOpenPullModal()}
-          onPush={() => handleOpenPushModal()}
+          onPull={handleToolbarPull}
+          onPush={handleToolbarPush}
           onStash={handleOpenSaveStashModal}
           onSaveSnapshot={handleOpenSaveSnapshotModal}
           onStashSelect={handleStashSelect}
@@ -1911,9 +1941,9 @@ function App() {
           isLoading={isGitLoading}
           gitOperation={currentOperation}
           onDismissOperation={clearOperation}
-          onFeedback={() => setFeedbackModalOpen(true)}
-          onAbout={() => setAboutModalOpen(true)}
-          onOpenSettings={() => openSettings()}
+          onFeedback={handleOpenFeedback}
+          onAbout={handleOpenAbout}
+          onOpenSettings={handleOpenSettingsModal}
           gitFlowConfig={gitFlowConfig}
           currentBranchFlowInfo={currentBranchFlowInfo}
           onNewBranch={handleNewBranch}
@@ -1941,7 +1971,11 @@ function App() {
 
       {hasOpenRepos && activeTabState ? (
         <div className="app-content" ref={containerRef}>
-          <div className="sidebar-container" style={{ width: panelSizes.sidebarWidth }}>
+          <div
+            className="sidebar-container"
+            ref={sidebarContainerRef}
+            style={{ width: panelSizes.sidebarWidth }}
+          >
             <Sidebar
               repoName={activeTab?.name}
               repoPath={activeTab?.path}
@@ -1974,7 +2008,7 @@ function App() {
           </div>
           <Resizer
             direction="horizontal"
-            onMouseDown={() => startResize('sidebar')}
+            onMouseDown={handleStartSidebarResize}
             isResizing={isResizing === 'sidebar'}
           />
           {activeTabState.viewMode === 'local-changes' ? (
@@ -2093,7 +2127,7 @@ function App() {
             isOpen={true}
             onClose={closeAddRemoteModal}
             onAdd={handleAddRemote}
-            existingRemotes={activeTabState?.remotes ?? []}
+            existingRemotes={activeRemotes}
           />
         )}
 
@@ -2104,17 +2138,15 @@ function App() {
             onClose={handleCloseTrackBranchModal}
             onTrack={handleTrackRemoteBranch}
             remoteBranch={selectedRemoteBranch}
-            localBranches={activeTabState?.branches.filter((b) => !b.is_remote) ?? []}
+            localBranches={localBranches}
           />
         )}
 
         {/* Feedback Modal */}
-        {feedbackModalOpen && (
-          <FeedbackModal isOpen={true} onClose={() => setFeedbackModalOpen(false)} />
-        )}
+        {feedbackModalOpen && <FeedbackModal isOpen={true} onClose={handleCloseFeedback} />}
 
         {/* About Modal */}
-        {aboutModalOpen && <AboutModal isOpen={true} onClose={() => setAboutModalOpen(false)} />}
+        {aboutModalOpen && <AboutModal isOpen={true} onClose={handleCloseAbout} />}
         {/* Settings Modal */}
         {settingsOpen && (
           <SettingsModal
@@ -2153,7 +2185,7 @@ function App() {
             onClose={handleCloseMergeModal}
             onMerge={handleMerge}
             sourceBranch={mergeBranch}
-            targetBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
+            targetBranch={headBranch?.name || ''}
             preview={mergePreview}
           />
         )}
@@ -2165,7 +2197,7 @@ function App() {
             onClose={handleCloseRebaseModal}
             onRebase={handleRebase}
             targetBranch={rebaseBranch}
-            currentBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
+            currentBranch={headBranch?.name || ''}
             preview={rebasePreview}
           />
         )}
@@ -2177,7 +2209,7 @@ function App() {
             onClose={handleCloseInteractiveRebaseModal}
             onRebase={handleInteractiveRebase}
             targetBranch={interactiveRebaseBranch}
-            currentBranch={activeTabState?.branches.find((b) => b.is_head)?.name || ''}
+            currentBranch={headBranch?.name || ''}
             commits={interactiveRebaseCommits}
             isLoadingCommits={isInteractiveRebaseLoading}
           />
@@ -2220,8 +2252,8 @@ function App() {
             isOpen={true}
             onClose={() => setCreateBranchModalOpen(false)}
             onCreate={handleCreateBranchFromModal}
-            sourceBranch={activeTabState?.branches.find((b) => b.is_head) || null}
-            localBranches={activeTabState?.branches.filter((b) => !b.is_remote) ?? []}
+            sourceBranch={headBranch}
+            localBranches={localBranches}
           />
         )}
 

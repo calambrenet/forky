@@ -30,42 +30,84 @@ const NODE_RADIUS = 4;
 const GRAPH_PADDING = 8;
 const MIN_GRAPH_WIDTH = 40;
 const VISIBLE_BUFFER = 15;
+const SCROLL_QUANTUM_ROWS = 5;
 const LANE_PADDING = 16; // Extra padding after the node
+
+interface VisibleRange {
+  startRow: number;
+  endRow: number;
+}
+
+function computeVisibleRange(
+  scrollTopPx: number,
+  containerHeightPx: number,
+  totalCommits: number
+): VisibleRange {
+  if (totalCommits === 0) {
+    return { startRow: 0, endRow: 0 };
+  }
+  const rawStart = Math.max(0, Math.floor(scrollTopPx / ROW_HEIGHT) - VISIBLE_BUFFER);
+  const rawEnd = Math.min(
+    totalCommits,
+    Math.ceil((scrollTopPx + containerHeightPx) / ROW_HEIGHT) + VISIBLE_BUFFER
+  );
+  const startRow = Math.floor(rawStart / SCROLL_QUANTUM_ROWS) * SCROLL_QUANTUM_ROWS;
+  const endRow = Math.min(
+    totalCommits,
+    Math.ceil(rawEnd / SCROLL_QUANTUM_ROWS) * SCROLL_QUANTUM_ROWS
+  );
+  return { startRow, endRow };
+}
 
 export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
   ({ commits, branchHeads, selectedCommitId, onCommitClick, onCommitDoubleClick }, ref) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [scrollTop, setScrollTop] = useState(0);
-    const [containerHeight, setContainerHeight] = useState(0);
+    const scrollTopRef = useRef(0);
+    const containerHeightRef = useRef(600);
+    const [visibleRange, setVisibleRange] = useState<VisibleRange>(() =>
+      computeVisibleRange(0, 600, commits.length)
+    );
 
-    // Localized date formatting
+    // Cache Intl.DateTimeFormat instances per locale instead of allocating on every row/render
+    const { timeFormatter, dateFormatter } = useMemo(() => {
+      const locale = i18n.language || undefined;
+      return {
+        timeFormatter: new Intl.DateTimeFormat(locale, {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        dateFormatter: new Intl.DateTimeFormat(locale, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
+      };
+    }, [i18n.language]);
+
     const formatDate = useCallback(
-      (dateStr: string): string => {
+      (dateStr: string, nowMs: number): string => {
         try {
           const date = new Date(dateStr);
-          const now = new Date();
-          const diffMs = now.getTime() - date.getTime();
-          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          const timeMs = date.getTime();
+          if (Number.isNaN(timeMs)) return dateStr;
+
+          const diffDays = Math.floor((nowMs - timeMs) / (1000 * 60 * 60 * 24));
 
           if (diffDays === 0) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return timeFormatter.format(date);
           } else if (diffDays === 1) {
             return t('commits.yesterday');
           } else if (diffDays > 1 && diffDays < 7) {
             return t('commits.daysAgo', { count: diffDays });
           } else {
-            return date.toLocaleDateString([], {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-            });
+            return dateFormatter.format(date);
           }
         } catch {
           return dateStr;
         }
       },
-      [t]
+      [t, timeFormatter, dateFormatter]
     );
 
     // Calculate graph layout
@@ -80,32 +122,58 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
     );
     const totalHeight = commits.length * ROW_HEIGHT;
 
+    const updateVisibleRange = useCallback(
+      (scrollTopPx: number, heightPx: number, total: number) => {
+        const next = computeVisibleRange(scrollTopPx, heightPx, total);
+        setVisibleRange((prev) =>
+          prev.startRow === next.startRow && prev.endRow === next.endRow ? prev : next
+        );
+      },
+      []
+    );
+
+    // Keep visibleRange in sync when commits.length changes
+    useEffect(() => {
+      updateVisibleRange(scrollTopRef.current, containerHeightRef.current, commits.length);
+    }, [commits.length, updateVisibleRange]);
+
     // Calculate the graph width for a specific row based on its lane
     const getRowGraphWidth = useCallback((lane: number) => {
       return Math.max(MIN_GRAPH_WIDTH, GRAPH_PADDING + (lane + 1) * LANE_WIDTH + LANE_PADDING);
     }, []);
 
-    // Handle scroll
-    const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-      setScrollTop(e.currentTarget.scrollTop);
-    }, []);
+    // Handle scroll with quantized range updates (only re-renders when row quantum shifts)
+    const handleScroll = useCallback(
+      (e: React.UIEvent<HTMLDivElement>) => {
+        const nextScrollTop = e.currentTarget.scrollTop;
+        scrollTopRef.current = nextScrollTop;
+        updateVisibleRange(nextScrollTop, containerHeightRef.current, commits.length);
+      },
+      [commits.length, updateVisibleRange]
+    );
 
     // Update container height on resize
     useEffect(() => {
       const scrollEl = scrollRef.current;
       if (!scrollEl) return;
 
+      const handleHeightChange = (height: number) => {
+        if (height <= 0 || height === containerHeightRef.current) return;
+        containerHeightRef.current = height;
+        updateVisibleRange(scrollTopRef.current, height, commits.length);
+      };
+
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          setContainerHeight(entry.contentRect.height);
+          handleHeightChange(entry.contentRect.height);
         }
       });
 
       resizeObserver.observe(scrollEl);
-      setContainerHeight(scrollEl.clientHeight);
+      handleHeightChange(scrollEl.clientHeight);
 
       return () => resizeObserver.disconnect();
-    }, []);
+    }, [commits.length, updateVisibleRange]);
 
     // Expose scrollToCommit method via ref
     useImperativeHandle(
@@ -114,7 +182,8 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
         scrollToCommit: (commitId: string) => {
           const commitIndex = commits.findIndex((c) => c.id === commitId);
           if (commitIndex !== -1 && scrollRef.current) {
-            const targetScrollTop = commitIndex * ROW_HEIGHT - containerHeight / 2 + ROW_HEIGHT / 2;
+            const targetScrollTop =
+              commitIndex * ROW_HEIGHT - containerHeightRef.current / 2 + ROW_HEIGHT / 2;
             scrollRef.current.scrollTo({
               top: Math.max(0, targetScrollTop),
               behavior: 'smooth',
@@ -122,17 +191,17 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
           }
         },
       }),
-      [commits, containerHeight]
+      [commits]
     );
 
-    // Calculate visible range
-    const startRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - VISIBLE_BUFFER);
-    const endRow = Math.min(
-      commits.length,
-      Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + VISIBLE_BUFFER
-    );
-
+    const startRow = Math.min(visibleRange.startRow, commits.length);
+    const endRow = Math.min(visibleRange.endRow, commits.length);
     const visibleNodes = graphData.nodes.slice(startRow, endRow);
+
+    // Bound SVG height to visible viewport slice to avoid WebKit GPU texture limits
+    const visibleRowCount = Math.max(1, endRow - startRow);
+    const svgTop = startRow * ROW_HEIGHT;
+    const svgHeight = visibleRowCount * ROW_HEIGHT;
 
     // Generate SVG path for a connection between commits
     const generatePath = (
@@ -147,11 +216,9 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       const y2 = toRow * ROW_HEIGHT + ROW_HEIGHT / 2;
 
       if (fromLane === toLane) {
-        // Straight vertical line
         return `M ${x1} ${y1} L ${x2} ${y2}`;
       }
 
-      // Curved path for branch/merge
       const midY = (y1 + y2) / 2;
       return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
     };
@@ -201,6 +268,8 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       );
     }
 
+    const nowMs = Date.now();
+
     return (
       <div className="commit-graph-container">
         {/* Header */}
@@ -215,8 +284,14 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
         {/* Scrollable content */}
         <div className="commit-graph-scroll" ref={scrollRef} onScroll={handleScroll}>
           <div className="commit-graph-content" style={{ height: totalHeight }}>
-            {/* SVG Graph layer */}
-            <svg className="commit-graph-svg" width={maxGraphWidth} style={{ height: totalHeight }}>
+            {/* Viewport-bounded SVG Graph layer */}
+            <svg
+              className="commit-graph-svg"
+              width={maxGraphWidth}
+              height={svgHeight}
+              viewBox={`0 ${svgTop} ${maxGraphWidth} ${svgHeight}`}
+              style={{ top: svgTop, height: svgHeight }}
+            >
               <g className="graph-lines">{renderGraphLines()}</g>
               <g className="graph-nodes">{renderNodes()}</g>
             </svg>
@@ -260,7 +335,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
                   <div className="row-author">{node.commit.author}</div>
 
                   {/* Date */}
-                  <div className="row-date">{formatDate(node.commit.date)}</div>
+                  <div className="row-date">{formatDate(node.commit.date, nowMs)}</div>
 
                   {/* SHA */}
                   <div className="row-sha">{node.commit.short_id}</div>

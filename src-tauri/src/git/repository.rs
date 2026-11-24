@@ -1,8 +1,24 @@
 use chrono::{DateTime, TimeZone, Utc};
-use git2::{BranchType, ErrorCode, Repository, StatusOptions};
+use git2::{BranchType, ErrorCode, Oid, Repository, StatusOptions};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+
+pub const MAX_DIFF_BYTES: u64 = 1_500_000;
+pub const MAX_DIFF_LINES: usize = 10_000;
+pub const MAX_IMAGE_BYTES: u64 = 15 * 1024 * 1024;
+const AHEAD_BEHIND_CACHE_MAX_ENTRIES: usize = 4_096;
+
+type AheadBehindCache = HashMap<(Oid, Oid), (u32, u32)>;
+
+static AHEAD_BEHIND_CACHE: OnceLock<Mutex<AheadBehindCache>> = OnceLock::new();
+
+fn ahead_behind_cache() -> &'static Mutex<AheadBehindCache> {
+    AHEAD_BEHIND_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -368,6 +384,17 @@ pub struct RepositoryInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RepositorySnapshot {
+    pub branches: Vec<BranchInfo>,
+    pub branch_heads: Vec<BranchHead>,
+    pub tags: Vec<TagInfo>,
+    pub remotes: Vec<String>,
+    pub stashes: Vec<StashInfo>,
+    pub unstaged: Vec<FileStatus>,
+    pub staged: Vec<FileStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiffInfo {
     pub file_path: String,
     pub old_content: Option<String>,
@@ -376,6 +403,8 @@ pub struct DiffInfo {
     pub is_binary: bool,
     pub binary_type: Option<String>, // "image", "other"
     pub file_size: Option<u64>,
+    #[serde(default)]
+    pub is_truncated: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -471,15 +500,47 @@ pub fn get_repository_info(repo: &Repository) -> Result<RepositoryInfo, String> 
     })
 }
 
+/// Helper function to calculate ahead/behind counts between two commit OIDs
+/// with an O(1) fast-path when equal and a bounded static cache keyed by `(local_oid, upstream_oid)`.
+pub(crate) fn calculate_ahead_behind_oids(
+    repo: &Repository,
+    local_oid: Oid,
+    upstream_oid: Oid,
+) -> (Option<u32>, Option<u32>) {
+    if local_oid == upstream_oid {
+        return (Some(0), Some(0));
+    }
+
+    if let Ok(cache) = ahead_behind_cache().lock() {
+        if let Some(&(ahead, behind)) = cache.get(&(local_oid, upstream_oid)) {
+            return (Some(ahead), Some(behind));
+        }
+    }
+
+    match repo.graph_ahead_behind(local_oid, upstream_oid) {
+        Ok((ahead, behind)) => {
+            let ahead = ahead as u32;
+            let behind = behind as u32;
+            if let Ok(mut cache) = ahead_behind_cache().lock() {
+                if cache.len() >= AHEAD_BEHIND_CACHE_MAX_ENTRIES {
+                    cache.clear();
+                }
+                cache.insert((local_oid, upstream_oid), (ahead, behind));
+            }
+            (Some(ahead), Some(behind))
+        }
+        Err(_) => (None, None),
+    }
+}
+
 /// Helper function to calculate ahead/behind counts for a branch relative to its upstream
 fn calculate_ahead_behind(
     repo: &Repository,
-    local_branch: &git2::Branch,
+    local_oid: Option<Oid>,
     upstream_branch: &git2::Branch,
 ) -> (Option<u32>, Option<u32>) {
-    let local_oid = match local_branch.get().peel_to_commit() {
-        Ok(commit) => commit.id(),
-        Err(_) => return (None, None),
+    let Some(local_oid) = local_oid else {
+        return (None, None);
     };
 
     let upstream_oid = match upstream_branch.get().peel_to_commit() {
@@ -487,22 +548,32 @@ fn calculate_ahead_behind(
         Err(_) => return (None, None),
     };
 
-    match repo.graph_ahead_behind(local_oid, upstream_oid) {
-        Ok((ahead, behind)) => (Some(ahead as u32), Some(behind as u32)),
-        Err(_) => (None, None),
-    }
+    calculate_ahead_behind_oids(repo, local_oid, upstream_oid)
 }
 
-pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
+/// Compute both `BranchInfo` (local + remote) and `BranchHead` (local) in a single pass.
+pub fn get_branches_and_heads(
+    repo: &Repository,
+) -> Result<(Vec<BranchInfo>, Vec<BranchHead>), String> {
     let mut branches = Vec::new();
+    let mut heads = Vec::new();
 
     // Local branches
     if let Ok(local_branches) = repo.branches(Some(BranchType::Local)) {
         for branch in local_branches.flatten() {
             let (branch, _) = branch;
-            if let Ok(name) = branch.name() {
-                let name = name.unwrap_or("").to_string();
+            if let Ok(name_opt) = branch.name() {
+                let name = name_opt.unwrap_or("").to_string();
                 let is_head = branch.is_head();
+                let local_oid = branch.get().peel_to_commit().ok().map(|c| c.id());
+
+                if let (Some(non_empty_name), Some(oid)) = (name_opt, local_oid) {
+                    heads.push(BranchHead {
+                        name: non_empty_name.to_string(),
+                        commit_sha: oid.to_string(),
+                        is_head,
+                    });
+                }
 
                 // Get upstream and calculate ahead/behind
                 let (upstream, ahead, behind) = match branch.upstream() {
@@ -510,7 +581,7 @@ pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
                         let upstream_name =
                             upstream_branch.name().ok().flatten().map(|s| s.to_string());
                         let (ahead, behind) =
-                            calculate_ahead_behind(repo, &branch, &upstream_branch);
+                            calculate_ahead_behind(repo, local_oid, &upstream_branch);
                         (upstream_name, ahead, behind)
                     }
                     Err(_) => (None, None, None),
@@ -546,6 +617,11 @@ pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
         }
     }
 
+    Ok((branches, heads))
+}
+
+pub fn get_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
+    let (branches, _) = get_branches_and_heads(repo)?;
     Ok(branches)
 }
 
@@ -571,7 +647,31 @@ pub fn get_branch_heads(repo: &Repository) -> Result<Vec<BranchHead>, String> {
     Ok(heads)
 }
 
-pub fn get_commits(repo: &Repository, limit: usize) -> Result<Vec<CommitInfo>, String> {
+/// Fetch all sidebar/status metadata for a repository in a single `git2::Repository` open.
+pub fn get_repository_snapshot(repo_path: &str) -> Result<RepositorySnapshot, String> {
+    let mut repo = open_repository(repo_path)?;
+    let (branches, branch_heads) = get_branches_and_heads(&repo)?;
+    let tags = get_tags(&repo)?;
+    let remotes = get_remotes(&repo)?;
+    let (unstaged, staged) = get_file_status_separated(&repo)?;
+    let stashes = get_stashes_from_repo(&mut repo)?;
+
+    Ok(RepositorySnapshot {
+        branches,
+        branch_heads,
+        tags,
+        remotes,
+        stashes,
+        unstaged,
+        staged,
+    })
+}
+
+pub fn get_commits(
+    repo: &Repository,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<CommitInfo>, String> {
     if repo.is_empty().unwrap_or(false) {
         return Ok(Vec::new());
     }
@@ -605,6 +705,7 @@ pub fn get_commits(repo: &Repository, limit: usize) -> Result<Vec<CommitInfo>, S
         .map_err(|e| e.message().to_string())?;
 
     let commits: Vec<CommitInfo> = revwalk
+        .skip(offset)
         .take(limit)
         .filter_map(|oid| oid.ok())
         .filter_map(|oid| repo.find_commit(oid).ok())
@@ -675,20 +776,25 @@ pub fn get_file_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
 }
 
 pub fn get_tags(repo: &Repository) -> Result<Vec<TagInfo>, String> {
-    let tags = repo.tag_names(None).map_err(|e| e.message().to_string())?;
+    let references = repo
+        .references_glob("refs/tags/*")
+        .map_err(|e| e.message().to_string())?;
     let mut result = Vec::new();
 
-    for tag_name in tags.iter().flatten() {
-        // Try to resolve the tag to a commit
-        let refname = format!("refs/tags/{}", tag_name);
-        if let Ok(reference) = repo.find_reference(&refname) {
-            // Peel to commit to handle both lightweight and annotated tags
-            if let Ok(commit) = reference.peel_to_commit() {
-                result.push(TagInfo {
-                    name: tag_name.to_string(),
-                    commit_sha: commit.id().to_string(),
-                });
-            }
+    for reference in references.flatten() {
+        let Some(tag_name) = reference
+            .name()
+            .and_then(|n| n.strip_prefix("refs/tags/"))
+        else {
+            continue;
+        };
+
+        // Peel to commit to handle both lightweight and annotated tags
+        if let Ok(commit) = reference.peel_to_commit() {
+            result.push(TagInfo {
+                name: tag_name.to_string(),
+                commit_sha: commit.id().to_string(),
+            });
         }
     }
 
@@ -842,18 +948,29 @@ fn get_binary_type(file_path: &str) -> Option<String> {
     }
 }
 
-/// Parse a git2 Diff into our DiffInfo structure
+/// Parse a git2 Diff into our DiffInfo structure, enforcing `MAX_DIFF_BYTES` and `MAX_DIFF_LINES`.
 fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
     use std::cell::RefCell;
 
     let hunks: RefCell<Vec<DiffHunk>> = RefCell::new(Vec::new());
     let is_binary: RefCell<bool> = RefCell::new(false);
+    let is_truncated: RefCell<bool> = RefCell::new(false);
+    let file_size: RefCell<Option<u64>> = RefCell::new(None);
+    let total_lines: RefCell<usize> = RefCell::new(0);
 
-    diff.foreach(
+    let foreach_res = diff.foreach(
         &mut |delta, _| {
-            // Check if the file is binary
+            let size = delta.new_file().size().max(delta.old_file().size());
+            if size > 0 {
+                *file_size.borrow_mut() = Some(size);
+            }
             if delta.flags().is_binary() {
                 *is_binary.borrow_mut() = true;
+                return true;
+            }
+            if size > MAX_DIFF_BYTES {
+                *is_truncated.borrow_mut() = true;
+                return false;
             }
             true
         },
@@ -862,6 +979,9 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
             true
         }),
         Some(&mut |_, hunk| {
+            if *is_truncated.borrow() {
+                return false;
+            }
             let diff_hunk = DiffHunk {
                 old_start: hunk.old_start(),
                 old_lines: hunk.old_lines(),
@@ -873,6 +993,14 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
             true
         }),
         Some(&mut |_, _hunk, line| {
+            let mut count = total_lines.borrow_mut();
+            if *count >= MAX_DIFF_LINES {
+                *is_truncated.borrow_mut() = true;
+                return false;
+            }
+            *count += 1;
+            drop(count);
+
             let mut hunks_mut = hunks.borrow_mut();
             if let Some(current_hunk) = hunks_mut.last_mut() {
                 let line_type = match line.origin() {
@@ -894,10 +1022,16 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
             }
             true
         }),
-    )
-    .map_err(|e| e.message().to_string())?;
+    );
 
-    let binary = *is_binary.borrow();
+    if let Err(e) = foreach_res {
+        // Returning `false` from a libgit2 foreach callback stops iteration with ErrorCode::User
+        if !(e.code() == ErrorCode::User && *is_truncated.borrow()) {
+            return Err(e.message().to_string());
+        }
+    }
+
+    let binary = is_binary.into_inner();
     let binary_type = if binary {
         get_binary_type(file_path)
     } else {
@@ -911,12 +1045,40 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
         hunks: hunks.into_inner(),
         is_binary: binary,
         binary_type,
-        file_size: None,
+        file_size: file_size.into_inner(),
+        is_truncated: is_truncated.into_inner(),
     })
 }
 
-/// Build a whole-file `DiffInfo` (all additions or all deletions) from raw bytes.
-fn diff_from_bytes(
+fn truncated_diff_info(file_path: &str, file_size: u64) -> DiffInfo {
+    DiffInfo {
+        file_path: file_path.to_string(),
+        old_content: None,
+        new_content: None,
+        hunks: Vec::new(),
+        is_binary: false,
+        binary_type: None,
+        file_size: Some(file_size),
+        is_truncated: true,
+    }
+}
+
+fn binary_diff_info(file_path: &str, file_size: u64) -> DiffInfo {
+    DiffInfo {
+        file_path: file_path.to_string(),
+        old_content: None,
+        new_content: None,
+        hunks: Vec::new(),
+        is_binary: true,
+        binary_type: get_binary_type(file_path),
+        file_size: Some(file_size),
+        is_truncated: false,
+    }
+}
+
+/// Build a whole-file `DiffInfo` (all additions or all deletions) from raw bytes,
+/// enforcing `MAX_DIFF_BYTES` and `MAX_DIFF_LINES`.
+pub(crate) fn diff_from_bytes(
     file_path: &str,
     content: &[u8],
     is_addition: bool,
@@ -925,36 +1087,33 @@ fn diff_from_bytes(
     let file_size = content.len() as u64;
 
     if known_binary || is_binary_content(content) {
-        return DiffInfo {
-            file_path: file_path.to_string(),
-            old_content: None,
-            new_content: None,
-            hunks: Vec::new(),
-            is_binary: true,
-            binary_type: get_binary_type(file_path),
-            file_size: Some(file_size),
-        };
+        return binary_diff_info(file_path, file_size);
+    }
+
+    if file_size > MAX_DIFF_BYTES {
+        return truncated_diff_info(file_path, file_size);
     }
 
     let text = String::from_utf8_lossy(content);
-    let lines: Vec<&str> = text.lines().collect();
     let line_type = if is_addition { "add" } else { "delete" };
 
-    let diff_lines: Vec<DiffLine> = lines
-        .iter()
-        .enumerate()
-        .map(|(i, line)| {
-            let line_no = Some((i + 1) as u32);
-            DiffLine {
-                content: format!("{}\n", line),
-                line_type: line_type.to_string(),
-                old_line_no: if is_addition { None } else { line_no },
-                new_line_no: if is_addition { line_no } else { None },
-            }
-        })
-        .collect();
+    let mut diff_lines = Vec::new();
+    let mut is_truncated = false;
+    for (i, line) in text.lines().enumerate() {
+        if i >= MAX_DIFF_LINES {
+            is_truncated = true;
+            break;
+        }
+        let line_no = Some((i + 1) as u32);
+        diff_lines.push(DiffLine {
+            content: format!("{}\n", line),
+            line_type: line_type.to_string(),
+            old_line_no: if is_addition { None } else { line_no },
+            new_line_no: if is_addition { line_no } else { None },
+        });
+    }
 
-    let count = lines.len() as u32;
+    let count = diff_lines.len() as u32;
     let hunk = DiffHunk {
         old_start: if is_addition { 0 } else { 1 },
         old_lines: if is_addition { 0 } else { count },
@@ -971,15 +1130,40 @@ fn diff_from_bytes(
         is_binary: false,
         binary_type: None,
         file_size: Some(file_size),
+        is_truncated,
     }
 }
 
-/// Read content of an untracked file and create diff info showing all lines as additions
+/// Read content of an untracked file and create diff info showing all lines as additions.
+/// Probes only the first 8 KB for binary detection and avoids loading files larger than `MAX_DIFF_BYTES`.
 pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
     let workdir = repo.workdir().ok_or("No working directory")?;
     let full_path = resolve_repo_path(workdir, file_path)?;
-    let content = std::fs::read(&full_path).map_err(|e| e.to_string())?;
-    Ok(diff_from_bytes(file_path, &content, true, false))
+    let file_size = std::fs::metadata(&full_path)
+        .map_err(|e| e.to_string())?
+        .len();
+
+    let mut file = std::fs::File::open(&full_path).map_err(|e| e.to_string())?;
+    let mut probe = Vec::with_capacity(file_size.min(8_000) as usize);
+    (&mut file)
+        .take(8_000)
+        .read_to_end(&mut probe)
+        .map_err(|e| e.to_string())?;
+
+    if is_binary_content(&probe) {
+        return Ok(binary_diff_info(file_path, file_size));
+    }
+
+    if file_size > MAX_DIFF_BYTES {
+        return Ok(truncated_diff_info(file_path, file_size));
+    }
+
+    if file_size > probe.len() as u64 {
+        probe.reserve((file_size as usize).saturating_sub(probe.len()));
+        file.read_to_end(&mut probe).map_err(|e| e.to_string())?;
+    }
+
+    Ok(diff_from_bytes(file_path, &probe, true, false))
 }
 
 /// Get diff for a newly staged file directly from the index blob (fallback to working dir).
@@ -987,12 +1171,14 @@ pub fn get_staged_new_file_diff(repo: &Repository, file_path: &str) -> Result<Di
     if let Ok(index) = repo.index() {
         if let Some(entry) = index.get_path(Path::new(file_path), 0) {
             if let Ok(blob) = repo.find_blob(entry.id) {
-                return Ok(diff_from_bytes(
-                    file_path,
-                    blob.content(),
-                    true,
-                    blob.is_binary(),
-                ));
+                let blob_size = blob.size() as u64;
+                if blob.is_binary() {
+                    return Ok(binary_diff_info(file_path, blob_size));
+                }
+                if blob_size > MAX_DIFF_BYTES {
+                    return Ok(truncated_diff_info(file_path, blob_size));
+                }
+                return Ok(diff_from_bytes(file_path, blob.content(), true, false));
             }
         }
     }
@@ -1016,12 +1202,14 @@ pub fn get_deleted_file_diff(repo: &Repository, file_path: &str) -> Result<DiffI
     let blob = repo
         .find_blob(blob_id)
         .map_err(|e| e.message().to_string())?;
-    Ok(diff_from_bytes(
-        file_path,
-        blob.content(),
-        false,
-        blob.is_binary(),
-    ))
+    let blob_size = blob.size() as u64;
+    if blob.is_binary() {
+        return Ok(binary_diff_info(file_path, blob_size));
+    }
+    if blob_size > MAX_DIFF_BYTES {
+        return Ok(truncated_diff_info(file_path, blob_size));
+    }
+    Ok(diff_from_bytes(file_path, blob.content(), false, false))
 }
 
 /// Stage multiple files in a single index write
@@ -2655,40 +2843,38 @@ pub fn git_delete_branch(
 // Stash Operations
 // ============================================================================
 
-pub fn get_stashes(repo_path: &str) -> Result<Vec<StashInfo>, String> {
-    // Use ASCII unit separator (%x1f) so '|' in stash messages never truncates fields
-    let output = git_cmd(Some(repo_path))
-        .args(["stash", "list", "--format=%gd%x1f%gs%x1f%ct"])
-        .output()
-        .map_err(|e| format!("Failed to list stashes: {}", e))?;
+fn get_stashes_from_repo(repo: &mut Repository) -> Result<Vec<StashInfo>, String> {
+    let mut raw_stashes: Vec<(usize, String, Oid)> = Vec::new();
+    repo.stash_foreach(|index, message, oid| {
+        raw_stashes.push((index, message.to_string(), *oid));
+        true
+    })
+    .map_err(|e| format!("Failed to list stashes: {}", e.message()))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Failed to list stashes: {}", stderr));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut stashes = Vec::new();
-
-    for (index, line) in stdout.lines().enumerate() {
-        let parts: Vec<&str> = line.split('\x1f').collect();
-        if parts.len() >= 3 {
-            let id = parts[0].to_string();
-            let message = parts[1].to_string();
-            let timestamp: i64 = parts[2].parse().unwrap_or(0);
+    let stashes = raw_stashes
+        .into_iter()
+        .map(|(index, message, oid)| {
+            let timestamp = repo
+                .find_commit(oid)
+                .map(|c| c.time().seconds())
+                .unwrap_or(0);
             let branch = extract_branch_from_stash_message(&message);
-
-            stashes.push(StashInfo {
+            StashInfo {
                 index,
-                id,
+                id: format!("stash@{{{}}}", index),
                 message,
                 branch,
                 timestamp,
-            });
-        }
-    }
+            }
+        })
+        .collect();
 
     Ok(stashes)
+}
+
+pub fn get_stashes(repo_path: &str) -> Result<Vec<StashInfo>, String> {
+    let mut repo = open_repository(repo_path)?;
+    get_stashes_from_repo(&mut repo)
 }
 
 fn extract_branch_from_stash_message(message: &str) -> String {
@@ -2894,6 +3080,16 @@ fn get_mime_type(file_path: &str) -> String {
     }
 }
 
+fn check_image_size_limit(file_size: u64) -> Result<(), String> {
+    if file_size > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "Image exceeds maximum preview size ({} MB)",
+            MAX_IMAGE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(())
+}
+
 /// Get current image content from working directory as base64
 pub fn get_image_content(repo: &Repository, file_path: &str) -> Result<ImageContent, String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -2901,13 +3097,14 @@ pub fn get_image_content(repo: &Repository, file_path: &str) -> Result<ImageCont
     let workdir = repo.workdir().ok_or("No working directory")?;
     let full_path = resolve_repo_path(workdir, file_path)?;
 
-    if !full_path.exists() {
-        return Err(format!("File does not exist: {}", file_path));
-    }
+    let metadata = std::fs::metadata(&full_path)
+        .map_err(|_| format!("File does not exist: {}", file_path))?;
+    check_image_size_limit(metadata.len())?;
 
     let content = std::fs::read(&full_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let file_size = content.len() as u64;
+    check_image_size_limit(file_size)?;
     let base64_content = STANDARD.encode(&content);
     let mime_type = get_mime_type(file_path);
 
@@ -2933,8 +3130,9 @@ pub fn get_image_from_head(repo: &Repository, file_path: &str) -> Result<ImageCo
         .find_blob(entry.id())
         .map_err(|e| format!("Failed to get blob: {}", e.message()))?;
 
+    let file_size = blob.size() as u64;
+    check_image_size_limit(file_size)?;
     let content = blob.content();
-    let file_size = content.len() as u64;
     let base64_content = STANDARD.encode(content);
     let mime_type = get_mime_type(file_path);
 
@@ -2959,8 +3157,9 @@ pub fn get_image_from_index(repo: &Repository, file_path: &str) -> Result<ImageC
         .find_blob(entry.id)
         .map_err(|e| format!("Failed to get blob: {}", e.message()))?;
 
+    let file_size = blob.size() as u64;
+    check_image_size_limit(file_size)?;
     let content = blob.content();
-    let file_size = content.len() as u64;
     let base64_content = STANDARD.encode(content);
     let mime_type = get_mime_type(file_path);
 
@@ -4028,8 +4227,27 @@ fn read_global_config(key: &str) -> Option<String> {
     }
 }
 
-/// Read the global git identity (user.name / user.email)
+/// Read the global git identity (user.name / user.email) in-process via git2,
+/// falling back to the git CLI only if opening the global config fails.
 pub fn git_get_global_identity() -> Result<GitIdentity, String> {
+    if let Ok(mut global_cfg) =
+        git2::Config::open_default().and_then(|c| c.open_level(git2::ConfigLevel::Global))
+    {
+        if let Ok(snapshot) = global_cfg.snapshot() {
+            let read_key = |key: &str| {
+                snapshot
+                    .get_string(key)
+                    .ok()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            };
+            return Ok(GitIdentity {
+                name: read_key("user.name"),
+                email: read_key("user.email"),
+            });
+        }
+    }
+
     Ok(GitIdentity {
         name: read_global_config("user.name"),
         email: read_global_config("user.email"),
@@ -4297,6 +4515,131 @@ mod tests {
             extract_ssh_host_from_url("ssh://git@git.example.com:2222/org/repo.git").as_deref(),
             Some("[git.example.com]:2222")
         );
-        assert_eq!(extract_ssh_host_from_url("https://github.com/org/repo.git"), None);
+        assert_eq!(
+            extract_ssh_host_from_url("https://github.com/org/repo.git"),
+            None
+        );
+    }
+
+    fn create_temp_git_repo(tag: &str) -> (PathBuf, Repository) {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "forky_test_{}_{}_{}",
+            tag,
+            std::process::id(),
+            nanos
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo = Repository::init(&dir).unwrap();
+        (dir, repo)
+    }
+
+    fn commit_file(repo: &Repository, file_name: &str, content: &str, message: &str) -> Oid {
+        let workdir = repo.workdir().unwrap();
+        std::fs::write(workdir.join(file_name), content).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file_name)).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("Test User", "test@example.com").unwrap();
+        let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)
+            .unwrap()
+    }
+
+    #[test]
+    fn calculate_ahead_behind_oids_shortcuts_equal_and_caches() {
+        let (dir, repo) = create_temp_git_repo("ahead_behind");
+        let c1 = commit_file(&repo, "a.txt", "one\n", "first");
+        let c2 = commit_file(&repo, "a.txt", "two\n", "second");
+
+        // Equal OIDs short-circuit immediately without needing cache entry
+        assert_eq!(calculate_ahead_behind_oids(&repo, c2, c2), (Some(0), Some(0)));
+
+        // Distinct OIDs compute and populate static cache
+        assert_eq!(calculate_ahead_behind_oids(&repo, c2, c1), (Some(1), Some(0)));
+        {
+            let cache = ahead_behind_cache().lock().unwrap();
+            assert_eq!(cache.get(&(c2, c1)), Some(&(1, 0)));
+        }
+        // Subsequent call hits cache and returns same counts
+        assert_eq!(calculate_ahead_behind_oids(&repo, c2, c1), (Some(1), Some(0)));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_limits_truncate_large_and_detect_binary_in_8kb_probe() {
+        // Exceeds MAX_DIFF_BYTES
+        let big_text = vec![b'a'; (MAX_DIFF_BYTES as usize) + 64];
+        let diff_big = diff_from_bytes("big.txt", &big_text, true, false);
+        assert!(diff_big.is_truncated);
+        assert!(diff_big.hunks.is_empty());
+        assert_eq!(diff_big.file_size, Some(big_text.len() as u64));
+
+        // Exceeds MAX_DIFF_LINES while under MAX_DIFF_BYTES
+        let many_lines = "x\n".repeat(MAX_DIFF_LINES + 250);
+        assert!((many_lines.len() as u64) < MAX_DIFF_BYTES);
+        let diff_many = diff_from_bytes("many.txt", many_lines.as_bytes(), true, false);
+        assert!(diff_many.is_truncated);
+        assert_eq!(diff_many.hunks.len(), 1);
+        assert_eq!(diff_many.hunks[0].lines.len(), MAX_DIFF_LINES);
+
+        // Large untracked binary file detected from first 8 KB probe without truncating as text
+        let (dir, repo) = create_temp_git_repo("diff_probe");
+        let mut binary_blob = vec![0u8; 16];
+        binary_blob.resize((MAX_DIFF_BYTES as usize) + 1024, b'Z');
+        std::fs::write(dir.join("huge.bin"), &binary_blob).unwrap();
+        let diff_bin = get_untracked_file_diff(&repo, "huge.bin").unwrap();
+        assert!(diff_bin.is_binary);
+        assert!(!diff_bin.is_truncated);
+        assert_eq!(diff_bin.file_size, Some(binary_blob.len() as u64));
+
+        // Large untracked text file returns truncated without loading full lines
+        let big_untracked = vec![b't'; (MAX_DIFF_BYTES as usize) + 128];
+        std::fs::write(dir.join("huge.txt"), &big_untracked).unwrap();
+        let diff_untracked = get_untracked_file_diff(&repo, "huge.txt").unwrap();
+        assert!(!diff_untracked.is_binary);
+        assert!(diff_untracked.is_truncated);
+        assert!(diff_untracked.hunks.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn get_commits_paginates_with_offset_without_gaps_or_overlaps() {
+        let (dir, repo) = create_temp_git_repo("pagination");
+        for i in 1..=5 {
+            commit_file(&repo, "log.txt", &format!("v{}\n", i), &format!("commit {}", i));
+        }
+
+        let all = get_commits(&repo, 10, 0).unwrap();
+        assert_eq!(all.len(), 5);
+
+        let page1 = get_commits(&repo, 2, 0).unwrap();
+        let page2 = get_commits(&repo, 2, 2).unwrap();
+        let page3 = get_commits(&repo, 2, 4).unwrap();
+        let page4 = get_commits(&repo, 2, 6).unwrap();
+
+        assert_eq!(page1.len(), 2);
+        assert_eq!(page2.len(), 2);
+        assert_eq!(page3.len(), 1);
+        assert!(page4.is_empty());
+
+        let combined_ids: Vec<String> = page1
+            .into_iter()
+            .chain(page2)
+            .chain(page3)
+            .map(|c| c.id)
+            .collect();
+        let all_ids: Vec<String> = all.into_iter().map(|c| c.id).collect();
+        assert_eq!(combined_ids, all_ids);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

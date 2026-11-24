@@ -1,5 +1,6 @@
-import type { FC } from 'react';
-import { memo, useCallback } from 'react';
+import type { FC, CSSProperties } from 'react';
+import { memo, useCallback, useMemo } from 'react';
+import { List, type RowComponentProps } from 'react-window';
 import {
   GitBranch,
   Folder,
@@ -14,6 +15,16 @@ import type { TreeNode } from './branchTree';
 import type { BranchInfo, TagInfo } from '../../types/git';
 
 const ICON_SIZE = 14;
+const VIRTUALIZE_TREE_THRESHOLD = 100;
+const TREE_ROW_HEIGHT = 26;
+const MAX_VIRTUAL_TREE_HEIGHT = 360;
+
+interface FlatTreeNode {
+  node: TreeNode;
+  depth: number;
+  isRemote: boolean;
+  isExpanded: boolean;
+}
 
 interface BranchCounterProps {
   branch: BranchInfo;
@@ -62,33 +73,27 @@ interface BranchTreeProps {
   isRemote?: boolean;
 }
 
-interface TreeNodeItemProps {
-  node: TreeNode;
-  expandedPaths: Set<string>;
+interface FlatTreeItemProps {
+  item: FlatTreeNode;
   onToggleExpand: (path: string) => void;
   onBranchClick?: (branch: BranchInfo) => void;
   onBranchDoubleClick?: (branch: BranchInfo) => void;
   onBranchContextMenu?: (branch: BranchInfo, event: React.MouseEvent) => void;
   onTagClick?: (tag: TagInfo) => void;
-  depth: number;
-  isRemote?: boolean;
-  renderChildren: (nodes: TreeNode[], depth: number, isRemote: boolean) => React.ReactNode;
+  style?: CSSProperties;
 }
 
-const TreeNodeItem: FC<TreeNodeItemProps> = memo(
+const FlatTreeItem: FC<FlatTreeItemProps> = memo(
   ({
-    node,
-    expandedPaths,
+    item,
     onToggleExpand,
     onBranchClick,
     onBranchDoubleClick,
     onBranchContextMenu,
     onTagClick,
-    depth,
-    isRemote,
-    renderChildren,
+    style,
   }) => {
-    const isExpanded = expandedPaths.has(node.fullPath);
+    const { node, depth, isExpanded } = item;
     const hasChildren = node.children.length > 0;
     const paddingLeft = 12 + depth * 16;
 
@@ -151,35 +156,67 @@ const TreeNodeItem: FC<TreeNodeItemProps> = memo(
       .join(' ');
 
     return (
-      <>
-        <div
-          className={itemClassName}
-          style={{ paddingLeft }}
-          onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
-          onContextMenu={handleContextMenu}
-        >
-          {(node.type === 'folder' || node.type === 'remote' || hasChildren) && (
-            <span className={`tree-expand-icon ${isExpanded ? 'expanded' : ''}`}>▶</span>
-          )}
-          {!(node.type === 'folder' || node.type === 'remote' || hasChildren) && (
-            <span className="tree-expand-icon placeholder" />
-          )}
-          <span className="tree-node-icon">{renderIcon()}</span>
-          <span className="tree-node-label" title={node.fullPath}>
-            {node.name}
-          </span>
-          {node.type === 'branch' && node.branch && !node.branch.is_remote && (
-            <BranchCounter branch={node.branch} />
-          )}
-        </div>
-        {isExpanded &&
-          hasChildren &&
-          renderChildren(node.children, depth + 1, isRemote || node.type === 'remote')}
-      </>
+      <div
+        className={itemClassName}
+        style={style ? { ...style, paddingLeft, boxSizing: 'border-box' } : { paddingLeft }}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
+      >
+        {(node.type === 'folder' || node.type === 'remote' || hasChildren) && (
+          <span className={`tree-expand-icon ${isExpanded ? 'expanded' : ''}`}>▶</span>
+        )}
+        {!(node.type === 'folder' || node.type === 'remote' || hasChildren) && (
+          <span className="tree-expand-icon placeholder" />
+        )}
+        <span className="tree-node-icon">{renderIcon()}</span>
+        <span className="tree-node-label" title={node.fullPath}>
+          {node.name}
+        </span>
+        {node.type === 'branch' && node.branch && !node.branch.is_remote && (
+          <BranchCounter branch={node.branch} />
+        )}
+      </div>
     );
   }
 );
+
+interface VirtualTreeRowExtraProps {
+  items: FlatTreeNode[];
+  onToggleExpand: (path: string) => void;
+  onBranchClick?: (branch: BranchInfo) => void;
+  onBranchDoubleClick?: (branch: BranchInfo) => void;
+  onBranchContextMenu?: (branch: BranchInfo, event: React.MouseEvent) => void;
+  onTagClick?: (tag: TagInfo) => void;
+}
+
+const VirtualTreeRow = ({
+  index,
+  style,
+  ariaAttributes,
+  items,
+  onToggleExpand,
+  onBranchClick,
+  onBranchDoubleClick,
+  onBranchContextMenu,
+  onTagClick,
+}: RowComponentProps<VirtualTreeRowExtraProps>) => {
+  const item = items[index];
+  if (!item) return <div style={style} {...ariaAttributes} />;
+  return (
+    <div style={style} {...ariaAttributes}>
+      <FlatTreeItem
+        item={item}
+        onToggleExpand={onToggleExpand}
+        onBranchClick={onBranchClick}
+        onBranchDoubleClick={onBranchDoubleClick}
+        onBranchContextMenu={onBranchContextMenu}
+        onTagClick={onTagClick}
+        style={{ height: TREE_ROW_HEIGHT }}
+      />
+    </div>
+  );
+};
 
 export const BranchTree: FC<BranchTreeProps> = memo(
   ({
@@ -193,31 +230,38 @@ export const BranchTree: FC<BranchTreeProps> = memo(
     depth = 0,
     isRemote = false,
   }) => {
-    const renderChildren = useCallback(
-      (childNodes: TreeNode[], childDepth: number, childIsRemote: boolean): React.ReactNode => {
-        if (childNodes.length === 0) return null;
-        return (
-          <div className="branch-tree">
-            {childNodes.map((node) => (
-              <TreeNodeItem
-                key={node.fullPath}
-                node={node}
-                expandedPaths={expandedPaths}
-                onToggleExpand={onToggleExpand}
-                onBranchClick={onBranchClick}
-                onBranchDoubleClick={onBranchDoubleClick}
-                onBranchContextMenu={onBranchContextMenu}
-                onTagClick={onTagClick}
-                depth={childDepth}
-                isRemote={childIsRemote}
-                renderChildren={renderChildren}
-              />
-            ))}
-          </div>
-        );
-      },
+    // Flatten visible tree nodes according to expandedPaths for O(visible) rendering & virtualization
+    const flatNodes = useMemo<FlatTreeNode[]>(() => {
+      const result: FlatTreeNode[] = [];
+      const walk = (list: TreeNode[], currentDepth: number, currentIsRemote: boolean) => {
+        for (const node of list) {
+          const isExpanded = expandedPaths.has(node.fullPath);
+          result.push({
+            node,
+            depth: currentDepth,
+            isRemote: currentIsRemote,
+            isExpanded,
+          });
+          if (isExpanded && node.children.length > 0) {
+            walk(node.children, currentDepth + 1, currentIsRemote || node.type === 'remote');
+          }
+        }
+      };
+      walk(nodes, depth, isRemote);
+      return result;
+    }, [nodes, expandedPaths, depth, isRemote]);
+
+    const rowProps = useMemo<VirtualTreeRowExtraProps>(
+      () => ({
+        items: flatNodes,
+        onToggleExpand,
+        onBranchClick,
+        onBranchDoubleClick,
+        onBranchContextMenu,
+        onTagClick,
+      }),
       [
-        expandedPaths,
+        flatNodes,
         onToggleExpand,
         onBranchClick,
         onBranchDoubleClick,
@@ -226,23 +270,35 @@ export const BranchTree: FC<BranchTreeProps> = memo(
       ]
     );
 
-    if (nodes.length === 0) return null;
+    if (flatNodes.length === 0) return null;
+
+    if (flatNodes.length > VIRTUALIZE_TREE_THRESHOLD) {
+      const listHeight = Math.min(flatNodes.length * TREE_ROW_HEIGHT, MAX_VIRTUAL_TREE_HEIGHT);
+      return (
+        <div className="branch-tree" style={{ height: listHeight }}>
+          <List<VirtualTreeRowExtraProps>
+            rowComponent={VirtualTreeRow}
+            rowCount={flatNodes.length}
+            rowHeight={TREE_ROW_HEIGHT}
+            rowProps={rowProps}
+            overscanCount={10}
+            style={{ height: listHeight, width: '100%' }}
+          />
+        </div>
+      );
+    }
 
     return (
       <div className="branch-tree">
-        {nodes.map((node) => (
-          <TreeNodeItem
-            key={node.fullPath}
-            node={node}
-            expandedPaths={expandedPaths}
+        {flatNodes.map((item) => (
+          <FlatTreeItem
+            key={item.node.fullPath}
+            item={item}
             onToggleExpand={onToggleExpand}
             onBranchClick={onBranchClick}
             onBranchDoubleClick={onBranchDoubleClick}
             onBranchContextMenu={onBranchContextMenu}
             onTagClick={onTagClick}
-            depth={depth}
-            isRemote={isRemote}
-            renderChildren={renderChildren}
           />
         ))}
       </div>

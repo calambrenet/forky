@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLocalStorage } from './useLocalStorage';
-import { useWindowFocus } from './useWindowFocus';
 
 export type Theme = 'light' | 'dark' | 'system';
 type ResolvedTheme = 'light' | 'dark';
@@ -16,7 +15,6 @@ export function useTheme() {
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('light');
   const lastThemeRef = useRef<string>('light');
   const initialCheckDone = useRef(false);
-  const { isFocused, isVisible } = useWindowFocus();
 
   // Detect system theme using Rust command (works reliably on Linux)
   const detectSystemTheme = useCallback(async (): Promise<ResolvedTheme> => {
@@ -44,15 +42,13 @@ export function useTheme() {
 
       const detectedTheme = await detectSystemTheme();
 
-      // Only update if theme actually changed
-      if (detectedTheme !== lastThemeRef.current) {
+      if (mounted && detectedTheme !== lastThemeRef.current) {
         lastThemeRef.current = detectedTheme;
         setSystemTheme(detectedTheme);
       }
     };
 
-    // Initial check only
-    checkTheme();
+    void checkTheme();
 
     return () => {
       mounted = false;
@@ -78,29 +74,27 @@ export function useTheme() {
     };
   }, []);
 
-  // Re-detect system theme when window gains focus (handles OS theme changes)
+  // Re-detect system theme on window focus ONLY when userTheme === 'system' (no React state re-renders on Alt+Tab)
   useEffect(() => {
-    // Only check when becoming visible/focused, not on initial mount
-    if (!initialCheckDone.current) return;
-    if (!isFocused || !isVisible) return;
+    if (userTheme !== 'system') return;
 
     let mounted = true;
 
-    const recheckTheme = async () => {
-      if (!mounted) return;
+    const handleFocus = async () => {
       const detectedTheme = await detectSystemTheme();
-      if (detectedTheme !== lastThemeRef.current) {
+      if (mounted && detectedTheme !== lastThemeRef.current) {
         lastThemeRef.current = detectedTheme;
         setSystemTheme(detectedTheme);
       }
     };
 
-    recheckTheme();
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       mounted = false;
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [isFocused, isVisible, detectSystemTheme]);
+  }, [userTheme, detectSystemTheme]);
 
   // Resolve the actual theme to use
   const resolvedTheme: ResolvedTheme = userTheme === 'system' ? systemTheme : userTheme;
