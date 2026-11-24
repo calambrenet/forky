@@ -37,6 +37,8 @@ export const Select: FC<SelectProps> = ({
 
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       setIsOpen(false);
     }
   }, []);
@@ -44,10 +46,11 @@ export const Select: FC<SelectProps> = ({
   useEffect(() => {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
+      // Capture phase so Escape closes the Select without also dismissing the parent Modal
+      document.addEventListener('keydown', handleEscape, true);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
-        document.removeEventListener('keydown', handleEscape);
+        document.removeEventListener('keydown', handleEscape, true);
       };
     }
   }, [isOpen, handleClickOutside, handleEscape]);

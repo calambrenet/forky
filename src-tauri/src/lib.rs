@@ -2,7 +2,8 @@ mod git;
 mod system;
 mod watcher;
 
-use git::commands::{self as git_commands, AppState};
+use git::commands as git_commands;
+#[cfg(not(target_os = "linux"))]
 use std::sync::Mutex;
 use system::commands as system_commands;
 #[cfg(not(target_os = "linux"))]
@@ -10,6 +11,12 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 use watcher::commands as watcher_commands;
 use watcher::WatcherState;
+
+/// Keeps the menu item index -> repo path mapping in memory so clicking "Open Recent"
+/// cannot open the wrong repo if `recent_repos.json` changed since menu construction.
+#[cfg(not(target_os = "linux"))]
+#[derive(Default)]
+pub(crate) struct RecentMenuPaths(Mutex<Vec<String>>);
 
 /// Reconstruye el menú nativo de la aplicación con la lista de repositorios recientes.
 /// Se llama al inicio (desde setup) y cada vez que se abre un repositorio.
@@ -29,8 +36,15 @@ pub(crate) fn rebuild_app_menu(
     };
 
     // Submenú "Open Recent"
-    let recent_items: Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> = if recent_repos.is_empty() {
-        let Ok(empty) = MenuItem::with_id(app, "recent_empty", "No Recent Repositories", false, None::<&str>) else {
+    let recent_items: Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> = if recent_repos.is_empty()
+    {
+        let Ok(empty) = MenuItem::with_id(
+            app,
+            "recent_empty",
+            "No Recent Repositories",
+            false,
+            None::<&str>,
+        ) else {
             return;
         };
         vec![Box::new(empty)]
@@ -53,90 +67,141 @@ pub(crate) fn rebuild_app_menu(
         return;
     };
 
-    // macOS app menu
+    // macOS app menu (uses MenuItem for About so `about_forky` emits `menu-about` to frontend)
     #[cfg(target_os = "macos")]
-    let Ok(app_menu) = Submenu::with_items(
-        app,
-        "Forky",
-        true,
-        &[
-            &PredefinedMenuItem::about(app, Some("About Forky"), None).unwrap(),
-            &PredefinedMenuItem::separator(app).unwrap(),
-            &PredefinedMenuItem::services(app, Some("Services")).unwrap(),
-            &PredefinedMenuItem::separator(app).unwrap(),
-            &PredefinedMenuItem::hide(app, Some("Hide Forky")).unwrap(),
-            &PredefinedMenuItem::hide_others(app, Some("Hide Others")).unwrap(),
-            &PredefinedMenuItem::show_all(app, Some("Show All")).unwrap(),
-            &PredefinedMenuItem::separator(app).unwrap(),
-            &PredefinedMenuItem::quit(app, Some("Quit Forky")).unwrap(),
-        ],
-    ) else {
-        return;
+    let app_menu = {
+        let (
+            Ok(about),
+            Ok(sep1),
+            Ok(services),
+            Ok(sep2),
+            Ok(hide),
+            Ok(hide_others),
+            Ok(show_all),
+            Ok(sep3),
+            Ok(quit),
+        ) = (
+            MenuItem::with_id(app, "about_forky", "About Forky", true, None::<&str>),
+            PredefinedMenuItem::separator(app),
+            PredefinedMenuItem::services(app, Some("Services")),
+            PredefinedMenuItem::separator(app),
+            PredefinedMenuItem::hide(app, Some("Hide Forky")),
+            PredefinedMenuItem::hide_others(app, Some("Hide Others")),
+            PredefinedMenuItem::show_all(app, Some("Show All")),
+            PredefinedMenuItem::separator(app),
+            PredefinedMenuItem::quit(app, Some("Quit Forky")),
+        )
+        else {
+            return;
+        };
+        let Ok(menu) = Submenu::with_items(
+            app,
+            "Forky",
+            true,
+            &[
+                &about,
+                &sep1,
+                &services,
+                &sep2,
+                &hide,
+                &hide_others,
+                &show_all,
+                &sep3,
+                &quit,
+            ],
+        ) else {
+            return;
+        };
+        menu
     };
 
-    let Ok(file_menu) = Submenu::with_items(
-        app,
-        "File",
-        true,
-        &[
-            &open_repo,
-            &open_recent,
-            &PredefinedMenuItem::separator(app).unwrap(),
-            &PredefinedMenuItem::close_window(app, Some("Close Window")).unwrap(),
-        ],
-    ) else {
-        return;
+    let file_menu = {
+        let (Ok(sep), Ok(close_win)) = (
+            PredefinedMenuItem::separator(app),
+            PredefinedMenuItem::close_window(app, Some("Close Window")),
+        ) else {
+            return;
+        };
+        let Ok(menu) = Submenu::with_items(
+            app,
+            "File",
+            true,
+            &[&open_repo, &open_recent, &sep, &close_win],
+        ) else {
+            return;
+        };
+        menu
     };
 
-    let Ok(edit_menu) = Submenu::with_items(
-        app,
-        "Edit",
-        true,
-        &[
-            &PredefinedMenuItem::undo(app, Some("Undo")).unwrap(),
-            &PredefinedMenuItem::redo(app, Some("Redo")).unwrap(),
-            &PredefinedMenuItem::separator(app).unwrap(),
-            &PredefinedMenuItem::cut(app, Some("Cut")).unwrap(),
-            &PredefinedMenuItem::copy(app, Some("Copy")).unwrap(),
-            &PredefinedMenuItem::paste(app, Some("Paste")).unwrap(),
-            &PredefinedMenuItem::select_all(app, Some("Select All")).unwrap(),
-        ],
-    ) else {
-        return;
+    let edit_menu = {
+        let (Ok(undo), Ok(redo), Ok(sep), Ok(cut), Ok(copy), Ok(paste), Ok(select_all)) = (
+            PredefinedMenuItem::undo(app, Some("Undo")),
+            PredefinedMenuItem::redo(app, Some("Redo")),
+            PredefinedMenuItem::separator(app),
+            PredefinedMenuItem::cut(app, Some("Cut")),
+            PredefinedMenuItem::copy(app, Some("Copy")),
+            PredefinedMenuItem::paste(app, Some("Paste")),
+            PredefinedMenuItem::select_all(app, Some("Select All")),
+        ) else {
+            return;
+        };
+        let Ok(menu) = Submenu::with_items(
+            app,
+            "Edit",
+            true,
+            &[&undo, &redo, &sep, &cut, &copy, &paste, &select_all],
+        ) else {
+            return;
+        };
+        menu
     };
 
-    let Ok(window_menu) = Submenu::with_items(
-        app,
-        "Window",
-        true,
-        &[
-            &PredefinedMenuItem::minimize(app, Some("Minimize")).unwrap(),
-            &PredefinedMenuItem::maximize(app, Some("Zoom")).unwrap(),
-            &PredefinedMenuItem::separator(app).unwrap(),
-            &PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen")).unwrap(),
-        ],
-    ) else {
-        return;
+    let window_menu = {
+        let (Ok(minimize), Ok(maximize), Ok(sep), Ok(fullscreen)) = (
+            PredefinedMenuItem::minimize(app, Some("Minimize")),
+            PredefinedMenuItem::maximize(app, Some("Zoom")),
+            PredefinedMenuItem::separator(app),
+            PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen")),
+        ) else {
+            return;
+        };
+        let Ok(menu) = Submenu::with_items(
+            app,
+            "Window",
+            true,
+            &[&minimize, &maximize, &sep, &fullscreen],
+        ) else {
+            return;
+        };
+        menu
     };
 
     #[cfg(target_os = "macos")]
-    let menu_result =
-        Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu]);
+    let menu_result = Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &window_menu]);
     #[cfg(not(target_os = "macos"))]
     let menu_result = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu]);
 
     if let Ok(menu) = menu_result {
+        if let Ok(mut paths) = app.state::<RecentMenuPaths>().0.lock() {
+            *paths = recent_repos.iter().map(|r| r.path.clone()).collect();
+        }
         let _ = app.set_menu(menu);
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_decorum::init())
+        .manage(WatcherState::default());
+
+    #[cfg(not(target_os = "linux"))]
+    let builder = builder.manage(RecentMenuPaths::default());
+
+    builder
         .setup(|app| {
             // Cargar repositorios recientes del disco y construir menú nativo
             #[cfg(not(target_os = "linux"))]
@@ -149,31 +214,28 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 use tauri_plugin_decorum::WebviewWindowExt;
-                let main_window = app.get_webview_window("main").unwrap();
-                main_window.set_traffic_lights_inset(12.0, 50.0).unwrap();
+                if let Some(main_window) = app.get_webview_window("main") {
+                    let _ = main_window.set_traffic_lights_inset(12.0, 50.0);
 
-                let window_clone = main_window.clone();
-                main_window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Resized(_) = event {
-                        let _ = window_clone.set_traffic_lights_inset(12.0, 50.0);
-                    }
-                });
+                    let window_clone = main_window.clone();
+                    main_window.on_window_event(move |event| {
+                        if let tauri::WindowEvent::Resized(_) = event {
+                            let _ = window_clone.set_traffic_lights_inset(12.0, 50.0);
+                        }
+                    });
+                }
             }
 
             // En Linux, ventana sin decoraciones con titlebar personalizado
             #[cfg(target_os = "linux")]
             {
-                use tauri::WebviewWindow;
-                let main_window: WebviewWindow = app.get_webview_window("main").unwrap();
-                main_window.set_decorations(false).unwrap();
+                if let Some(main_window) = app.get_webview_window("main") {
+                    let _ = main_window.set_decorations(false);
+                }
             }
 
             Ok(())
         })
-        .manage(AppState {
-            current_repo_path: Mutex::new(None),
-        })
-        .manage(WatcherState::default())
         .invoke_handler(tauri::generate_handler![
             git_commands::open_repository,
             git_commands::get_recent_repos,
@@ -214,7 +276,6 @@ pub fn run() {
             git_commands::git_stash_apply,
             git_commands::git_stash_pop,
             git_commands::git_stash_drop,
-            git_commands::git_checkout_with_stash,
             git_commands::get_image_content,
             git_commands::get_image_from_head,
             git_commands::get_image_from_index,
@@ -257,10 +318,15 @@ pub fn run() {
                     let _ = window.emit("menu-about", ());
                 }
             } else if let Some(index_str) = id.strip_prefix("recent_") {
+                #[cfg(not(target_os = "linux"))]
                 if let Ok(index) = index_str.parse::<usize>() {
-                    let repos = git::recent::load(app);
-                    if let Some(repo) = repos.get(index) {
-                        let path = repo.path.clone();
+                    let path_opt = app
+                        .state::<RecentMenuPaths>()
+                        .0
+                        .lock()
+                        .ok()
+                        .and_then(|paths| paths.get(index).cloned());
+                    if let Some(path) = path_opt {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.emit("menu-open-recent-repo", path);
                         }

@@ -1,6 +1,159 @@
 use chrono::{DateTime, TimeZone, Utc};
-use git2::{BranchType, Repository, StatusOptions};
+use git2::{BranchType, ErrorCode, Repository, StatusOptions};
 use serde::{Deserialize, Serialize};
+use std::path::{Component, Path, PathBuf};
+use std::process::Command;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn apply_no_window(cmd: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
+/// Base git CLI command: English output (`LC_ALL=C`), never hangs on prompts, no Windows console flash.
+fn git_cmd(repo_path: Option<&str>) -> Command {
+    let mut cmd = Command::new("git");
+    if let Some(path) = repo_path {
+        cmd.arg("-C").arg(path);
+    }
+    cmd.env("LC_ALL", "C").env("GIT_TERMINAL_PROMPT", "0");
+    apply_no_window(&mut cmd);
+    cmd
+}
+
+/// Network git CLI command: preserves user `GIT_SSH_COMMAND` if set; otherwise disables password prompts
+/// while keeping `StrictHostKeyChecking=ask` so unknown host fingerprints still appear in stderr.
+fn git_network_cmd(repo_path: Option<&str>) -> Command {
+    let mut cmd = git_cmd(repo_path);
+    if std::env::var_os("GIT_SSH_COMMAND").is_none() {
+        cmd.env(
+            "GIT_SSH_COMMAND",
+            "ssh -o StrictHostKeyChecking=ask -o NumberOfPasswordPrompts=0 -o PasswordAuthentication=no",
+        );
+    }
+    cmd
+}
+
+/// Reject empty, NUL-containing, or flag-like (`-...`) CLI arguments to prevent option injection.
+pub(crate) fn validate_non_flag(value: &str, field: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("Invalid {}: cannot be empty", field));
+    }
+    if trimmed.starts_with('-') || value.contains('\0') {
+        return Err(format!("Invalid {}: must not start with '-'", field));
+    }
+    Ok(())
+}
+
+/// Validate a Git branch or tag ref name using libgit2 rules plus flag rejection.
+pub(crate) fn validate_git_ref(name: &str, field: &str) -> Result<(), String> {
+    validate_non_flag(name, field)?;
+    let valid = git2::Branch::name_is_valid(name).unwrap_or(false);
+    if !valid {
+        return Err(format!("Invalid {}: '{}'", field, name));
+    }
+    Ok(())
+}
+
+/// Resolve a relative file path safely inside `repo_root`, rejecting absolute paths and `..` traversal.
+pub(crate) fn resolve_repo_path(repo_root: &Path, rel_path: &str) -> Result<PathBuf, String> {
+    if rel_path.is_empty() || rel_path.contains('\0') {
+        return Err("Invalid file path".to_string());
+    }
+    let rel = Path::new(rel_path);
+    for comp in rel.components() {
+        match comp {
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err(format!("Path escapes repository root: '{}'", rel_path));
+            }
+            Component::CurDir | Component::Normal(_) => {}
+        }
+    }
+
+    let joined = repo_root.join(rel);
+    if let Ok(canon_root) = repo_root.canonicalize() {
+        // Canonicalize the deepest existing ancestor to catch symlink escapes outside repo_root.
+        let mut check = joined.as_path();
+        while !check.exists() {
+            match check.parent() {
+                Some(parent) if !parent.as_os_str().is_empty() => check = parent,
+                _ => break,
+            }
+        }
+        if let Ok(canon_check) = check.canonicalize() {
+            if !canon_check.starts_with(&canon_root) {
+                return Err(format!("Path escapes repository root: '{}'", rel_path));
+            }
+        }
+    }
+
+    Ok(joined)
+}
+
+fn get_unmerged_files(repo_path: &str) -> Vec<String> {
+    match git_cmd(Some(repo_path))
+        .args(["diff", "--name-only", "--diff-filter=U"])
+        .output()
+    {
+        Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|s| s.to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn top_stash_oid(repo_path: &str) -> Option<String> {
+    let output = git_cmd(Some(repo_path))
+        .args(["rev-parse", "-q", "--verify", "refs/stash"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if oid.is_empty() {
+        None
+    } else {
+        Some(oid)
+    }
+}
+
+/// Quote a file path for unified diff headers if it contains quotes, control chars, or non-ASCII.
+fn quote_git_path(prefix: &str, file_path: &str) -> String {
+    let full = format!("{}{}", prefix, file_path);
+    let needs_quoting = file_path
+        .bytes()
+        .any(|b| b < 0x20 || b == 0x7f || b == b'"' || b == b'\\' || b >= 0x80);
+    if !needs_quoting {
+        return full;
+    }
+    let mut out = String::with_capacity(full.len() + 8);
+    out.push('"');
+    for b in full.bytes() {
+        match b {
+            b'"' => out.push_str("\\\""),
+            b'\\' => out.push_str("\\\\"),
+            b'\t' => out.push_str("\\t"),
+            b'\n' => out.push_str("\\n"),
+            b'\r' => out.push_str("\\r"),
+            0x00..=0x1f | 0x7f..=0xff => out.push_str(&format!("\\{:03o}", b)),
+            _ => out.push(b as char),
+        }
+    }
+    out.push('"');
+    out
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CommitInfo {
@@ -122,19 +275,42 @@ pub fn open_repository(path: &str) -> Result<Repository, String> {
 }
 
 pub fn get_repository_info(repo: &Repository) -> Result<RepositoryInfo, String> {
-    let path = repo.path().parent().unwrap_or(repo.path());
-    let name = path
+    let path = repo.workdir().unwrap_or_else(|| repo.path());
+    let normalized = path
+        .to_string_lossy()
+        .trim_end_matches(['/', '\\'])
+        .to_string();
+    let display_path = if normalized.is_empty() {
+        path.to_string_lossy().to_string()
+    } else {
+        normalized
+    };
+    let name = Path::new(&display_path)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let current_branch = repo
-        .head()
-        .ok()
-        .and_then(|head| head.shorthand().map(|s| s.to_string()));
+    let current_branch = match repo.head() {
+        Ok(head) => {
+            if repo.head_detached().unwrap_or(false) {
+                head.target()
+                    .map(|oid| format!("HEAD ({})", &oid.to_string()[..7]))
+            } else {
+                head.shorthand().map(|s| s.to_string())
+            }
+        }
+        Err(e) if e.code() == ErrorCode::UnbornBranch => repo
+            .find_reference("HEAD")
+            .ok()
+            .and_then(|r| {
+                r.symbolic_target()
+                    .map(|t| t.strip_prefix("refs/heads/").unwrap_or(t).to_string())
+            }),
+        Err(_) => None,
+    };
 
     Ok(RepositoryInfo {
-        path: path.to_string_lossy().to_string(),
+        path: display_path,
         name,
         current_branch,
         is_bare: repo.is_bare(),
@@ -245,23 +421,31 @@ pub fn get_branch_heads(repo: &Repository) -> Result<Vec<BranchHead>, String> {
 }
 
 pub fn get_commits(repo: &Repository, limit: usize) -> Result<Vec<CommitInfo>, String> {
+    if repo.is_empty().unwrap_or(false) {
+        return Ok(Vec::new());
+    }
+
     let mut revwalk = repo.revwalk().map_err(|e| e.message().to_string())?;
 
-    // Push all local branches to include all commits in the graph
-    let mut has_branches = false;
+    // Push all local branches and always push HEAD (covers detached HEAD commits)
+    let mut pushed_any = false;
     if let Ok(local_branches) = repo.branches(Some(BranchType::Local)) {
         for branch in local_branches.flatten() {
             let (branch, _) = branch;
             if let Ok(reference) = branch.get().peel_to_commit() {
-                let _ = revwalk.push(reference.id());
-                has_branches = true;
+                if revwalk.push(reference.id()).is_ok() {
+                    pushed_any = true;
+                }
             }
         }
     }
 
-    // Fallback to HEAD if no branches were pushed
-    if !has_branches {
-        revwalk.push_head().map_err(|e| e.message().to_string())?;
+    if revwalk.push_head().is_ok() {
+        pushed_any = true;
+    }
+
+    if !pushed_any {
+        return Ok(Vec::new());
     }
 
     // Sort by topological order with time
@@ -275,11 +459,15 @@ pub fn get_commits(repo: &Repository, limit: usize) -> Result<Vec<CommitInfo>, S
         .filter_map(|oid| repo.find_commit(oid).ok())
         .map(|commit| {
             let time = commit.time();
-            let datetime: DateTime<Utc> = Utc.timestamp_opt(time.seconds(), 0).unwrap();
+            let datetime: DateTime<Utc> = Utc
+                .timestamp_opt(time.seconds(), 0)
+                .single()
+                .unwrap_or(DateTime::UNIX_EPOCH);
+            let id = commit.id().to_string();
 
             CommitInfo {
-                id: commit.id().to_string(),
-                short_id: commit.id().to_string()[..7].to_string(),
+                short_id: id.chars().take(7).collect(),
+                id,
                 message: commit.message().unwrap_or("").trim().to_string(),
                 author: commit.author().name().unwrap_or("Unknown").to_string(),
                 author_email: commit.author().email().unwrap_or("").to_string(),
@@ -304,18 +492,20 @@ pub fn get_file_status(repo: &Repository) -> Result<Vec<FileStatus>, String> {
     let mut files = Vec::new();
 
     for entry in statuses.iter() {
-        let path = entry.path().unwrap_or("").to_string();
+        let path = String::from_utf8_lossy(entry.path_bytes()).to_string();
         let status = entry.status();
 
-        let (status_str, staged) = if status.is_index_new() {
+        let (status_str, staged) = if status.is_conflicted() {
+            ("conflicted".to_string(), false)
+        } else if status.is_index_new() {
             ("new".to_string(), true)
-        } else if status.is_index_modified() {
+        } else if status.is_index_modified() || status.is_index_typechange() {
             ("modified".to_string(), true)
         } else if status.is_index_deleted() {
             ("deleted".to_string(), true)
         } else if status.is_wt_new() {
             ("untracked".to_string(), false)
-        } else if status.is_wt_modified() {
+        } else if status.is_wt_modified() || status.is_wt_typechange() {
             ("modified".to_string(), false)
         } else if status.is_wt_deleted() {
             ("deleted".to_string(), false)
@@ -369,6 +559,7 @@ pub fn get_working_diff(
 
     let mut diff_opts = DiffOptions::new();
     diff_opts.pathspec(file_path);
+    diff_opts.disable_pathspec_match(true);
     diff_opts.context_lines(3);
 
     let diff = if staged {
@@ -402,6 +593,7 @@ pub fn get_commit_diff(
 
     let mut diff_opts = DiffOptions::new();
     diff_opts.pathspec(file_path);
+    diff_opts.disable_pathspec_match(true);
     diff_opts.context_lines(3);
 
     let diff = repo
@@ -536,6 +728,7 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
                     '+' => "add",
                     '-' => "delete",
                     ' ' => "context",
+                    '>' | '<' | '=' => "no_newline",
                     _ => "context",
                 };
 
@@ -574,7 +767,7 @@ fn parse_diff(diff: &git2::Diff, file_path: &str) -> Result<DiffInfo, String> {
 /// Read content of an untracked file and create diff info showing all lines as additions
 pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
     let workdir = repo.workdir().ok_or("No working directory")?;
-    let full_path = workdir.join(file_path);
+    let full_path = resolve_repo_path(workdir, file_path)?;
 
     // Read the file
     let content = std::fs::read(&full_path).map_err(|e| e.to_string())?;
@@ -619,7 +812,7 @@ pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<Dif
     Ok(DiffInfo {
         file_path: file_path.to_string(),
         old_content: None,
-        new_content: Some(text.to_string()),
+        new_content: None,
         hunks: vec![hunk],
         is_binary: false,
         binary_type: None,
@@ -627,18 +820,73 @@ pub fn get_untracked_file_diff(repo: &Repository, file_path: &str) -> Result<Dif
     })
 }
 
-/// Get diff for a deleted file from the index, showing all lines as deletions
-pub fn get_deleted_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
-    // Get the file content from HEAD
-    let head = repo.head().map_err(|e| e.message().to_string())?;
-    let tree = head.peel_to_tree().map_err(|e| e.message().to_string())?;
+/// Get diff for a newly staged file directly from the index blob (fallback to working dir).
+pub fn get_staged_new_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
+    if let Ok(index) = repo.index() {
+        if let Some(entry) = index.get_path(Path::new(file_path), 0) {
+            if let Ok(blob) = repo.find_blob(entry.id) {
+                let content = blob.content();
+                let file_size = content.len() as u64;
+                if blob.is_binary() || is_binary_content(content) {
+                    return Ok(DiffInfo {
+                        file_path: file_path.to_string(),
+                        old_content: None,
+                        new_content: None,
+                        hunks: Vec::new(),
+                        is_binary: true,
+                        binary_type: get_binary_type(file_path),
+                        file_size: Some(file_size),
+                    });
+                }
+                let text = String::from_utf8_lossy(content);
+                let lines: Vec<&str> = text.lines().collect();
+                let diff_lines: Vec<DiffLine> = lines
+                    .iter()
+                    .enumerate()
+                    .map(|(i, line)| DiffLine {
+                        content: format!("{}\n", line),
+                        line_type: "add".to_string(),
+                        old_line_no: None,
+                        new_line_no: Some((i + 1) as u32),
+                    })
+                    .collect();
+                return Ok(DiffInfo {
+                    file_path: file_path.to_string(),
+                    old_content: None,
+                    new_content: None,
+                    hunks: vec![DiffHunk {
+                        old_start: 0,
+                        old_lines: 0,
+                        new_start: 1,
+                        new_lines: lines.len() as u32,
+                        lines: diff_lines,
+                    }],
+                    is_binary: false,
+                    binary_type: None,
+                    file_size: Some(file_size),
+                });
+            }
+        }
+    }
+    get_untracked_file_diff(repo, file_path)
+}
 
-    let entry = tree
-        .get_path(std::path::Path::new(file_path))
-        .map_err(|e| e.message().to_string())?;
+/// Get diff for a deleted file from the index (falling back to HEAD), showing all lines as deletions
+pub fn get_deleted_file_diff(repo: &Repository, file_path: &str) -> Result<DiffInfo, String> {
+    let blob_id = repo
+        .index()
+        .ok()
+        .and_then(|idx| idx.get_path(Path::new(file_path), 0).map(|e| e.id))
+        .or_else(|| {
+            repo.head()
+                .ok()
+                .and_then(|h| h.peel_to_tree().ok())
+                .and_then(|t| t.get_path(Path::new(file_path)).ok().map(|e| e.id()))
+        })
+        .ok_or_else(|| format!("Deleted file '{}' not found in index or HEAD", file_path))?;
 
     let blob = repo
-        .find_blob(entry.id())
+        .find_blob(blob_id)
         .map_err(|e| e.message().to_string())?;
     let content = blob.content();
     let file_size = content.len() as u64;
@@ -681,7 +929,7 @@ pub fn get_deleted_file_diff(repo: &Repository, file_path: &str) -> Result<DiffI
 
     Ok(DiffInfo {
         file_path: file_path.to_string(),
-        old_content: Some(text.to_string()),
+        old_content: None,
         new_content: None,
         hunks: vec![hunk],
         is_binary: false,
@@ -694,18 +942,18 @@ pub fn get_deleted_file_diff(repo: &Repository, file_path: &str) -> Result<DiffI
 pub fn stage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
     let mut index = repo.index().map_err(|e| e.message().to_string())?;
 
-    // Check if file exists or was deleted
+    // Validate path stays inside repo workdir and handle broken symlinks via symlink_metadata
     let workdir = repo.workdir().ok_or("No working directory")?;
-    let full_path = workdir.join(file_path);
+    let full_path = resolve_repo_path(workdir, file_path)?;
 
-    if full_path.exists() {
+    if full_path.symlink_metadata().is_ok() {
         index
-            .add_path(std::path::Path::new(file_path))
+            .add_path(Path::new(file_path))
             .map_err(|e| e.message().to_string())?;
     } else {
         // File was deleted, remove from index
         index
-            .remove_path(std::path::Path::new(file_path))
+            .remove_path(Path::new(file_path))
             .map_err(|e| e.message().to_string())?;
     }
 
@@ -713,28 +961,33 @@ pub fn stage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Unstage a file
+/// Unstage a file (also supports unborn branch before the initial commit)
 pub fn unstage_file(repo: &Repository, file_path: &str) -> Result<(), String> {
-    let head = repo.head().map_err(|e| e.message().to_string())?;
-    let head_commit = head.peel_to_commit().map_err(|e| e.message().to_string())?;
-
-    repo.reset_default(
-        Some(&head_commit.as_object()),
-        &[std::path::Path::new(file_path)],
-    )
-    .map_err(|e| e.message().to_string())?;
+    match repo.head() {
+        Ok(head) => {
+            let head_commit = head.peel_to_commit().map_err(|e| e.message().to_string())?;
+            repo.reset_default(Some(head_commit.as_object()), &[Path::new(file_path)])
+                .map_err(|e| e.message().to_string())?;
+        }
+        Err(e) if e.code() == ErrorCode::UnbornBranch => {
+            let mut index = repo.index().map_err(|e| e.message().to_string())?;
+            index
+                .remove_path(Path::new(file_path))
+                .map_err(|e| e.message().to_string())?;
+            index.write().map_err(|e| e.message().to_string())?;
+        }
+        Err(e) => return Err(e.message().to_string()),
+    }
 
     Ok(())
 }
 
-/// Discard changes in a file (restore from HEAD or delete if untracked)
+/// Discard unstaged changes in a file (restore from index without wiping staged changes, or delete if untracked)
 pub fn discard_file(repo_path: &str, file_path: &str, is_untracked: bool) -> Result<(), String> {
-    use std::process::Command;
+    let full_path = resolve_repo_path(Path::new(repo_path), file_path)?;
 
     if is_untracked {
-        // For untracked files, simply delete them
-        let full_path = std::path::Path::new(repo_path).join(file_path);
-        if full_path.is_dir() {
+        if full_path.is_dir() && !full_path.is_symlink() {
             std::fs::remove_dir_all(&full_path)
                 .map_err(|e| format!("Failed to remove directory: {}", e))?;
         } else {
@@ -742,12 +995,9 @@ pub fn discard_file(repo_path: &str, file_path: &str, is_untracked: bool) -> Res
                 .map_err(|e| format!("Failed to remove file: {}", e))?;
         }
     } else {
-        // For tracked files, use git checkout to restore from HEAD
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
+        // Restore working tree from index so staged changes remain intact
+        let output = git_cmd(Some(repo_path))
             .arg("checkout")
-            .arg("HEAD")
             .arg("--")
             .arg(file_path)
             .output()
@@ -779,26 +1029,36 @@ pub struct HunkData {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HunkLineData {
     pub content: String,
-    pub line_type: String, // "add", "delete", "context"
+    pub line_type: String, // "add", "delete", "context", "no_newline"
 }
 
-/// Generate a unified diff patch from hunk data
-fn generate_patch(file_path: &str, hunk: &HunkData) -> String {
+/// Generate a unified diff patch from hunk data preserving CRLF, no-EOF-newline markers, and path quoting
+pub(crate) fn generate_patch(file_path: &str, hunk: &HunkData) -> String {
     let mut patch = String::new();
 
-    // Header
-    patch.push_str(&format!("diff --git a/{} b/{}\n", file_path, file_path));
-    patch.push_str(&format!("--- a/{}\n", file_path));
-    patch.push_str(&format!("+++ b/{}\n", file_path));
+    let a_path = quote_git_path("a/", file_path);
+    let b_path = quote_git_path("b/", file_path);
+    patch.push_str(&format!("diff --git {} {}\n", a_path, b_path));
+    patch.push_str(&format!("--- {}\n", a_path));
+    patch.push_str(&format!("+++ {}\n", b_path));
 
-    // Hunk header
     patch.push_str(&format!(
         "@@ -{},{} +{},{} @@\n",
         hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
     ));
 
-    // Lines - content might already have newline, so we need to handle both cases
     for line in &hunk.lines {
+        if line.line_type == "no_newline" {
+            let trimmed = line.content.trim_end_matches(['\n', '\r']);
+            if trimmed.starts_with('\\') {
+                patch.push_str(trimmed);
+            } else {
+                patch.push_str("\\ No newline at end of file");
+            }
+            patch.push('\n');
+            continue;
+        }
+
         let prefix = match line.line_type.as_str() {
             "add" => "+",
             "delete" => "-",
@@ -806,35 +1066,46 @@ fn generate_patch(file_path: &str, hunk: &HunkData) -> String {
             _ => " ",
         };
 
-        // Remove trailing newline/carriage return if present, then add our own
-        let content = line.content.trim_end_matches(|c| c == '\n' || c == '\r');
-        patch.push_str(&format!("{}{}\n", prefix, content));
+        // Preserve CRLF vs LF endings so `git apply` matches Windows line endings accurately
+        let has_crlf = line.content.ends_with("\r\n");
+        let body = if has_crlf {
+            &line.content[..line.content.len() - 2]
+        } else {
+            line.content.strip_suffix('\n').unwrap_or(&line.content)
+        };
+        patch.push_str(prefix);
+        patch.push_str(body);
+        if has_crlf {
+            patch.push_str("\r\n");
+        } else {
+            patch.push('\n');
+        }
     }
 
     patch
 }
 
-/// Stage a single hunk from unstaged changes
-pub fn stage_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
+fn apply_hunk_patch(
+    repo_path: &str,
+    file_path: &str,
+    hunk: &HunkData,
+    extra_args: &[&str],
+    action_label: &str,
+) -> Result<(), String> {
     use std::io::Write;
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
 
-    let patch = generate_patch(file_path, &hunk);
+    resolve_repo_path(Path::new(repo_path), file_path)?;
+    let patch = generate_patch(file_path, hunk);
+    let has_context = hunk.lines.iter().any(|l| l.line_type == "context");
 
-    // Debug: print the generated patch
-    eprintln!("=== STAGE HUNK PATCH ===");
-    eprintln!("repo_path: {}", repo_path);
-    eprintln!("file_path: {}", file_path);
-    eprintln!("patch:\n{}", patch);
-    eprintln!("=== END PATCH ===");
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.arg("apply").args(extra_args);
+    if !has_context {
+        cmd.arg("--unidiff-zero");
+    }
 
-    // Use git apply --cached to stage the hunk
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("apply")
-        .arg("--cached")
-        .arg("--unidiff-zero")
+    let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -853,89 +1124,31 @@ pub fn stage_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<()
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("git apply stderr: {}", stderr);
-        return Err(format!("Failed to stage hunk: {}", stderr.trim()));
+        return Err(format!("Failed to {}: {}", action_label, stderr.trim()));
     }
 
-    eprintln!("Stage hunk successful!");
     Ok(())
+}
+
+/// Stage a single hunk from unstaged changes
+pub fn stage_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
+    apply_hunk_patch(repo_path, file_path, &hunk, &["--cached"], "stage hunk")
 }
 
 /// Unstage a single hunk from staged changes
 pub fn unstage_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
-    let patch = generate_patch(file_path, &hunk);
-
-    // Use git apply --cached -R to unstage the hunk (reverse apply to index)
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("apply")
-        .arg("--cached")
-        .arg("--reverse")
-        .arg("--unidiff-zero")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to execute git apply: {}", e))?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(patch.as_bytes())
-            .map_err(|e| format!("Failed to write patch to stdin: {}", e))?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("Failed to wait for git apply: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Failed to unstage hunk: {}", stderr.trim()));
-    }
-
-    Ok(())
+    apply_hunk_patch(
+        repo_path,
+        file_path,
+        &hunk,
+        &["--cached", "--reverse"],
+        "unstage hunk",
+    )
 }
 
-/// Discard a single hunk from unstaged changes (restore from index or HEAD)
+/// Discard a single hunk from unstaged changes (restore from index)
 pub fn discard_hunk(repo_path: &str, file_path: &str, hunk: HunkData) -> Result<(), String> {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
-    let patch = generate_patch(file_path, &hunk);
-
-    // Use git apply -R to discard the hunk from working directory
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("apply")
-        .arg("--reverse")
-        .arg("--unidiff-zero")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to execute git apply: {}", e))?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(patch.as_bytes())
-            .map_err(|e| format!("Failed to write patch to stdin: {}", e))?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("Failed to wait for git apply: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Failed to discard hunk: {}", stderr.trim()));
-    }
-
-    Ok(())
+    apply_hunk_patch(repo_path, file_path, &hunk, &["--reverse"], "discard hunk")
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1131,12 +1344,19 @@ fn create_error_result(stderr: &str, stdout: &str) -> GitOperationResult {
         };
     }
 
+    // Prefer stderr, falling back to stdout when git reports errors there (e.g. "nothing to commit")
+    let primary = if stderr.trim().is_empty() {
+        stdout.trim()
+    } else {
+        stderr.trim()
+    };
+
     // Detect error type
-    let error_type = detect_error_type(stderr);
+    let error_type = detect_error_type(primary);
 
     // If it's a checkout conflict, extract the conflicting files
     let conflicting_files = if error_type.as_deref() == Some("checkout_would_overwrite") {
-        let files = extract_conflicting_files(stderr);
+        let files = extract_conflicting_files(primary);
         if files.is_empty() {
             None
         } else {
@@ -1148,7 +1368,7 @@ fn create_error_result(stderr: &str, stdout: &str) -> GitOperationResult {
 
     GitOperationResult {
         success: false,
-        message: stderr.trim().to_string(),
+        message: primary.to_string(),
         requires_ssh_verification: None,
         requires_credential: None,
         error_type,
@@ -1229,17 +1449,39 @@ fn parse_ssh_host_verification(stderr: &str) -> Option<SshHostVerification> {
     }
 }
 
-/// Add a host to SSH known_hosts using ssh-keyscan
-pub fn add_ssh_known_host(host: &str) -> Result<GitOperationResult, String> {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    use std::process::Command;
+/// Parse optional `[host]:port` into `(host, Option<port>)` for ssh-keyscan.
+fn parse_ssh_host_port(raw_host: &str) -> (&str, Option<&str>) {
+    if let Some(rest) = raw_host.strip_prefix('[') {
+        if let Some((host_part, port_part)) = rest.split_once("]:") {
+            if !host_part.is_empty() && !port_part.is_empty() && port_part.chars().all(|c| c.is_ascii_digit()) {
+                return (host_part, Some(port_part));
+            }
+        }
+    }
+    (raw_host, None)
+}
 
-    // Run ssh-keyscan to get the host key
-    let output = Command::new("ssh-keyscan")
-        .arg("-t")
-        .arg("ed25519,rsa,ecdsa")
-        .arg(host)
+/// Add a host to SSH known_hosts using ssh-keyscan, verifying fingerprint when provided.
+pub fn add_ssh_known_host(
+    host: &str,
+    expected_fingerprint: Option<&str>,
+) -> Result<GitOperationResult, String> {
+    use std::fs::OpenOptions;
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::process::Stdio;
+
+    let (scan_host, port) = parse_ssh_host_port(host.trim());
+    validate_non_flag(scan_host, "SSH host")?;
+
+    let mut keyscan = Command::new("ssh-keyscan");
+    keyscan.arg("-t").arg("ed25519,rsa,ecdsa");
+    if let Some(p) = port {
+        keyscan.arg("-p").arg(p);
+    }
+    keyscan.arg("--").arg(scan_host);
+    apply_no_window(&mut keyscan);
+
+    let output = keyscan
         .output()
         .map_err(|e| format!("Failed to execute ssh-keyscan: {}", e))?;
 
@@ -1267,21 +1509,79 @@ pub fn add_ssh_known_host(host: &str) -> Result<GitOperationResult, String> {
         });
     }
 
-    // Get the path to known_hosts
-    let home = std::env::var("HOME").map_err(|_| "Could not determine home directory")?;
-    let ssh_dir = format!("{}/.ssh", home);
-    let known_hosts_path = format!("{}/known_hosts", ssh_dir);
+    // Verify scanned keys contain the exact fingerprint the user approved (MITM protection)
+    if let Some(expected_fp) = expected_fingerprint.filter(|fp| !fp.trim().is_empty()) {
+        let mut keygen_cmd = Command::new("ssh-keygen");
+        keygen_cmd
+            .args(["-lf", "-"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        apply_no_window(&mut keygen_cmd);
 
-    // Create .ssh directory if it doesn't exist
+        let mut child = keygen_cmd
+            .spawn()
+            .map_err(|e| format!("Failed to verify SSH fingerprint via ssh-keygen: {}", e))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(host_keys.as_bytes());
+        }
+        let fp_output = child
+            .wait_with_output()
+            .map_err(|e| format!("Failed to read ssh-keygen output: {}", e))?;
+
+        let fp_stdout = String::from_utf8_lossy(&fp_output.stdout);
+        let expected_clean = expected_fp.trim().trim_end_matches('.');
+        let matched = fp_output.status.success()
+            && fp_stdout
+                .lines()
+                .any(|line| line.split_whitespace().any(|tok| tok == expected_clean));
+
+        if !matched {
+            return Ok(GitOperationResult {
+                success: false,
+                message: format!(
+                    "SSH host key fingerprint mismatch for '{}'. Refusing to add unverified keys.",
+                    host
+                ),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("ssh_fingerprint_mismatch".to_string()),
+                conflicting_files: None,
+            });
+        }
+    }
+
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .ok_or("Could not determine home directory")?;
+    let ssh_dir = PathBuf::from(home).join(".ssh");
+    let known_hosts_path = ssh_dir.join("known_hosts");
+
     std::fs::create_dir_all(&ssh_dir)
         .map_err(|e| format!("Failed to create .ssh directory: {}", e))?;
 
-    // Append to known_hosts
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&ssh_dir, std::fs::Permissions::from_mode(0o700));
+    }
+
     let mut file = OpenOptions::new()
         .create(true)
+        .read(true)
         .append(true)
         .open(&known_hosts_path)
         .map_err(|e| format!("Failed to open known_hosts: {}", e))?;
+
+    // Ensure leading newline if existing known_hosts does not end with one
+    if let Ok(meta) = file.metadata() {
+        if meta.len() > 0 && file.seek(SeekFrom::End(-1)).is_ok() {
+            let mut last_byte = [0u8; 1];
+            if file.read_exact(&mut last_byte).is_ok() && last_byte[0] != b'\n' {
+                let _ = file.write_all(b"\n");
+            }
+        }
+    }
 
     file.write_all(host_keys.as_bytes())
         .map_err(|e| format!("Failed to write to known_hosts: {}", e))?;
@@ -1294,17 +1594,8 @@ pub fn add_ssh_known_host(host: &str) -> Result<GitOperationResult, String> {
 
 /// Execute git pull using the git command line (handles authentication properly)
 pub fn git_pull(repo_path: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
+    let output = git_network_cmd(Some(repo_path))
         .arg("pull")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env(
-            "GIT_SSH_COMMAND",
-            "ssh -o BatchMode=yes -o StrictHostKeyChecking=ask",
-        )
         .output()
         .map_err(|e| format!("Failed to execute git pull: {}", e))?;
 
@@ -1312,12 +1603,11 @@ pub fn git_pull(repo_path: &str) -> Result<GitOperationResult, String> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        let message =
-            if stdout.contains("Already up to date") || stdout.contains("Ya está actualizado") {
-                "Already up to date".to_string()
-            } else {
-                stdout.trim().to_string()
-            };
+        let message = if stdout.contains("Already up to date") {
+            "Already up to date".to_string()
+        } else {
+            stdout.trim().to_string()
+        };
         Ok(create_success_result(message))
     } else {
         Ok(create_error_result(&stderr, &stdout))
@@ -1326,17 +1616,8 @@ pub fn git_pull(repo_path: &str) -> Result<GitOperationResult, String> {
 
 /// Execute git push using the git command line (handles authentication properly)
 pub fn git_push(repo_path: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
+    let output = git_network_cmd(Some(repo_path))
         .arg("push")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env(
-            "GIT_SSH_COMMAND",
-            "ssh -o BatchMode=yes -o StrictHostKeyChecking=ask",
-        )
         .output()
         .map_err(|e| format!("Failed to execute git push: {}", e))?;
 
@@ -1345,14 +1626,13 @@ pub fn git_push(repo_path: &str) -> Result<GitOperationResult, String> {
 
     // Git push outputs to stderr even on success
     if output.status.success() {
-        let message =
-            if stderr.contains("Everything up-to-date") || stderr.contains("Todo actualizado") {
-                "Everything up-to-date".to_string()
-            } else if stdout.is_empty() && stderr.is_empty() {
-                "Push completed successfully".to_string()
-            } else {
-                format!("{}{}", stdout, stderr).trim().to_string()
-            };
+        let message = if stderr.contains("Everything up-to-date") {
+            "Everything up-to-date".to_string()
+        } else if stdout.is_empty() && stderr.is_empty() {
+            "Push completed successfully".to_string()
+        } else {
+            format!("{}{}", stdout, stderr).trim().to_string()
+        };
         Ok(create_success_result(message))
     } else {
         Ok(create_error_result(&stderr, &stdout))
@@ -1361,18 +1641,9 @@ pub fn git_push(repo_path: &str) -> Result<GitOperationResult, String> {
 
 /// Execute git fetch using the git command line
 pub fn git_fetch(repo_path: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
+    let output = git_network_cmd(Some(repo_path))
         .arg("fetch")
         .arg("--all")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env(
-            "GIT_SSH_COMMAND",
-            "ssh -o BatchMode=yes -o StrictHostKeyChecking=ask",
-        )
         .output()
         .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
 
@@ -1423,22 +1694,16 @@ pub fn git_fetch_with_options(
     repo_path: &str,
     options: FetchOptions,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo_path).arg("fetch");
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
-    cmd.env(
-        "GIT_SSH_COMMAND",
-        "ssh -o BatchMode=yes -o StrictHostKeyChecking=ask",
-    );
+    let mut cmd = git_network_cmd(Some(repo_path));
+    cmd.arg("fetch");
 
     if options.all {
         cmd.arg("--all");
     } else if let Some(remote) = &options.remote {
-        cmd.arg(remote);
+        validate_non_flag(remote, "remote")?;
+        cmd.arg("--").arg(remote);
     } else {
-        cmd.arg("origin");
+        cmd.arg("--").arg("origin");
     }
 
     let output = cmd
@@ -1465,20 +1730,15 @@ pub fn git_pull_with_options(
     repo_path: &str,
     options: PullOptions,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(&options.remote, "remote")?;
+    validate_non_flag(&options.branch, "branch")?;
 
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo_path).arg("pull");
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
-    cmd.env(
-        "GIT_SSH_COMMAND",
-        "ssh -o BatchMode=yes -o StrictHostKeyChecking=ask",
-    );
+    let mut cmd = git_network_cmd(Some(repo_path));
+    cmd.arg("pull");
 
     if options.rebase {
         cmd.arg("--rebase");
     } else {
-        // Explicitly tell git to merge (not rebase) when divergent branches exist
         cmd.arg("--no-rebase");
     }
 
@@ -1486,9 +1746,7 @@ pub fn git_pull_with_options(
         cmd.arg("--autostash");
     }
 
-    // Add remote and branch
-    cmd.arg(&options.remote);
-    cmd.arg(&options.branch);
+    cmd.arg("--").arg(&options.remote).arg(&options.branch);
 
     let output = cmd
         .output()
@@ -1498,12 +1756,11 @@ pub fn git_pull_with_options(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        let message =
-            if stdout.contains("Already up to date") || stdout.contains("Ya está actualizado") {
-                "Already up to date".to_string()
-            } else {
-                stdout.trim().to_string()
-            };
+        let message = if stdout.contains("Already up to date") {
+            "Already up to date".to_string()
+        } else {
+            stdout.trim().to_string()
+        };
         Ok(create_success_result(message))
     } else {
         Ok(create_error_result(&stderr, &stdout))
@@ -1515,15 +1772,12 @@ pub fn git_push_with_options(
     repo_path: &str,
     options: PushOptions,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(&options.remote, "remote")?;
+    validate_non_flag(&options.branch, "branch")?;
+    validate_non_flag(&options.remote_branch, "remote branch")?;
 
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo_path).arg("push");
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
-    cmd.env(
-        "GIT_SSH_COMMAND",
-        "ssh -o BatchMode=yes -o StrictHostKeyChecking=ask",
-    );
+    let mut cmd = git_network_cmd(Some(repo_path));
+    cmd.arg("push");
 
     if options.force_with_lease {
         cmd.arg("--force-with-lease");
@@ -1533,12 +1787,8 @@ pub fn git_push_with_options(
         cmd.arg("--tags");
     }
 
-    // Add remote
-    cmd.arg(&options.remote);
-
-    // Add branch:remote_branch refspec
     let refspec = format!("{}:{}", options.branch, options.remote_branch);
-    cmd.arg(&refspec);
+    cmd.arg("--").arg(&options.remote).arg(&refspec);
 
     let output = cmd
         .output()
@@ -1547,16 +1797,14 @@ pub fn git_push_with_options(
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-    // Git push outputs to stderr even on success
     if output.status.success() {
-        let message =
-            if stderr.contains("Everything up-to-date") || stderr.contains("Todo actualizado") {
-                "Everything up-to-date".to_string()
-            } else if stdout.is_empty() && stderr.is_empty() {
-                "Push completed successfully".to_string()
-            } else {
-                format!("{}{}", stdout, stderr).trim().to_string()
-            };
+        let message = if stderr.contains("Everything up-to-date") {
+            "Everything up-to-date".to_string()
+        } else if stdout.is_empty() && stderr.is_empty() {
+            "Push completed successfully".to_string()
+        } else {
+            format!("{}{}", stdout, stderr).trim().to_string()
+        };
         Ok(create_success_result(message))
     } else {
         Ok(create_error_result(&stderr, &stdout))
@@ -1579,8 +1827,17 @@ pub fn get_file_status_separated(
     let mut staged = Vec::new();
 
     for entry in statuses.iter() {
-        let path = entry.path().unwrap_or("").to_string();
+        let path = String::from_utf8_lossy(entry.path_bytes()).to_string();
         let status = entry.status();
+
+        if status.is_conflicted() {
+            unstaged.push(FileStatus {
+                path,
+                status: "conflicted".to_string(),
+                staged: false,
+            });
+            continue;
+        }
 
         // Check for staged changes (index changes)
         if status.is_index_new() {
@@ -1589,7 +1846,7 @@ pub fn get_file_status_separated(
                 status: "new".to_string(),
                 staged: true,
             });
-        } else if status.is_index_modified() {
+        } else if status.is_index_modified() || status.is_index_typechange() {
             staged.push(FileStatus {
                 path: path.clone(),
                 status: "modified".to_string(),
@@ -1612,25 +1869,25 @@ pub fn get_file_status_separated(
         // Check for unstaged changes (working tree changes)
         if status.is_wt_new() {
             unstaged.push(FileStatus {
-                path: path.clone(),
+                path,
                 status: "untracked".to_string(),
                 staged: false,
             });
-        } else if status.is_wt_modified() {
+        } else if status.is_wt_modified() || status.is_wt_typechange() {
             unstaged.push(FileStatus {
-                path: path.clone(),
+                path,
                 status: "modified".to_string(),
                 staged: false,
             });
         } else if status.is_wt_deleted() {
             unstaged.push(FileStatus {
-                path: path.clone(),
+                path,
                 status: "deleted".to_string(),
                 staged: false,
             });
         } else if status.is_wt_renamed() {
             unstaged.push(FileStatus {
-                path: path.clone(),
+                path,
                 status: "renamed".to_string(),
                 staged: false,
             });
@@ -1666,13 +1923,12 @@ pub fn get_last_commit_message(repo: &Repository) -> Result<CommitMessage, Strin
 
 /// Execute git checkout to switch branches
 pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(branch_name, "branch name")?;
 
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
+    let output = git_cmd(Some(repo_path))
         .arg("checkout")
         .arg(branch_name)
+        .arg("--")
         .output()
         .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
 
@@ -1680,9 +1936,7 @@ pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationRe
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        // Git checkout success messages often go to stderr
-        let message = if stderr.contains("Switched to branch") || stderr.contains("Cambiado a rama")
-        {
+        let message = if stderr.contains("Switched to branch") {
             stderr.trim().to_string()
         } else if !stdout.is_empty() {
             stdout.trim().to_string()
@@ -1691,32 +1945,29 @@ pub fn git_checkout(repo_path: &str, branch_name: &str) -> Result<GitOperationRe
         };
         Ok(create_success_result(message))
     } else {
-        // Common errors: uncommitted changes, branch doesn't exist
         Ok(create_error_result(&stderr, &stdout))
     }
 }
 
 /// Execute git checkout with automatic stash/pop for handling uncommitted changes
-/// This function:
-/// 1. Stashes current changes (including untracked files)
-/// 2. Checks out the target branch
-/// 3. Optionally pops the stash to restore changes
 pub fn git_checkout_with_stash(
     repo_path: &str,
     branch_name: &str,
     restore_changes: bool,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(branch_name, "branch name")?;
 
-    // Step 1: Stash all changes including untracked files
-    let stash_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("stash")
-        .arg("push")
-        .arg("-u")
-        .arg("-m")
-        .arg(format!("Auto-stash before switching to {}", branch_name))
+    // Record top stash OID before pushing so we never pop an unrelated older stash
+    let before_stash = top_stash_oid(repo_path);
+
+    let stash_output = git_cmd(Some(repo_path))
+        .args([
+            "stash",
+            "push",
+            "-u",
+            "-m",
+            &format!("Auto-stash before switching to {}", branch_name),
+        ])
         .output()
         .map_err(|e| format!("Failed to execute git stash: {}", e))?;
 
@@ -1732,29 +1983,32 @@ pub fn git_checkout_with_stash(
         });
     }
 
+    let after_stash = top_stash_oid(repo_path);
+    let created_stash = after_stash.is_some() && after_stash != before_stash;
+
     // Step 2: Checkout the target branch
-    let checkout_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
+    let checkout_output = git_cmd(Some(repo_path))
         .arg("checkout")
         .arg(branch_name)
+        .arg("--")
         .output()
         .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
 
     if !checkout_output.status.success() {
         let stderr = String::from_utf8_lossy(&checkout_output.stderr).to_string();
 
-        // Checkout failed, try to restore the stash
-        let _ = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("stash")
-            .arg("pop")
-            .output();
+        let rollback_note = if created_stash {
+            match git_cmd(Some(repo_path)).args(["stash", "pop"]).output() {
+                Ok(pop) if pop.status.success() => "stash restored",
+                _ => "failed to restore stash — your changes remain in stash@{0}",
+            }
+        } else {
+            "no stash created"
+        };
 
         return Ok(GitOperationResult {
             success: false,
-            message: format!("Checkout failed (stash restored): {}", stderr.trim()),
+            message: format!("Checkout failed ({}): {}", rollback_note, stderr.trim()),
             requires_ssh_verification: None,
             requires_credential: None,
             error_type: Some("checkout_failed".to_string()),
@@ -1762,19 +2016,15 @@ pub fn git_checkout_with_stash(
         });
     }
 
-    // Step 3: Optionally pop the stash to restore changes
-    if restore_changes {
-        let pop_output = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("stash")
-            .arg("pop")
+    // Step 3: Optionally pop the stash only if we actually created one
+    if restore_changes && created_stash {
+        let pop_output = git_cmd(Some(repo_path))
+            .args(["stash", "pop"])
             .output()
             .map_err(|e| format!("Failed to execute git stash pop: {}", e))?;
 
         if !pop_output.status.success() {
             let stderr = String::from_utf8_lossy(&pop_output.stderr).to_string();
-            // Checkout succeeded but pop failed - likely conflicts
             return Ok(GitOperationResult {
                 success: true,
                 message: format!(
@@ -1789,23 +2039,20 @@ pub fn git_checkout_with_stash(
             });
         }
 
-        Ok(GitOperationResult {
-            success: true,
-            message: format!("Switched to '{}' and restored changes", branch_name),
-            requires_ssh_verification: None,
-            requires_credential: None,
-            error_type: None,
-            conflicting_files: None,
-        })
+        Ok(create_success_result(format!(
+            "Switched to '{}' and restored changes",
+            branch_name
+        )))
+    } else if created_stash {
+        Ok(create_success_result(format!(
+            "Switched to '{}' (changes saved in stash)",
+            branch_name
+        )))
     } else {
-        Ok(GitOperationResult {
-            success: true,
-            message: format!("Switched to '{}' (changes saved in stash)", branch_name),
-            requires_ssh_verification: None,
-            requires_credential: None,
-            error_type: None,
-            conflicting_files: None,
-        })
+        Ok(create_success_result(format!(
+            "Switched to '{}'",
+            branch_name
+        )))
     }
 }
 
@@ -1815,17 +2062,11 @@ pub fn git_checkout_track(
     local_branch: &str,
     remote_branch: &str,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_git_ref(local_branch, "local branch")?;
+    validate_non_flag(remote_branch, "remote branch")?;
 
-    // git checkout -b <local_branch> --track <remote_branch>
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("checkout")
-        .arg("-b")
-        .arg(local_branch)
-        .arg("--track")
-        .arg(remote_branch)
+    let output = git_cmd(Some(repo_path))
+        .args(["checkout", "-b", local_branch, "--track", remote_branch])
         .output()
         .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
 
@@ -1833,7 +2074,7 @@ pub fn git_checkout_track(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        let message = if stderr.contains("Switched to") || stderr.contains("Cambiado a") {
+        let message = if stderr.contains("Switched to") {
             stderr.trim().to_string()
         } else if !stdout.is_empty() {
             stdout.trim().to_string()
@@ -1855,17 +2096,12 @@ pub fn git_commit(
     message: &str,
     amend: bool,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo_path).arg("commit");
-    cmd.arg("-m").arg(message);
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.arg("commit").arg("-m").arg(message);
 
     if amend {
         cmd.arg("--amend");
     }
-
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
 
     let output = cmd
         .output()
@@ -1875,9 +2111,7 @@ pub fn git_commit(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        // Parse commit info from output
         let message = if stdout.contains("create mode") || stdout.contains("delete mode") {
-            // Get first line which usually contains the commit summary
             stdout
                 .lines()
                 .next()
@@ -1900,19 +2134,11 @@ pub fn git_add_remote(
     name: &str,
     url: &str,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(name, "remote name")?;
+    validate_non_flag(url, "remote URL")?;
 
-    let mut cmd = Command::new("git");
-    cmd.arg("-C")
-        .arg(repo_path)
-        .arg("remote")
-        .arg("add")
-        .arg(name)
-        .arg(url);
-
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
-
-    let output = cmd
+    let output = git_cmd(Some(repo_path))
+        .args(["remote", "add", "--", name, url])
         .output()
         .map_err(|e| format!("Failed to execute git remote add: {}", e))?;
 
@@ -1931,50 +2157,38 @@ pub fn git_add_remote(
 
 /// Test connection to a remote URL using git ls-remote
 pub fn git_test_remote_connection(url: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(url, "remote URL")?;
 
-    let mut cmd = Command::new("git");
-    cmd.arg("ls-remote")
-        .arg("--exit-code")
-        .arg("--heads")
-        .arg(url);
-
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
-
-    // Set a timeout-like behavior by limiting refs
-    let output = cmd
+    let output = git_network_cmd(None)
+        .args(["ls-remote", "--exit-code", "--heads", "--", url])
         .output()
         .map_err(|e| format!("Failed to test connection: {}", e))?;
 
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
         Ok(create_success_result("Connection successful".to_string()))
     } else {
-        // Check for common errors
-        if stderr.contains("Host key verification failed") {
-            Ok(create_error_result(
-                "SSH host key verification failed. Add the host to known_hosts first.",
-                &stderr,
-            ))
-        } else if stderr.contains("Permission denied") || stderr.contains("Authentication failed") {
-            Ok(create_error_result(
-                "Authentication failed. Check your credentials.",
-                &stderr,
-            ))
-        } else if stderr.contains("Could not resolve host") {
-            Ok(create_error_result(
-                "Could not resolve host. Check the URL.",
-                &stderr,
-            ))
-        } else if stderr.contains("Connection refused") {
-            Ok(create_error_result(
-                "Connection refused. Check if the server is accessible.",
-                &stderr,
-            ))
-        } else {
-            Ok(create_error_result("Could not connect to remote", &stderr))
+        // Parse SSH verification/credentials from real stderr first
+        let mut res = create_error_result(&stderr, &stdout);
+        if res.requires_ssh_verification.is_some() || res.requires_credential.is_some() {
+            return Ok(res);
         }
+        res.message = if stderr.contains("Host key verification failed") {
+            "SSH host key verification failed. Add the host to known_hosts first.".to_string()
+        } else if stderr.contains("Permission denied") || stderr.contains("Authentication failed") {
+            "Authentication failed. Check your credentials.".to_string()
+        } else if stderr.contains("Could not resolve host") {
+            "Could not resolve host. Check the URL.".to_string()
+        } else if stderr.contains("Connection refused") {
+            "Connection refused. Check if the server is accessible.".to_string()
+        } else if res.message.is_empty() {
+            "Could not connect to remote".to_string()
+        } else {
+            res.message
+        };
+        Ok(res)
     }
 }
 
@@ -1985,17 +2199,12 @@ pub fn git_create_branch(
     start_point: &str,
     checkout: bool,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_git_ref(branch_name, "branch name")?;
+    validate_non_flag(start_point, "start point")?;
 
     if checkout {
-        // git checkout -b <branch_name> <start_point>
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("checkout")
-            .arg("-b")
-            .arg(branch_name)
-            .arg(start_point)
+        let output = git_cmd(Some(repo_path))
+            .args(["checkout", "-b", branch_name, start_point, "--"])
             .output()
             .map_err(|e| format!("Failed to execute git checkout -b: {}", e))?;
 
@@ -2003,7 +2212,7 @@ pub fn git_create_branch(
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         if output.status.success() {
-            let message = if stderr.contains("Switched to") || stderr.contains("Cambiado a") {
+            let message = if stderr.contains("Switched to") {
                 stderr.trim().to_string()
             } else if !stdout.is_empty() {
                 stdout.trim().to_string()
@@ -2015,13 +2224,8 @@ pub fn git_create_branch(
             Ok(create_error_result(&stderr, &stdout))
         }
     } else {
-        // git branch <branch_name> <start_point>
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("branch")
-            .arg(branch_name)
-            .arg(start_point)
+        let output = git_cmd(Some(repo_path))
+            .args(["branch", "--", branch_name, start_point])
             .output()
             .map_err(|e| format!("Failed to execute git branch: {}", e))?;
 
@@ -2040,8 +2244,6 @@ pub fn git_create_branch(
 }
 
 /// Creates a new tag at the specified commit/branch
-/// If message is provided, creates an annotated tag; otherwise creates a lightweight tag
-/// If push_to_remotes is true, pushes the tag to all remotes
 pub fn git_create_tag(
     repo_path: &str,
     tag_name: &str,
@@ -2049,45 +2251,19 @@ pub fn git_create_tag(
     message: Option<&str>,
     push_to_remotes: bool,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_git_ref(tag_name, "tag name")?;
+    validate_non_flag(start_point, "start point")?;
 
-    // Create the tag
-    let output = if let Some(msg) = message {
-        if msg.trim().is_empty() {
-            // Lightweight tag
-            Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("tag")
-                .arg(tag_name)
-                .arg(start_point)
-                .output()
-                .map_err(|e| format!("Failed to execute git tag: {}", e))?
-        } else {
-            // Annotated tag with message
-            Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("tag")
-                .arg("-a")
-                .arg(tag_name)
-                .arg(start_point)
-                .arg("-m")
-                .arg(msg)
-                .output()
-                .map_err(|e| format!("Failed to execute git tag -a: {}", e))?
-        }
-    } else {
-        // Lightweight tag
-        Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("tag")
-            .arg(tag_name)
-            .arg(start_point)
-            .output()
-            .map_err(|e| format!("Failed to execute git tag: {}", e))?
-    };
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.arg("tag");
+    if let Some(msg) = message.filter(|m| !m.trim().is_empty()) {
+        cmd.arg("-a").arg("-m").arg(msg);
+    }
+    cmd.arg("--").arg(tag_name).arg(start_point);
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute git tag: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -2096,17 +2272,15 @@ pub fn git_create_tag(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // If push_to_remotes is true, push the tag to all remotes
+    // Push only the newly created tag (not unrelated local tags)
     if push_to_remotes {
-        let push_output = Command::new("git")
-            .arg("-C")
-            .arg(repo_path)
-            .arg("push")
-            .arg("--tags")
+        let tag_ref = format!("refs/tags/{}", tag_name);
+        let push_output = git_network_cmd(Some(repo_path))
+            .args(["push", "origin", "--", &tag_ref])
             .output()
-            .map_err(|e| format!("Failed to execute git push --tags: {}", e))?;
+            .map_err(|e| format!("Failed to execute git push tag: {}", e))?;
 
-        let _push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
+        let push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
         let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
 
         if push_output.status.success() {
@@ -2115,27 +2289,23 @@ pub fn git_create_tag(
                 tag_name
             )))
         } else {
-            // Tag was created but push failed
-            Ok(GitOperationResult {
-                success: false,
-                message: format!(
+            let mut res = create_error_result(&push_stderr, &push_stdout);
+            if res.requires_ssh_verification.is_none() && res.requires_credential.is_none() {
+                res.message = format!(
                     "Tag '{}' created but push failed: {}",
                     tag_name,
-                    push_stderr.trim()
-                ),
-                requires_ssh_verification: None,
-                requires_credential: None,
-                error_type: Some("push_failed".to_string()),
-                conflicting_files: None,
-            })
+                    res.message
+                );
+                res.error_type = Some("push_failed".to_string());
+            }
+            Ok(res)
         }
     } else {
         Ok(create_success_result(format!("Tag '{}' created", tag_name)))
     }
 }
 
-/// Renames a local branch
-/// If rename_remote is true and the branch has an upstream, also renames the remote branch
+/// Renames a local branch (and optionally the remote branch)
 pub fn git_rename_branch(
     repo_path: &str,
     old_name: &str,
@@ -2143,16 +2313,11 @@ pub fn git_rename_branch(
     rename_remote: bool,
     remote_name: Option<&str>,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(old_name, "old branch name")?;
+    validate_git_ref(new_name, "new branch name")?;
 
-    // Rename local branch: git branch -m old_name new_name
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("branch")
-        .arg("-m")
-        .arg(old_name)
-        .arg(new_name)
+    let output = git_cmd(Some(repo_path))
+        .args(["branch", "-m", "--", old_name, new_name])
         .output()
         .map_err(|e| format!("Failed to execute git branch -m: {}", e))?;
 
@@ -2163,42 +2328,31 @@ pub fn git_rename_branch(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // If rename_remote is true and we have a remote name, also rename on remote
     if rename_remote {
         if let Some(remote) = remote_name {
-            // Push the new branch name to remote
-            let push_output = Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("push")
-                .arg(remote)
-                .arg(new_name)
+            validate_non_flag(remote, "remote")?;
+
+            let push_output = git_network_cmd(Some(repo_path))
+                .args(["push", "--", remote, new_name])
                 .output()
                 .map_err(|e| format!("Failed to push new branch: {}", e))?;
 
             if !push_output.status.success() {
                 let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
-                return Ok(GitOperationResult {
-                    success: false,
-                    message: format!(
+                let push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
+                let mut res = create_error_result(&push_stderr, &push_stdout);
+                if res.requires_ssh_verification.is_none() && res.requires_credential.is_none() {
+                    res.message = format!(
                         "Local branch renamed but failed to push to remote: {}",
-                        push_stderr.trim()
-                    ),
-                    requires_ssh_verification: None,
-                    requires_credential: None,
-                    error_type: Some("push_failed".to_string()),
-                    conflicting_files: None,
-                });
+                        res.message
+                    );
+                    res.error_type = Some("push_failed".to_string());
+                }
+                return Ok(res);
             }
 
-            // Delete the old branch from remote
-            let delete_output = Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("push")
-                .arg(remote)
-                .arg("--delete")
-                .arg(old_name)
+            let delete_output = git_network_cmd(Some(repo_path))
+                .args(["push", "--delete", "--", remote, old_name])
                 .output()
                 .map_err(|e| format!("Failed to delete old remote branch: {}", e))?;
 
@@ -2217,14 +2371,8 @@ pub fn git_rename_branch(
                 });
             }
 
-            // Set upstream for the new branch
-            let upstream_output = Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("branch")
-                .arg("-u")
-                .arg(format!("{}/{}", remote, new_name))
-                .arg(new_name)
+            let upstream_output = git_cmd(Some(repo_path))
+                .args(["branch", "-u", &format!("{}/{}", remote, new_name), "--", new_name])
                 .output()
                 .map_err(|e| format!("Failed to set upstream: {}", e))?;
 
@@ -2234,7 +2382,6 @@ pub fn git_rename_branch(
                     old_name, new_name
                 )))
             } else {
-                // Upstream setting failed but main operation succeeded
                 Ok(create_success_result(format!(
                     "Branch renamed from '{}' to '{}' (upstream may need manual setup)",
                     old_name, new_name
@@ -2254,9 +2401,7 @@ pub fn git_rename_branch(
     }
 }
 
-/// Deletes a local branch
-/// If force is true, uses -D (force delete), otherwise uses -d (safe delete)
-/// If delete_remote is true and remote_name is provided, also deletes the remote branch
+/// Deletes a local branch (and optionally the remote branch)
 pub fn git_delete_branch(
     repo_path: &str,
     branch_name: &str,
@@ -2264,16 +2409,11 @@ pub fn git_delete_branch(
     delete_remote: bool,
     remote_name: Option<&str>,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(branch_name, "branch name")?;
 
-    // Delete local branch: git branch -d/-D branch_name
     let delete_flag = if force { "-D" } else { "-d" };
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("branch")
-        .arg(delete_flag)
-        .arg(branch_name)
+    let output = git_cmd(Some(repo_path))
+        .args(["branch", delete_flag, "--", branch_name])
         .output()
         .map_err(|e| format!("Failed to execute git branch {}: {}", delete_flag, e))?;
 
@@ -2281,7 +2421,6 @@ pub fn git_delete_branch(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check if it's an unmerged branch error
         if stderr.contains("not fully merged") {
             return Ok(GitOperationResult {
                 success: false,
@@ -2298,32 +2437,26 @@ pub fn git_delete_branch(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // If delete_remote is true and we have a remote name, also delete on remote
     if delete_remote {
         if let Some(remote) = remote_name {
-            let push_output = Command::new("git")
-                .arg("-C")
-                .arg(repo_path)
-                .arg("push")
-                .arg(remote)
-                .arg("--delete")
-                .arg(branch_name)
+            validate_non_flag(remote, "remote")?;
+            let push_output = git_network_cmd(Some(repo_path))
+                .args(["push", "--delete", "--", remote, branch_name])
                 .output()
                 .map_err(|e| format!("Failed to delete remote branch: {}", e))?;
 
             if !push_output.status.success() {
                 let push_stderr = String::from_utf8_lossy(&push_output.stderr).to_string();
-                return Ok(GitOperationResult {
-                    success: false,
-                    message: format!(
+                let push_stdout = String::from_utf8_lossy(&push_output.stdout).to_string();
+                let mut res = create_error_result(&push_stderr, &push_stdout);
+                if res.requires_ssh_verification.is_none() && res.requires_credential.is_none() {
+                    res.message = format!(
                         "Local branch deleted but failed to delete remote branch: {}",
-                        push_stderr.trim()
-                    ),
-                    requires_ssh_verification: None,
-                    requires_credential: None,
-                    error_type: Some("delete_remote_failed".to_string()),
-                    conflicting_files: None,
-                });
+                        res.message
+                    );
+                    res.error_type = Some("delete_remote_failed".to_string());
+                }
+                return Ok(res);
             }
 
             Ok(create_success_result(format!(
@@ -2349,16 +2482,9 @@ pub fn git_delete_branch(
 // ============================================================================
 
 pub fn get_stashes(repo_path: &str) -> Result<Vec<StashInfo>, String> {
-    use std::process::Command;
-
-    // Use git stash list with custom format to get structured data
-    // Format: index|ref|message|timestamp
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("stash")
-        .arg("list")
-        .arg("--format=%gd|%gs|%ct")
+    // Use ASCII unit separator (%x1f) so '|' in stash messages never truncates fields
+    let output = git_cmd(Some(repo_path))
+        .args(["stash", "list", "--format=%gd%x1f%gs%x1f%ct"])
         .output()
         .map_err(|e| format!("Failed to list stashes: {}", e))?;
 
@@ -2371,13 +2497,11 @@ pub fn get_stashes(repo_path: &str) -> Result<Vec<StashInfo>, String> {
     let mut stashes = Vec::new();
 
     for (index, line) in stdout.lines().enumerate() {
-        let parts: Vec<&str> = line.split('|').collect();
+        let parts: Vec<&str> = line.split('\x1f').collect();
         if parts.len() >= 3 {
-            let id = parts[0].to_string(); // e.g., "stash@{0}"
-            let message = parts[1].to_string(); // e.g., "WIP on main: abc1234 commit message"
+            let id = parts[0].to_string();
+            let message = parts[1].to_string();
             let timestamp: i64 = parts[2].parse().unwrap_or(0);
-
-            // Extract branch name from message (format: "WIP on branch: ..." or "On branch: ...")
             let branch = extract_branch_from_stash_message(&message);
 
             stashes.push(StashInfo {
@@ -2394,10 +2518,6 @@ pub fn get_stashes(repo_path: &str) -> Result<Vec<StashInfo>, String> {
 }
 
 fn extract_branch_from_stash_message(message: &str) -> String {
-    // Stash messages typically look like:
-    // "WIP on main: abc1234 commit message"
-    // "On main: custom message"
-    // "index on main: abc1234 commit message"
     if let Some(rest) = message.strip_prefix("WIP on ") {
         if let Some(colon_pos) = rest.find(':') {
             return rest[..colon_pos].to_string();
@@ -2422,10 +2542,10 @@ pub fn git_stash_save(
     include_untracked: bool,
     keep_index: bool,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    let before_stash = top_stash_oid(repo_path);
 
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo_path).arg("stash").arg("push");
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.args(["stash", "push"]);
 
     if include_untracked {
         cmd.arg("-u");
@@ -2448,21 +2568,31 @@ pub fn git_stash_save(
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
+    if stderr.contains("No local changes to save") || stdout.contains("No local changes to save") {
+        return Ok(GitOperationResult {
+            success: false,
+            message: "No local changes to save".to_string(),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: Some("no_changes".to_string()),
+            conflicting_files: None,
+        });
+    }
+
     if !output.status.success() {
-        // Check if there are no changes to stash
-        if stderr.contains("No local changes to save")
-            || stdout.contains("No local changes to save")
-        {
-            return Ok(GitOperationResult {
-                success: false,
-                message: "No local changes to save".to_string(),
-                requires_ssh_verification: None,
-                requires_credential: None,
-                error_type: Some("no_changes".to_string()),
-                conflicting_files: None,
-            });
-        }
         return Ok(create_error_result(&stderr, &stdout));
+    }
+
+    let after_stash = top_stash_oid(repo_path);
+    if after_stash == before_stash {
+        return Ok(GitOperationResult {
+            success: false,
+            message: "No local changes to save".to_string(),
+            requires_ssh_verification: None,
+            requires_credential: None,
+            error_type: Some("no_changes".to_string()),
+            conflicting_files: None,
+        });
     }
 
     Ok(create_success_result(
@@ -2471,16 +2601,10 @@ pub fn git_stash_save(
 }
 
 pub fn git_stash_apply(repo_path: &str, stash_index: usize) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
     let stash_ref = format!("stash@{{{}}}", stash_index);
 
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("stash")
-        .arg("apply")
-        .arg(&stash_ref)
+    let output = git_cmd(Some(repo_path))
+        .args(["stash", "apply", &stash_ref])
         .output()
         .map_err(|e| format!("Failed to apply stash: {}", e))?;
 
@@ -2488,18 +2612,17 @@ pub fn git_stash_apply(repo_path: &str, stash_index: usize) -> Result<GitOperati
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check for conflicts
         if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
             return Ok(GitOperationResult {
                 success: false,
                 message: format!(
                     "Stash applied with conflicts. Resolve conflicts and commit.\n{}",
-                    stderr.trim()
+                    if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() }
                 ),
                 requires_ssh_verification: None,
                 requires_credential: None,
                 error_type: Some("conflicts".to_string()),
-                conflicting_files: None,
+                conflicting_files: Some(get_unmerged_files(repo_path)),
             });
         }
         return Ok(create_error_result(&stderr, &stdout));
@@ -2511,16 +2634,10 @@ pub fn git_stash_apply(repo_path: &str, stash_index: usize) -> Result<GitOperati
 }
 
 pub fn git_stash_pop(repo_path: &str, stash_index: usize) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
     let stash_ref = format!("stash@{{{}}}", stash_index);
 
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("stash")
-        .arg("pop")
-        .arg(&stash_ref)
+    let output = git_cmd(Some(repo_path))
+        .args(["stash", "pop", &stash_ref])
         .output()
         .map_err(|e| format!("Failed to pop stash: {}", e))?;
 
@@ -2528,15 +2645,17 @@ pub fn git_stash_pop(repo_path: &str, stash_index: usize) -> Result<GitOperation
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check for conflicts
         if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
             return Ok(GitOperationResult {
                 success: false,
-                message: format!("Stash popped with conflicts. Resolve conflicts and commit. The stash was not dropped.\n{}", stderr.trim()),
+                message: format!(
+                    "Stash popped with conflicts. Resolve conflicts and commit. The stash was not dropped.\n{}",
+                    if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() }
+                ),
                 requires_ssh_verification: None,
                 requires_credential: None,
                 error_type: Some("conflicts".to_string()),
-                conflicting_files: None,
+                conflicting_files: Some(get_unmerged_files(repo_path)),
             });
         }
         return Ok(create_error_result(&stderr, &stdout));
@@ -2548,16 +2667,10 @@ pub fn git_stash_pop(repo_path: &str, stash_index: usize) -> Result<GitOperation
 }
 
 pub fn git_stash_drop(repo_path: &str, stash_index: usize) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
     let stash_ref = format!("stash@{{{}}}", stash_index);
 
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("stash")
-        .arg("drop")
-        .arg(&stash_ref)
+    let output = git_cmd(Some(repo_path))
+        .args(["stash", "drop", &stash_ref])
         .output()
         .map_err(|e| format!("Failed to drop stash: {}", e))?;
 
@@ -2612,7 +2725,7 @@ pub fn get_image_content(repo: &Repository, file_path: &str) -> Result<ImageCont
     use base64::{engine::general_purpose::STANDARD, Engine as _};
 
     let workdir = repo.workdir().ok_or("No working directory")?;
-    let full_path = workdir.join(file_path);
+    let full_path = resolve_repo_path(workdir, file_path)?;
 
     if !full_path.exists() {
         return Err(format!("File does not exist: {}", file_path));
@@ -2698,127 +2811,73 @@ pub struct MergePreview {
     pub conflicting_files: Vec<String>,
 }
 
-/// Get a preview of what a merge would look like without actually performing it
+/// Get a preview of what a merge would look like without modifying the working tree (in-process via git2)
 pub fn get_merge_preview(repo_path: &str, source_branch: &str) -> Result<MergePreview, String> {
-    use std::process::Command;
+    validate_non_flag(source_branch, "source branch")?;
 
-    // Get current branch name
-    let head_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("rev-parse")
-        .arg("--abbrev-ref")
-        .arg("HEAD")
-        .output()
-        .map_err(|e| format!("Failed to get current branch: {}", e))?;
+    let repo = open_repository(repo_path)?;
+    let head = repo
+        .head()
+        .map_err(|e| format!("Failed to get current branch: {}", e.message()))?;
+    let target_branch = head.shorthand().unwrap_or("HEAD").to_string();
+    let head_commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("Failed to resolve HEAD commit: {}", e.message()))?;
 
-    let target_branch = String::from_utf8_lossy(&head_output.stdout)
-        .trim()
-        .to_string();
+    let source_commit = repo
+        .revparse_single(source_branch)
+        .and_then(|o| o.peel_to_commit())
+        .map_err(|e| format!("Failed to resolve '{}': {}", source_branch, e.message()))?;
 
-    // Get merge base (common ancestor)
-    let merge_base_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("merge-base")
-        .arg("HEAD")
-        .arg(source_branch)
-        .output()
-        .map_err(|e| format!("Failed to find merge base: {}", e))?;
+    let merge_base_oid = repo
+        .merge_base(head_commit.id(), source_commit.id())
+        .map_err(|_| {
+            format!(
+                "Cannot find common ancestor between HEAD and '{}'. Are they related?",
+                source_branch
+            )
+        })?;
 
-    if !merge_base_output.status.success() {
-        return Err(format!(
-            "Cannot find common ancestor between HEAD and '{}'. Are they related?",
-            source_branch
-        ));
-    }
+    let (commits_ahead, _) = repo
+        .graph_ahead_behind(source_commit.id(), head_commit.id())
+        .map_err(|e| format!("Failed to count commits: {}", e.message()))?;
 
-    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
-        .trim()
-        .to_string();
+    let can_fast_forward = head_commit.id() == merge_base_oid;
 
-    // Count commits ahead (commits in source_branch not in HEAD)
-    let ahead_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("rev-list")
-        .arg("--count")
-        .arg(format!("{}..{}", merge_base, source_branch))
-        .output()
-        .map_err(|e| format!("Failed to count commits: {}", e))?;
+    let base_tree = repo
+        .find_commit(merge_base_oid)
+        .and_then(|c| c.tree())
+        .map_err(|e| format!("Failed to get merge base tree: {}", e.message()))?;
+    let our_tree = head_commit
+        .tree()
+        .map_err(|e| format!("Failed to get HEAD tree: {}", e.message()))?;
+    let their_tree = source_commit
+        .tree()
+        .map_err(|e| format!("Failed to get source tree: {}", e.message()))?;
 
-    let commits_ahead: usize = String::from_utf8_lossy(&ahead_output.stdout)
-        .trim()
-        .parse()
-        .unwrap_or(0);
+    let merge_index = repo
+        .merge_trees(&base_tree, &our_tree, &their_tree, None)
+        .map_err(|e| format!("Failed to simulate merge: {}", e.message()))?;
 
-    // Check if can fast-forward (HEAD is at merge base)
-    let head_sha_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("rev-parse")
-        .arg("HEAD")
-        .output()
-        .map_err(|e| format!("Failed to get HEAD: {}", e))?;
-
-    let head_sha = String::from_utf8_lossy(&head_sha_output.stdout)
-        .trim()
-        .to_string();
-    let can_fast_forward = head_sha == merge_base;
-
-    // Check for conflicts using git merge-tree (doesn't modify working directory)
-    let source_sha_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("rev-parse")
-        .arg(source_branch)
-        .output()
-        .map_err(|e| format!("Failed to get source branch SHA: {}", e))?;
-
-    let source_sha = String::from_utf8_lossy(&source_sha_output.stdout)
-        .trim()
-        .to_string();
-
-    // Use git merge-tree to detect conflicts without modifying working tree
-    let merge_tree_output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("merge-tree")
-        .arg(&merge_base)
-        .arg(&head_sha)
-        .arg(&source_sha)
-        .output()
-        .map_err(|e| format!("Failed to run merge-tree: {}", e))?;
-
-    let merge_tree_result = String::from_utf8_lossy(&merge_tree_output.stdout).to_string();
-
-    // Parse conflicts from merge-tree output
+    let mut seen = std::collections::HashSet::new();
     let mut conflicting_files = Vec::new();
-    let has_conflicts = merge_tree_result.contains("<<<<<<<")
-        || merge_tree_result.contains("changed in both")
-        || merge_tree_result.contains("added in both");
+    let has_conflicts = merge_index.has_conflicts();
 
     if has_conflicts {
-        // Extract file paths from merge-tree output
-        // When there's a conflict, merge-tree outputs markers followed by file info
-        let mut in_conflict_section = false;
-        for line in merge_tree_result.lines() {
-            if line.contains("changed in both") || line.contains("added in both") {
-                in_conflict_section = true;
-                continue;
-            }
-            if in_conflict_section && line.starts_with("  ") {
-                // Lines with file info have format: "  base   100644 <sha> <path>"
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 4 {
-                    let path = parts[3..].join(" ");
-                    if !path.is_empty() && !conflicting_files.contains(&path) {
+        if let Ok(conflicts) = merge_index.conflicts() {
+            for conflict in conflicts.flatten() {
+                let path_bytes = conflict
+                    .our
+                    .as_ref()
+                    .or(conflict.their.as_ref())
+                    .or(conflict.ancestor.as_ref())
+                    .map(|entry| entry.path.as_slice());
+                if let Some(bytes) = path_bytes {
+                    let path = String::from_utf8_lossy(bytes).to_string();
+                    if !path.is_empty() && seen.insert(path.clone()) {
                         conflicting_files.push(path);
                     }
                 }
-            }
-            if line.is_empty() {
-                in_conflict_section = false;
             }
         }
     }
@@ -2839,10 +2898,10 @@ pub fn git_merge(
     source_branch: &str,
     merge_type: &str,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(source_branch, "source branch")?;
 
-    let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(repo_path).arg("merge");
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.arg("merge");
 
     match merge_type {
         "no-ff" => {
@@ -2851,11 +2910,10 @@ pub fn git_merge(
         "squash" => {
             cmd.arg("--squash");
         }
-        // "default" - no extra flags, allows fast-forward
         _ => {}
     }
 
-    cmd.arg(source_branch);
+    cmd.arg("--").arg(source_branch);
 
     let output = cmd
         .output()
@@ -2865,15 +2923,12 @@ pub fn git_merge(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check for conflicts
         if stdout.contains("CONFLICT")
             || stderr.contains("CONFLICT")
             || stdout.contains("Automatic merge failed")
             || stderr.contains("Automatic merge failed")
         {
-            // Extract conflicting files
-            let mut conflicting_files = extract_conflicting_files(&stdout);
-            conflicting_files.extend(extract_conflicting_files(&stderr));
+            let conflicting_files = get_unmerged_files(repo_path);
 
             return Ok(GitOperationResult {
                 success: false,
@@ -2896,19 +2951,11 @@ pub fn git_merge(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // For squash merges, remind user to commit
     if merge_type == "squash" {
-        return Ok(GitOperationResult {
-            success: true,
-            message: format!(
-                "Squash merge completed. Changes are staged but not committed.\n{}",
-                stdout.trim()
-            ),
-            requires_ssh_verification: None,
-            requires_credential: None,
-            error_type: None,
-            conflicting_files: None,
-        });
+        return Ok(create_success_result(format!(
+            "Squash merge completed. Changes are staged but not committed.\n{}",
+            stdout.trim()
+        )));
     }
 
     Ok(create_success_result(format!(
@@ -2919,13 +2966,8 @@ pub fn git_merge(
 
 /// Abort an in-progress merge
 pub fn git_merge_abort(repo_path: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("merge")
-        .arg("--abort")
+    let output = git_cmd(Some(repo_path))
+        .args(["merge", "--abort"])
         .output()
         .map_err(|e| format!("Failed to abort merge: {}", e))?;
 
@@ -2968,54 +3010,27 @@ pub struct RebaseOptions {
     pub autostash: bool,
 }
 
-/// Get a preview of the rebase operation
+/// Get a preview of the rebase operation (in-process via git2)
 pub fn get_rebase_preview(repo_path: &str, target_branch: &str) -> Result<RebasePreview, String> {
-    use std::process::Command;
+    validate_non_flag(target_branch, "target branch")?;
 
-    // Get current branch name
-    let output = Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| format!("Failed to get current branch: {}", e))?;
+    let repo = open_repository(repo_path)?;
+    let head = repo
+        .head()
+        .map_err(|e| format!("Failed to get current branch: {}", e.message()))?;
+    let source_branch = head.shorthand().unwrap_or("HEAD").to_string();
+    let head_commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("Failed to resolve HEAD: {}", e.message()))?;
 
-    if !output.status.success() {
-        return Err("Failed to get current branch".to_string());
-    }
+    let target_commit = repo
+        .revparse_single(target_branch)
+        .and_then(|o| o.peel_to_commit())
+        .map_err(|_| format!("Failed to find common ancestor with '{}'", target_branch))?;
 
-    let source_branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    // Get merge base
-    let output = Command::new("git")
-        .args(["merge-base", "HEAD", target_branch])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| format!("Failed to get merge base: {}", e))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Failed to find common ancestor with '{}'",
-            target_branch
-        ));
-    }
-
-    let merge_base = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    // Count commits to rebase (commits in current branch that are not in target)
-    let output = Command::new("git")
-        .args(["rev-list", "--count", &format!("{}..HEAD", merge_base)])
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| format!("Failed to count commits: {}", e))?;
-
-    let commits_to_rebase = if output.status.success() {
-        String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse::<usize>()
-            .unwrap_or(0)
-    } else {
-        0
-    };
+    let (commits_to_rebase, _) = repo
+        .graph_ahead_behind(head_commit.id(), target_commit.id())
+        .map_err(|_| format!("Failed to find common ancestor with '{}'", target_branch))?;
 
     Ok(RebasePreview {
         source_branch,
@@ -3030,23 +3045,22 @@ pub fn git_rebase(
     target_branch: &str,
     options: RebaseOptions,
 ) -> Result<GitOperationResult, String> {
-    use std::process::Command;
+    validate_non_flag(target_branch, "target branch")?;
 
-    let mut args = vec!["rebase".to_string()];
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.arg("rebase");
 
     if options.preserve_merges {
-        args.push("--rebase-merges".to_string());
+        cmd.arg("--rebase-merges");
     }
 
     if options.autostash {
-        args.push("--autostash".to_string());
+        cmd.arg("--autostash");
     }
 
-    args.push(target_branch.to_string());
+    cmd.arg("--").arg(target_branch);
 
-    let output = Command::new("git")
-        .args(&args)
-        .current_dir(repo_path)
+    let output = cmd
         .output()
         .map_err(|e| format!("Failed to execute git rebase: {}", e))?;
 
@@ -3054,30 +3068,16 @@ pub fn git_rebase(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check for conflicts
         if stderr.contains("CONFLICT")
             || stderr.contains("conflict")
             || stdout.contains("CONFLICT")
             || stdout.contains("could not apply")
         {
-            // Get list of conflicting files
-            let status_output = Command::new("git")
-                .args(["diff", "--name-only", "--diff-filter=U"])
-                .current_dir(repo_path)
-                .output();
-
-            let conflicting_files = if let Ok(status) = status_output {
-                String::from_utf8_lossy(&status.stdout)
-                    .lines()
-                    .map(|s| s.to_string())
-                    .collect()
-            } else {
-                vec![]
-            };
+            let conflicting_files = get_unmerged_files(repo_path);
 
             return Ok(GitOperationResult {
                 success: false,
-                message: format!("Rebase conflicts detected. Please resolve conflicts and run 'git rebase --continue'."),
+                message: "Rebase conflicts detected. Please resolve conflicts and run 'git rebase --continue'.".to_string(),
                 requires_ssh_verification: None,
                 requires_credential: None,
                 error_type: Some("rebase_conflicts".to_string()),
@@ -3088,16 +3088,10 @@ pub fn git_rebase(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // Check if rebase resulted in "Already up to date" or similar
     if stdout.contains("is up to date") || stdout.contains("Already applied") {
-        return Ok(GitOperationResult {
-            success: true,
-            message: "Already up to date, nothing to rebase.".to_string(),
-            requires_ssh_verification: None,
-            requires_credential: None,
-            error_type: None,
-            conflicting_files: None,
-        });
+        return Ok(create_success_result(
+            "Already up to date, nothing to rebase.".to_string(),
+        ));
     }
 
     Ok(create_success_result(format!(
@@ -3108,11 +3102,8 @@ pub fn git_rebase(
 
 /// Abort a rebase in progress
 pub fn git_rebase_abort(repo_path: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
+    let output = git_cmd(Some(repo_path))
         .args(["rebase", "--abort"])
-        .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to execute git rebase --abort: {}", e))?;
 
@@ -3120,7 +3111,6 @@ pub fn git_rebase_abort(repo_path: &str) -> Result<GitOperationResult, String> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check if there's no rebase in progress
         if stderr.contains("No rebase in progress") || stderr.contains("no rebase in progress") {
             return Ok(GitOperationResult {
                 success: false,
@@ -3141,12 +3131,9 @@ pub fn git_rebase_abort(repo_path: &str) -> Result<GitOperationResult, String> {
 
 /// Continue a rebase after resolving conflicts
 pub fn git_rebase_continue(repo_path: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
+    let output = git_cmd(Some(repo_path))
         .args(["rebase", "--continue"])
-        .current_dir(repo_path)
-        .env("GIT_EDITOR", "true") // Skip editor for commit messages
+        .env("GIT_EDITOR", "true")
         .output()
         .map_err(|e| format!("Failed to execute git rebase --continue: {}", e))?;
 
@@ -3154,19 +3141,21 @@ pub fn git_rebase_continue(repo_path: &str) -> Result<GitOperationResult, String
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check if there are still conflicts
-        if stderr.contains("CONFLICT") || stderr.contains("conflict") {
+        if stderr.contains("CONFLICT")
+            || stderr.contains("conflict")
+            || stdout.contains("CONFLICT")
+            || stdout.contains("conflict")
+        {
             return Ok(GitOperationResult {
                 success: false,
                 message: "There are still unresolved conflicts.".to_string(),
                 requires_ssh_verification: None,
                 requires_credential: None,
                 error_type: Some("rebase_conflicts".to_string()),
-                conflicting_files: None,
+                conflicting_files: Some(get_unmerged_files(repo_path)),
             });
         }
 
-        // Check if there's no rebase in progress
         if stderr.contains("No rebase in progress") || stderr.contains("no rebase in progress") {
             return Ok(GitOperationResult {
                 success: false,
@@ -3227,12 +3216,10 @@ pub fn get_interactive_rebase_commits(
     repo_path: &str,
     target_branch: &str,
 ) -> Result<Vec<InteractiveRebaseEntry>, String> {
-    use std::process::Command;
+    validate_non_flag(target_branch, "target branch")?;
 
-    // Get merge base between HEAD and target
-    let merge_base_output = Command::new("git")
+    let merge_base_output = git_cmd(Some(repo_path))
         .args(["merge-base", "HEAD", target_branch])
-        .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to get merge base: {}", e))?;
 
@@ -3244,15 +3231,14 @@ pub fn get_interactive_rebase_commits(
         .trim()
         .to_string();
 
-    // Get commits between merge base and HEAD in reverse order (oldest first, like git rebase -i shows)
-    let log_output = Command::new("git")
+    // Use ASCII unit separator (%x1f) so '|' in subjects/authors never corrupts fields
+    let log_output = git_cmd(Some(repo_path))
         .args([
             "log",
             "--reverse",
-            "--format=%H|%h|%s|%an|%aI",
+            "--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI",
             &format!("{}..HEAD", merge_base),
         ])
-        .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to get commits: {}", e))?;
 
@@ -3265,7 +3251,7 @@ pub fn get_interactive_rebase_commits(
     let mut entries = Vec::new();
 
     for line in stdout.lines() {
-        let parts: Vec<&str> = line.splitn(5, '|').collect();
+        let parts: Vec<&str> = line.splitn(5, '\x1f').collect();
         if parts.len() >= 5 {
             entries.push(InteractiveRebaseEntry {
                 action: RebaseAction::Pick,
@@ -3281,6 +3267,13 @@ pub fn get_interactive_rebase_commits(
     Ok(entries)
 }
 
+struct TempFileGuard(PathBuf);
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Execute interactive rebase with custom action sequence
 pub fn git_interactive_rebase(
     repo_path: &str,
@@ -3289,100 +3282,106 @@ pub fn git_interactive_rebase(
     autostash: bool,
 ) -> Result<GitOperationResult, String> {
     use std::fs;
-    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    // Create temporary file with rebase todo list
+    validate_non_flag(target_branch, "target branch")?;
+
     let todo_content: String = entries
         .iter()
         .map(|entry| {
+            // Strip newlines so commit subjects cannot inject extra todo commands
+            let clean_msg: String = entry
+                .message
+                .chars()
+                .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
+                .collect();
             format!(
                 "{} {} {}",
                 entry.action.to_git_command(),
                 entry.short_id,
-                entry.message
+                clean_msg.trim()
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Create temp file for the todo list
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
     let temp_dir = std::env::temp_dir();
-    let todo_file = temp_dir.join(format!("forky_rebase_todo_{}", std::process::id()));
+    let todo_file = temp_dir.join(format!("forky_rebase_todo_{}_{}", std::process::id(), nonce));
+    let _todo_guard = TempFileGuard(todo_file.clone());
 
     fs::write(&todo_file, &todo_content)
         .map_err(|e| format!("Failed to write rebase todo file: {}", e))?;
 
-    // Create a script that will replace the todo file
-    let script_file = temp_dir.join(format!("forky_rebase_editor_{}", std::process::id()));
+    #[cfg(windows)]
+    let script_file = temp_dir.join(format!(
+        "forky_rebase_editor_{}_{}.cmd",
+        std::process::id(),
+        nonce
+    ));
+    #[cfg(not(windows))]
+    let script_file = temp_dir.join(format!(
+        "forky_rebase_editor_{}_{}.sh",
+        std::process::id(),
+        nonce
+    ));
+    let _script_guard = TempFileGuard(script_file.clone());
 
     #[cfg(unix)]
     {
-        let script_content = format!("#!/bin/sh\ncp \"{}\" \"$1\"\n", todo_file.to_string_lossy());
+        use std::os::unix::fs::PermissionsExt;
+        // Single-quote escape for POSIX /bin/sh
+        let escaped_todo = todo_file.to_string_lossy().replace('\'', "'\\''");
+        let script_content = format!("#!/bin/sh\ncp '{}' \"$1\"\n", escaped_todo);
         fs::write(&script_file, &script_content)
             .map_err(|e| format!("Failed to write editor script: {}", e))?;
-
-        // Make script executable
-        Command::new("chmod")
-            .args(["+x", script_file.to_str().unwrap()])
-            .output()
+        fs::set_permissions(&script_file, fs::Permissions::from_mode(0o700))
             .map_err(|e| format!("Failed to make script executable: {}", e))?;
     }
 
     #[cfg(windows)]
     {
-        let script_file = temp_dir.join(format!("forky_rebase_editor_{}.cmd", std::process::id()));
         let script_content = format!(
-            "@echo off\ncopy /Y \"{}\" \"%~1\"\n",
-            todo_file.to_string_lossy().replace("/", "\\")
+            "@echo off\ncopy /Y \"{}\" \"%~1\" >nul\n",
+            todo_file.to_string_lossy().replace('/', "\\")
         );
         fs::write(&script_file, &script_content)
             .map_err(|e| format!("Failed to write editor script: {}", e))?;
     }
 
-    // Build rebase command
-    let mut args = vec!["rebase", "-i"];
-    if autostash {
-        args.push("--autostash");
-    }
-    args.push(target_branch);
+    // Quote script path so spaces in temp_dir work when git runs `sh -c "$GIT_SEQUENCE_EDITOR <file>"`
+    let seq_editor = format!(
+        "\"{}\"",
+        script_file.to_string_lossy().replace('\\', "/")
+    );
 
-    // Execute rebase with custom GIT_SEQUENCE_EDITOR
-    let output = Command::new("git")
-        .args(&args)
-        .current_dir(repo_path)
-        .env("GIT_SEQUENCE_EDITOR", script_file.to_str().unwrap())
-        .env("GIT_EDITOR", "true") // Skip editor for commit messages
+    let mut cmd = git_cmd(Some(repo_path));
+    cmd.args(["rebase", "-i"]);
+    if autostash {
+        cmd.arg("--autostash");
+    }
+    cmd.arg("--")
+        .arg(target_branch)
+        .env("GIT_SEQUENCE_EDITOR", &seq_editor)
+        .env("GIT_EDITOR", "true");
+
+    let output = cmd
         .output()
         .map_err(|e| format!("Failed to execute git rebase: {}", e))?;
-
-    // Cleanup temp files
-    let _ = fs::remove_file(&todo_file);
-    let _ = fs::remove_file(&script_file);
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !output.status.success() {
-        // Check for conflicts
         if stderr.contains("CONFLICT")
             || stderr.contains("conflict")
             || stdout.contains("CONFLICT")
             || stdout.contains("conflict")
         {
-            // Get conflicting files
-            let status_output = Command::new("git")
-                .args(["diff", "--name-only", "--diff-filter=U"])
-                .current_dir(repo_path)
-                .output();
-
-            let conflicting_files = if let Ok(status) = status_output {
-                String::from_utf8_lossy(&status.stdout)
-                    .lines()
-                    .map(|s| s.to_string())
-                    .collect()
-            } else {
-                vec![]
-            };
+            let conflicting_files = get_unmerged_files(repo_path);
 
             return Ok(GitOperationResult {
                 success: false,
@@ -3397,16 +3396,25 @@ pub fn git_interactive_rebase(
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    // Check if rebase resulted in "Already up to date" or similar
+    // Detect if rebase paused (e.g. `edit` action) instead of reporting completed
+    if let Ok(repo) = open_repository(repo_path) {
+        let git_dir = repo.path();
+        if git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists() {
+            return Ok(GitOperationResult {
+                success: false,
+                message: "Interactive rebase is paused for editing. Finish your edits and run 'git rebase --continue' (or '--abort') from the terminal.".to_string(),
+                requires_ssh_verification: None,
+                requires_credential: None,
+                error_type: Some("rebase_paused".to_string()),
+                conflicting_files: None,
+            });
+        }
+    }
+
     if stdout.contains("is up to date") || stdout.contains("Already applied") {
-        return Ok(GitOperationResult {
-            success: true,
-            message: "Already up to date, nothing to rebase.".to_string(),
-            requires_ssh_verification: None,
-            requires_credential: None,
-            error_type: None,
-            conflicting_files: None,
-        });
+        return Ok(create_success_result(
+            "Already up to date, nothing to rebase.".to_string(),
+        ));
     }
 
     Ok(create_success_result(format!(
@@ -3476,14 +3484,21 @@ pub fn get_gitflow_config(repo: &Repository) -> Result<GitFlowConfig, String> {
 
 /// Get current branch flow info (type and name without prefix)
 pub fn get_current_branch_flow_info(repo: &Repository) -> Result<CurrentBranchFlowInfo, String> {
-    let head = repo
-        .head()
-        .map_err(|e| format!("Failed to get HEAD: {}", e))?;
-    let branch_name = head.shorthand().unwrap_or("").to_string();
+    let branch_name = match repo.head() {
+        Ok(head) => head.shorthand().unwrap_or("").to_string(),
+        Err(e) if e.code() == ErrorCode::UnbornBranch => repo
+            .find_reference("HEAD")
+            .ok()
+            .and_then(|r| {
+                r.symbolic_target()
+                    .map(|t| t.strip_prefix("refs/heads/").unwrap_or(t).to_string())
+            })
+            .unwrap_or_default(),
+        Err(e) => return Err(format!("Failed to get HEAD: {}", e)),
+    };
 
     let config = get_gitflow_config(repo)?;
 
-    // Check if current branch matches any git flow branch type
     if branch_name == config.master_branch {
         return Ok(CurrentBranchFlowInfo {
             branch_type: GitFlowBranchType::Master,
@@ -3498,7 +3513,7 @@ pub fn get_current_branch_flow_info(repo: &Repository) -> Result<CurrentBranchFl
         });
     }
 
-    if branch_name.starts_with(&config.feature_prefix) {
+    if !config.feature_prefix.is_empty() && branch_name.starts_with(&config.feature_prefix) {
         let name = branch_name[config.feature_prefix.len()..].to_string();
         return Ok(CurrentBranchFlowInfo {
             branch_type: GitFlowBranchType::Feature,
@@ -3506,7 +3521,7 @@ pub fn get_current_branch_flow_info(repo: &Repository) -> Result<CurrentBranchFl
         });
     }
 
-    if branch_name.starts_with(&config.release_prefix) {
+    if !config.release_prefix.is_empty() && branch_name.starts_with(&config.release_prefix) {
         let name = branch_name[config.release_prefix.len()..].to_string();
         return Ok(CurrentBranchFlowInfo {
             branch_type: GitFlowBranchType::Release,
@@ -3514,7 +3529,7 @@ pub fn get_current_branch_flow_info(repo: &Repository) -> Result<CurrentBranchFl
         });
     }
 
-    if branch_name.starts_with(&config.hotfix_prefix) {
+    if !config.hotfix_prefix.is_empty() && branch_name.starts_with(&config.hotfix_prefix) {
         let name = branch_name[config.hotfix_prefix.len()..].to_string();
         return Ok(CurrentBranchFlowInfo {
             branch_type: GitFlowBranchType::Hotfix,
@@ -3626,11 +3641,11 @@ pub fn git_flow_start(
     };
 
     let branch_name = format!("{}{}", prefix, name);
+    validate_git_ref(&branch_name, "branch name")?;
+    validate_non_flag(&base_branch, "base branch")?;
 
-    // Create and checkout the new branch from base
-    let output = std::process::Command::new("git")
-        .args(["checkout", "-b", &branch_name, &base_branch])
-        .current_dir(repo_path)
+    let output = git_cmd(Some(repo_path))
+        .args(["checkout", "-b", &branch_name, &base_branch, "--"])
         .output()
         .map_err(|e| format!("Failed to execute git: {}", e))?;
 
@@ -3682,14 +3697,13 @@ pub fn git_flow_finish(
     };
 
     let branch_name = format!("{}{}", prefix, name);
+    validate_non_flag(&branch_name, "branch name")?;
     let mut messages = Vec::new();
 
-    // Merge into each target branch
     for target in &target_branches {
-        // Checkout target branch
-        let output = std::process::Command::new("git")
-            .args(["checkout", target])
-            .current_dir(repo_path)
+        validate_non_flag(target, "target branch")?;
+        let output = git_cmd(Some(repo_path))
+            .args(["checkout", target, "--"])
             .output()
             .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
 
@@ -3701,31 +3715,33 @@ pub fn git_flow_finish(
             ));
         }
 
-        // Merge with --no-ff
         let merge_message = format!("Merge {} '{}' into {}", flow_type, name, target);
-        let output = std::process::Command::new("git")
-            .args(["merge", "--no-ff", "-m", &merge_message, &branch_name])
-            .current_dir(repo_path)
+        let output = git_cmd(Some(repo_path))
+            .args(["merge", "--no-ff", "-m", &merge_message, "--", &branch_name])
             .output()
             .map_err(|e| format!("Failed to execute git merge: {}", e))?;
 
         if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-            // Check for merge conflicts
-            if stderr.contains("CONFLICT") || stderr.contains("Automatic merge failed") {
+            if stdout.contains("CONFLICT")
+                || stderr.contains("CONFLICT")
+                || stdout.contains("Automatic merge failed")
+                || stderr.contains("Automatic merge failed")
+            {
                 return Ok(GitOperationResult {
                     success: false,
                     message: format!("Merge conflict while merging into '{}'. Please resolve conflicts manually.", target),
                     requires_ssh_verification: None,
                     requires_credential: None,
                     error_type: Some("merge_conflict".to_string()),
-                    conflicting_files: None,
+                    conflicting_files: Some(get_unmerged_files(repo_path)),
                 });
             }
 
             return Ok(create_error_result(
-                &format!("Failed to merge into '{}': {}", target, stderr),
+                &format!("Failed to merge into '{}': {}", target, if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() }),
                 "",
             ));
         }
@@ -3733,14 +3749,27 @@ pub fn git_flow_finish(
         messages.push(format!("Merged into '{}'", target));
     }
 
-    // Create tag for release/hotfix (on master branch)
+    // Create tag for release/hotfix (on master branch) respecting version_tag_prefix
     if create_tag {
-        // Make sure we're on master for tagging
-        let _ = std::process::Command::new("git")
-            .args(["checkout", &config.master_branch])
-            .current_dir(repo_path)
-            .output();
+        let master_co = git_cmd(Some(repo_path))
+            .args(["checkout", &config.master_branch, "--"])
+            .output()
+            .map_err(|e| format!("Failed to checkout '{}': {}", config.master_branch, e))?;
 
+        if !master_co.status.success() {
+            let stderr = String::from_utf8_lossy(&master_co.stderr);
+            return Ok(create_error_result(
+                &format!(
+                    "Merged successfully but failed to checkout '{}' for tagging: {}",
+                    config.master_branch,
+                    stderr.trim()
+                ),
+                "",
+            ));
+        }
+
+        let tag_name = format!("{}{}", config.version_tag_prefix, name);
+        validate_git_ref(&tag_name, "tag name")?;
         let tag_message = format!(
             "{} {}",
             if flow_type == "release" {
@@ -3750,52 +3779,42 @@ pub fn git_flow_finish(
             },
             name
         );
-        let output = std::process::Command::new("git")
-            .args(["tag", "-a", name, "-m", &tag_message])
-            .current_dir(repo_path)
+        let output = git_cmd(Some(repo_path))
+            .args(["tag", "-a", "-m", &tag_message, "--", &tag_name])
             .output()
             .map_err(|e| format!("Failed to create tag: {}", e))?;
 
         if output.status.success() {
-            messages.push(format!("Created tag '{}'", name));
+            messages.push(format!("Created tag '{}'", tag_name));
         } else {
-            // Tag might already exist, not a fatal error
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             if !stderr.contains("already exists") {
-                messages.push(format!("Warning: Could not create tag: {}", stderr));
+                messages.push(format!("Warning: Could not create tag: {}", stderr.trim()));
             }
         }
     }
 
-    // Delete branch if requested
+    // Safe delete only (never silently force-delete with -D)
     if delete_branch {
-        let output = std::process::Command::new("git")
-            .args(["branch", "-d", &branch_name])
-            .current_dir(repo_path)
+        let output = git_cmd(Some(repo_path))
+            .args(["branch", "-d", "--", &branch_name])
             .output()
             .map_err(|e| format!("Failed to delete branch: {}", e))?;
 
         if output.status.success() {
             messages.push(format!("Deleted branch '{}'", branch_name));
         } else {
-            // Try force delete if normal delete fails
-            let output = std::process::Command::new("git")
-                .args(["branch", "-D", &branch_name])
-                .current_dir(repo_path)
-                .output();
-
-            if let Ok(output) = output {
-                if output.status.success() {
-                    messages.push(format!("Deleted branch '{}' (force)", branch_name));
-                }
-            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            messages.push(format!(
+                "Warning: Could not safely delete branch '{}': {}",
+                branch_name,
+                stderr.trim()
+            ));
         }
     }
 
-    // Checkout back to develop
-    let _ = std::process::Command::new("git")
-        .args(["checkout", &config.develop_branch])
-        .current_dir(repo_path)
+    let _ = git_cmd(Some(repo_path))
+        .args(["checkout", &config.develop_branch, "--"])
         .output();
 
     Ok(create_success_result(messages.join(". ")))
@@ -3813,11 +3832,8 @@ pub struct GitIdentity {
 
 /// Read a single global git config entry. Returns None if it is unset.
 fn read_global_config(key: &str) -> Option<String> {
-    use std::process::Command;
-
-    let output = Command::new("git")
+    let output = git_cmd(None)
         .args(["config", "--global", "--get", key])
-        .env("GIT_TERMINAL_PROMPT", "0")
         .output()
         .ok()?;
 
@@ -3843,8 +3859,6 @@ pub fn git_get_global_identity() -> Result<GitIdentity, String> {
 
 /// Write user.name and user.email at the global level
 pub fn git_set_global_identity(name: &str, email: &str) -> Result<GitOperationResult, String> {
-    use std::process::Command;
-
     let name = name.trim();
     let email = email.trim();
 
@@ -3855,9 +3869,8 @@ pub fn git_set_global_identity(name: &str, email: &str) -> Result<GitOperationRe
         return Ok(create_error_result("Email cannot be empty", ""));
     }
 
-    let set_name = Command::new("git")
-        .args(["config", "--global", "user.name", name])
-        .env("GIT_TERMINAL_PROMPT", "0")
+    let set_name = git_cmd(None)
+        .args(["config", "--global", "--", "user.name", name])
         .output()
         .map_err(|e| format!("Failed to set user.name: {}", e))?;
 
@@ -3867,9 +3880,8 @@ pub fn git_set_global_identity(name: &str, email: &str) -> Result<GitOperationRe
         return Ok(create_error_result(&stderr, &stdout));
     }
 
-    let set_email = Command::new("git")
-        .args(["config", "--global", "user.email", email])
-        .env("GIT_TERMINAL_PROMPT", "0")
+    let set_email = git_cmd(None)
+        .args(["config", "--global", "--", "user.email", email])
         .output()
         .map_err(|e| format!("Failed to set user.email: {}", e))?;
 
@@ -3885,16 +3897,16 @@ pub fn git_set_global_identity(name: &str, email: &str) -> Result<GitOperationRe
 }
 
 /// Fast-forward a local branch to match its remote tracking branch
-/// Uses `git fetch remote branch:branch` for non-checked-out branches
-/// Uses `git merge --ff-only` for the currently checked-out branch
 pub fn git_fast_forward(
     repo_path: &str,
     branch: &str,
     remote: &str,
 ) -> Result<GitOperationResult, String> {
+    validate_non_flag(branch, "branch")?;
+    validate_non_flag(remote, "remote")?;
+
     let repo = open_repository(repo_path)?;
 
-    // Check if the branch is currently checked out
     let head = repo.head().map_err(|e| e.to_string())?;
     let current_branch = head
         .shorthand()
@@ -3904,25 +3916,21 @@ pub fn git_fast_forward(
     let is_current_branch = current_branch == branch;
 
     if is_current_branch {
-        // For the current branch, use git merge --ff-only
         let remote_ref = format!("{}/{}", remote, branch);
 
-        // First fetch the remote branch
-        let fetch_output = std::process::Command::new("git")
-            .args(["fetch", remote, branch])
-            .current_dir(repo_path)
+        let fetch_output = git_network_cmd(Some(repo_path))
+            .args(["fetch", "--", remote, branch])
             .output()
             .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
 
         if !fetch_output.status.success() {
+            let stdout = String::from_utf8_lossy(&fetch_output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&fetch_output.stderr).to_string();
-            return Ok(create_error_result(&stderr, ""));
+            return Ok(create_error_result(&stderr, &stdout));
         }
 
-        // Then merge with --ff-only
-        let merge_output = std::process::Command::new("git")
-            .args(["merge", "--ff-only", &remote_ref])
-            .current_dir(repo_path)
+        let merge_output = git_cmd(Some(repo_path))
+            .args(["merge", "--ff-only", "--", &remote_ref])
             .output()
             .map_err(|e| format!("Failed to execute git merge: {}", e))?;
 
@@ -3930,12 +3938,13 @@ pub fn git_fast_forward(
         let stderr = String::from_utf8_lossy(&merge_output.stderr).to_string();
 
         if !merge_output.status.success() {
-            // Check if it's because it can't be fast-forwarded
-            if stderr.contains("Not possible to fast-forward") || stderr.contains("fatal") {
+            if stderr.contains("Not possible to fast-forward")
+                || stderr.contains("diverging branches")
+            {
                 return Ok(GitOperationResult {
                     success: false,
                     message: format!(
-                        "Cannot fast-forward '{}': branches have diverged or are up to date",
+                        "Cannot fast-forward '{}': branches have diverged",
                         branch
                     ),
                     requires_ssh_verification: None,
@@ -3952,12 +3961,12 @@ pub fn git_fast_forward(
             branch, remote, branch
         )))
     } else {
-        // For non-current branches, use git fetch remote branch:branch
-        let refspec = format!("{}:{}", branch, branch);
+        // Update both local branch and remote-tracking ref so ahead/behind stays accurate
+        let local_refspec = format!("refs/heads/{}:refs/heads/{}", branch, branch);
+        let remote_refspec = format!("refs/heads/{}:refs/remotes/{}/{}", branch, remote, branch);
 
-        let output = std::process::Command::new("git")
-            .args(["fetch", remote, &refspec])
-            .current_dir(repo_path)
+        let output = git_network_cmd(Some(repo_path))
+            .args(["fetch", "--", remote, &local_refspec, &remote_refspec])
             .output()
             .map_err(|e| format!("Failed to execute git fetch: {}", e))?;
 
@@ -3965,7 +3974,6 @@ pub fn git_fast_forward(
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         if !output.status.success() {
-            // Check for non-fast-forward error
             if stderr.contains("non-fast-forward") {
                 return Ok(GitOperationResult {
                     success: false,
@@ -3986,5 +3994,80 @@ pub fn git_fast_forward(
             "Fast-forwarded '{}' from '{}/{}'",
             branch, remote, branch
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_non_flag_blocks_option_injection() {
+        assert!(validate_non_flag("--upload-pack=sh", "remote URL").is_err());
+        assert!(validate_non_flag("  -f", "host").is_err());
+        assert!(validate_non_flag("", "branch").is_err());
+        assert!(validate_non_flag("a\0b", "branch").is_err());
+        assert!(validate_non_flag("https://github.com/user/repo.git", "remote URL").is_ok());
+        assert!(validate_non_flag("git@github.com:user/repo.git", "remote URL").is_ok());
+    }
+
+    #[test]
+    fn validate_git_ref_checks_rules() {
+        assert!(validate_git_ref("feature/login-fix", "branch").is_ok());
+        assert!(validate_git_ref("-evil", "branch").is_err());
+        assert!(validate_git_ref("foo..bar", "branch").is_err());
+        assert!(validate_git_ref("foo.lock", "branch").is_err());
+    }
+
+    #[test]
+    fn resolve_repo_path_blocks_traversal_and_absolute() {
+        let root = std::env::temp_dir();
+        assert!(resolve_repo_path(&root, "src/main.rs").is_ok());
+        assert!(resolve_repo_path(&root, "../etc/passwd").is_err());
+        assert!(resolve_repo_path(&root, "a/../../outside").is_err());
+        assert!(resolve_repo_path(&root, "/etc/passwd").is_err());
+        assert!(resolve_repo_path(&root, "").is_err());
+    }
+
+    #[test]
+    fn parse_ssh_host_port_handles_bracketed_ports() {
+        assert_eq!(parse_ssh_host_port("github.com"), ("github.com", None));
+        assert_eq!(
+            parse_ssh_host_port("[git.example.com]:2222"),
+            ("git.example.com", Some("2222"))
+        );
+    }
+
+    #[test]
+    fn generate_patch_preserves_no_newline_and_crlf() {
+        let hunk = HunkData {
+            old_start: 1,
+            old_lines: 2,
+            new_start: 1,
+            new_lines: 2,
+            lines: vec![
+                HunkLineData {
+                    content: "line1\r\n".to_string(),
+                    line_type: "context".to_string(),
+                },
+                HunkLineData {
+                    content: "old".to_string(),
+                    line_type: "delete".to_string(),
+                },
+                HunkLineData {
+                    content: "\\ No newline at end of file\n".to_string(),
+                    line_type: "no_newline".to_string(),
+                },
+                HunkLineData {
+                    content: "new\r\n".to_string(),
+                    line_type: "add".to_string(),
+                },
+            ],
+        };
+        let patch = generate_patch("src/file.txt", &hunk);
+        assert!(patch.contains(" line1\r\n"));
+        assert!(patch.contains("\n\\ No newline at end of file\n"));
+        assert!(!patch.contains(" \\ No newline"));
+        assert!(patch.contains("+new\r\n"));
     }
 }

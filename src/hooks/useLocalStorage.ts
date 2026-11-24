@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// Debounce delay for localStorage writes (ms)
 const DEBOUNCE_DELAY = 300;
 
-// Polyfill for requestIdleCallback
 const requestIdleCallbackPolyfill =
   typeof window !== 'undefined' && 'requestIdleCallback' in window
     ? window.requestIdleCallback
@@ -15,68 +13,103 @@ const cancelIdleCallbackPolyfill =
     ? window.cancelIdleCallback
     : (id: number) => clearTimeout(id);
 
-export function useLocalStorage<T>(key: string, defaultValue: T): [T, (value: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : defaultValue;
-    } catch {
-      return defaultValue;
-    }
-  });
+function readStorage<T>(key: string, defaultValue: T): T {
+  if (!key) return defaultValue;
+  try {
+    const stored = localStorage.getItem(key);
+    return stored !== null ? (JSON.parse(stored) as T) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
 
-  // Refs for debouncing
+function writeStorage<T>(key: string, value: T): void {
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error('Error saving to localStorage:', error);
+  }
+}
+
+export function useLocalStorage<T>(key: string, defaultValue: T): [T, (value: T) => void] {
+  const defaultValueRef = useRef(defaultValue);
+  defaultValueRef.current = defaultValue;
+
+  const [value, setValue] = useState<T>(() => readStorage(key, defaultValue));
+
+  const prevKeyRef = useRef<string>(key);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleCallbackRef = useRef<number | null>(null);
-  const pendingValueRef = useRef<T | null>(null);
+  const hasPendingWriteRef = useRef(false);
+  const pendingKeyRef = useRef<string>(key);
+  const pendingValueRef = useRef<T>(value);
 
-  // Persist to localStorage with debounce and requestIdleCallback
-  useEffect(() => {
-    // Store the pending value
-    pendingValueRef.current = value;
-
-    // Clear any existing debounce timer
+  const flushPending = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
-
-    // Cancel any pending idle callback
-    if (idleCallbackRef.current) {
+    if (idleCallbackRef.current !== null) {
       cancelIdleCallbackPolyfill(idleCallbackRef.current);
+      idleCallbackRef.current = null;
     }
+    if (hasPendingWriteRef.current) {
+      hasPendingWriteRef.current = false;
+      writeStorage(pendingKeyRef.current, pendingValueRef.current);
+    }
+  }, []);
 
-    // Set up debounced write
-    debounceTimerRef.current = setTimeout(() => {
-      // Use requestIdleCallback for non-blocking write
-      idleCallbackRef.current = requestIdleCallbackPolyfill(
-        () => {
-          try {
-            if (pendingValueRef.current !== null) {
-              localStorage.setItem(key, JSON.stringify(pendingValueRef.current));
-            }
-          } catch (error) {
-            console.error('Error saving to localStorage:', error);
-          }
-        },
-        { timeout: 1000 }
-      ); // Max wait 1 second
-    }, DEBOUNCE_DELAY);
+  // Reload state when `key` changes (e.g. switching repository tabs) without overwriting the new key
+  useEffect(() => {
+    if (prevKeyRef.current !== key) {
+      flushPending();
+      prevKeyRef.current = key;
+      setValue(readStorage(key, defaultValueRef.current));
+    }
+  }, [key, flushPending]);
 
-    // Cleanup on unmount or key change
+  // Flush any pending write on unmount so recent changes are never lost
+  useEffect(() => {
     return () => {
+      flushPending();
+    };
+  }, [flushPending]);
+
+  const setValueMemoized = useCallback(
+    (newValue: T) => {
+      setValue(newValue);
+
+      if (!key) return;
+
+      pendingKeyRef.current = key;
+      pendingValueRef.current = newValue;
+      hasPendingWriteRef.current = true;
+
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      if (idleCallbackRef.current) {
+      if (idleCallbackRef.current !== null) {
         cancelIdleCallbackPolyfill(idleCallbackRef.current);
+        idleCallbackRef.current = null;
       }
-    };
-  }, [key, value]);
 
-  // Memoized setter to prevent unnecessary re-renders
-  const setValueMemoized = useCallback((newValue: T) => {
-    setValue(newValue);
-  }, []);
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        idleCallbackRef.current = requestIdleCallbackPolyfill(
+          () => {
+            idleCallbackRef.current = null;
+            if (hasPendingWriteRef.current) {
+              hasPendingWriteRef.current = false;
+              writeStorage(pendingKeyRef.current, pendingValueRef.current);
+            }
+          },
+          { timeout: 1000 }
+        );
+      }, DEBOUNCE_DELAY);
+    },
+    [key]
+  );
 
   return [value, setValueMemoized];
 }

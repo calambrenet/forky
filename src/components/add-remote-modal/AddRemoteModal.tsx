@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { Globe, Check, AlertCircle } from 'lucide-react';
@@ -28,9 +28,11 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const testRequestIdRef = useRef(0);
 
-  // Reset form when modal opens/closes
+  // Reset form and invalidate any in-flight connection test when modal opens/closes
   useEffect(() => {
+    testRequestIdRef.current += 1;
     if (isOpen) {
       setRemoteName('');
       setRepoUrl('');
@@ -40,19 +42,22 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
     }
   }, [isOpen]);
 
-  // Validation
+  // Validation against trimmed name (dots are valid in git remote names, e.g. github.com)
+  const trimmedName = remoteName.trim();
+  const nameExists = existingRemotes.includes(trimmedName);
   const isValidName =
-    remoteName.trim().length > 0 &&
-    /^[a-zA-Z0-9_-]+$/.test(remoteName) &&
-    !existingRemotes.includes(remoteName.trim());
+    trimmedName.length > 0 &&
+    !trimmedName.startsWith('-') &&
+    /^[a-zA-Z0-9._-]+$/.test(trimmedName) &&
+    !nameExists;
 
   const isValidUrl = repoUrl.trim().length > 0;
 
   const nameError =
-    remoteName.trim().length > 0 && !isValidName
-      ? existingRemotes.includes(remoteName.trim())
+    trimmedName.length > 0 && !isValidName
+      ? nameExists
         ? 'Remote name already exists'
-        : 'Invalid name (use alphanumeric, - or _)'
+        : 'Invalid name (use alphanumeric, ., - or _)'
       : '';
 
   const canAdd = isValidName && isValidUrl && !isAdding;
@@ -60,6 +65,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   const handleTestConnection = useCallback(async () => {
     if (!isValidUrl) return;
 
+    const reqId = ++testRequestIdRef.current;
     setTestStatus('testing');
     setTestMessage('');
 
@@ -67,6 +73,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
       const result = await invoke<GitOperationResult>('git_test_remote_connection', {
         url: repoUrl.trim(),
       });
+      if (reqId !== testRequestIdRef.current) return;
 
       if (result.success) {
         setTestStatus('success');
@@ -76,6 +83,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
         setTestMessage(result.message || 'Connection failed');
       }
     } catch (error) {
+      if (reqId !== testRequestIdRef.current) return;
       setTestStatus('error');
       setTestMessage(String(error));
     }
@@ -86,14 +94,14 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
 
     setIsAdding(true);
     try {
-      await onAdd(remoteName.trim(), repoUrl.trim());
+      await onAdd(trimmedName, repoUrl.trim());
       onClose();
     } catch (error) {
       console.error('Error adding remote:', error);
     } finally {
       setIsAdding(false);
     }
-  }, [canAdd, remoteName, repoUrl, onAdd, onClose]);
+  }, [canAdd, trimmedName, repoUrl, onAdd, onClose]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -106,7 +114,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <Modal isOpen={isOpen} onClose={isAdding ? undefined : onClose}>
       <ModalHeader
         icon={<Globe size={24} />}
         title={t('modals.addRemote.title')}
@@ -133,6 +141,7 @@ export const AddRemoteModal: FC<AddRemoteModalProps> = ({
               className="add-remote-input"
               value={repoUrl}
               onChange={(e) => {
+                testRequestIdRef.current += 1;
                 setRepoUrl(e.target.value);
                 setTestStatus('idle');
                 setTestMessage('');

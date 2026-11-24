@@ -75,8 +75,16 @@ export const useGitOperationStore = create<GitOperationStore>()(
       },
 
       completeOperation: (result) => {
+        if (dismissTimeout) {
+          clearTimeout(dismissTimeout);
+          dismissTimeout = null;
+        }
+
         const current = get().currentOperation;
-        if (!current) return;
+        if (!current) {
+          set({ isLoading: false });
+          return;
+        }
 
         set({
           isLoading: false,
@@ -187,7 +195,11 @@ export const useGitOperationStore = create<GitOperationStore>()(
           }
         },
         setItem: (name, value) => {
-          localStorage.setItem(name, JSON.stringify(value));
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch (error) {
+            console.error('Failed to persist git activity log:', error);
+          }
         },
         removeItem: (name) => {
           localStorage.removeItem(name);

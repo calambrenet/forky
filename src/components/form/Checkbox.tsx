@@ -7,11 +7,20 @@ interface CheckboxProps {
   onChange: (checked: boolean) => void;
   label: string;
   disabled?: boolean;
+  variant?: 'default' | 'warning';
 }
 
-export const Checkbox: FC<CheckboxProps> = ({ checked, onChange, label, disabled = false }) => {
+export const Checkbox: FC<CheckboxProps> = ({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+  variant = 'default',
+}) => {
   return (
-    <label className={`checkbox-container ${disabled ? 'disabled' : ''}`}>
+    <label
+      className={`checkbox-container ${disabled ? 'disabled' : ''} ${variant === 'warning' ? 'warning' : ''}`}
+    >
       <input
         type="checkbox"
         checked={checked}

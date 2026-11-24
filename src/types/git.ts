@@ -74,7 +74,7 @@ export interface HunkLineData {
 
 export interface DiffLine {
   content: string;
-  line_type: 'add' | 'delete' | 'context';
+  line_type: 'add' | 'delete' | 'context' | 'no_newline';
   old_line_no: number | null;
   new_line_no: number | null;
 }

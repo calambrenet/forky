@@ -28,11 +28,13 @@ export const SshHostVerificationModal: FC<SshHostVerificationModalProps> = memo(
 
     const handleReject = () => {
       onReject();
-      onClose();
+      if (onClose !== onReject) {
+        onClose();
+      }
     };
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : handleReject}>
         <ModalHeader
           icon={<ShieldAlert size={24} />}
           title={t('modals.sshVerification.title')}

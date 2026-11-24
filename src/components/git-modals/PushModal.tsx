@@ -152,6 +152,7 @@ export const PushModal: FC<PushModalProps> = memo(
             onChange={setForceWithLease}
             label={t('modals.push.forcePush')}
             disabled={isLoading}
+            variant="warning"
           />
         </div>
         <ModalFooter className={isLoading ? 'modal-footer-loading' : undefined}>

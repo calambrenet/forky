@@ -370,8 +370,12 @@ function App() {
   const getStoredOptions = useCallback((): GitOptionsStorage => {
     if (!activeTab?.path) return {};
     const key = `forky:git-options:${activeTab.path}`;
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : {};
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? (JSON.parse(stored) as GitOptionsStorage) : {};
+    } catch {
+      return {};
+    }
   }, [activeTab?.path]);
 
   // Save git options for current repo
@@ -380,7 +384,11 @@ function App() {
       if (!activeTab?.path) return;
       const key = `forky:git-options:${activeTab.path}`;
       const current = getStoredOptions();
-      localStorage.setItem(key, JSON.stringify({ ...current, ...options }));
+      try {
+        localStorage.setItem(key, JSON.stringify({ ...current, ...options }));
+      } catch (error) {
+        console.error('Error saving git options:', error);
+      }
     },
     [activeTab?.path, getStoredOptions]
   );
@@ -398,7 +406,16 @@ function App() {
     [showSshVerification]
   );
 
-  // Accept SSH host and add to known_hosts
+  // Reject/close SSH host verification and release the in-progress git loading lock
+  const handleRejectSshHost = useCallback(() => {
+    closeSshVerification();
+    completeOperation({
+      success: false,
+      message: 'SSH host verification cancelled',
+    });
+  }, [closeSshVerification, completeOperation]);
+
+  // Accept SSH host and add to known_hosts (verifying approved fingerprint)
   const handleAcceptSshHost = useCallback(async () => {
     if (!sshVerification.hostInfo) return;
 
@@ -406,6 +423,7 @@ function App() {
     try {
       const result = await invoke<GitOperationResult>('add_ssh_known_host', {
         host: sshVerification.hostInfo.host,
+        expectedFingerprint: sshVerification.hostInfo.fingerprint,
       });
 
       if (result.success) {
@@ -413,16 +431,25 @@ function App() {
         closeSshVerification();
         if (pendingOp) {
           await pendingOp();
+        } else {
+          completeOperation(result);
         }
       } else {
         console.error('Failed to add SSH host:', result.message);
+        closeSshVerification();
+        completeOperation(result);
+        addAlert('error', t('alerts.gitError'), result.message);
       }
     } catch (error) {
+      const errorMessage = String(error);
       console.error('Error adding SSH host:', error);
+      closeSshVerification();
+      completeOperation({ success: false, message: errorMessage });
+      addAlert('error', t('alerts.gitError'), errorMessage);
     } finally {
       setIsSshLoading(false);
     }
-  }, [sshVerification, closeSshVerification]);
+  }, [sshVerification, closeSshVerification, completeOperation, addAlert, t]);
 
   // Handle credential modal submit
   const handleCredentialSubmit = useCallback(
@@ -439,20 +466,26 @@ function App() {
   // Handle branch change from toolbar (git checkout)
   const handleBranchChange = useCallback(
     async (branchName: string) => {
-      if (!activeTab?.path || isGitLoading) return;
+      const targetTab = useRepositoryStore.getState().getActiveTab();
+      if (!targetTab?.path || useGitOperationStore.getState().isLoading) return;
 
       // Don't checkout if already on this branch
-      if (activeTab.currentBranch === branchName) return;
+      if (targetTab.currentBranch === branchName) return;
 
+      const targetTabId = targetTab.id;
+      const targetRepoPath = targetTab.path;
       const command = `git checkout ${branchName}`;
       startOperation('Checkout', branchName);
 
       try {
-        const result = await invoke<GitOperationResult>('git_checkout', { branchName });
+        const result = await invoke<GitOperationResult>('git_checkout', {
+          repoPath: targetRepoPath,
+          branchName,
+        });
 
         completeOperation(result);
         addLogEntry(
-          activeTab?.path || '',
+          targetRepoPath,
           'Checkout',
           `Checkout '${branchName}'`,
           command,
@@ -461,35 +494,21 @@ function App() {
         );
 
         if (result.success) {
-          // Update the current branch in the tab
-          const activeTabId = useRepositoryStore.getState().activeTabId;
-          if (activeTabId) {
-            setTabCurrentBranch(activeTabId, branchName);
-          }
-          // Refresh repository data to update commits, branches, etc.
-          await refreshActiveTab();
+          setTabCurrentBranch(targetTabId, branchName);
+          await useRepositoryStore.getState().refreshTab(targetTabId);
         } else if (result.error_type === 'checkout_would_overwrite') {
-          // Show checkout conflict modal with option to stash and switch
           setCheckoutConflictBranch(branchName);
           setCheckoutConflictFiles(result.conflicting_files || []);
           setCheckoutConflictModalOpen(true);
         } else {
-          // Check if checkout failed due to uncommitted changes
-          if (result.error_type === 'checkout_would_overwrite' && result.conflicting_files) {
-            // Show the checkout conflict modal instead of an error
-            setCheckoutConflictBranch(branchName);
-            setCheckoutConflictFiles(result.conflicting_files);
-            setCheckoutConflictModalOpen(true);
-          } else {
-            const errorTitle = getErrorTitle(result.error_type, 'Checkout');
-            addAlert('error', errorTitle, result.message);
-          }
+          const errorTitle = getErrorTitle(result.error_type, 'Checkout');
+          addAlert('error', errorTitle, result.message);
         }
       } catch (error) {
         console.error('Error checking out branch:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
-          activeTab?.path || '',
+          targetRepoPath,
           'Checkout',
           `Checkout '${branchName}'`,
           command,
@@ -499,24 +518,18 @@ function App() {
         addAlert('error', 'Checkout Error', String(error));
       }
     },
-    [
-      activeTab?.path,
-      activeTab?.currentBranch,
-      isGitLoading,
-      startOperation,
-      completeOperation,
-      addLogEntry,
-      setTabCurrentBranch,
-      refreshActiveTab,
-      addAlert,
-      getErrorTitle,
-    ]
+    [startOperation, completeOperation, addLogEntry, setTabCurrentBranch, addAlert, getErrorTitle]
   );
 
   // Handle checkout with stash (from conflict modal)
   const handleCheckoutWithStash = useCallback(
     async (restoreChanges: boolean) => {
       if (!activeTab?.path || !checkoutConflictBranch) return;
+
+      const targetTab = useRepositoryStore.getState().getActiveTab();
+      if (!targetTab?.path) return;
+      const targetTabId = targetTab.id;
+      const targetRepoPath = targetTab.path;
 
       setIsCheckoutWithStashLoading(true);
       const command = restoreChanges
@@ -527,13 +540,14 @@ function App() {
 
       try {
         const result = await invoke<GitOperationResult>('git_checkout_with_stash', {
+          repoPath: targetRepoPath,
           branchName: checkoutConflictBranch,
           restoreChanges,
         });
 
         completeOperation(result);
         addLogEntry(
-          activeTab?.path || '',
+          targetRepoPath,
           'Checkout',
           `Checkout '${checkoutConflictBranch}' with stash`,
           command,
@@ -542,20 +556,12 @@ function App() {
         );
 
         if (result.success) {
-          // Update the current branch in the tab
-          const activeTabId = useRepositoryStore.getState().activeTabId;
-          if (activeTabId) {
-            setTabCurrentBranch(activeTabId, checkoutConflictBranch);
-          }
-          // Refresh repository data to update commits, branches, etc.
-          await refreshActiveTab();
-          // Refresh local changes view
+          setTabCurrentBranch(targetTabId, checkoutConflictBranch);
+          await useRepositoryStore.getState().refreshTab(targetTabId);
           setLocalChangesRefreshKey((k) => k + 1);
 
-          // Check for special messages (conflicts, stash pop failed)
-          if (result.error_type === 'stash_conflicts') {
-            addAlert('warning', t('alerts.checkoutSuccess'), result.message);
-          } else if (result.error_type === 'stash_pop_failed') {
+          // Matches backend `stash_pop_conflict` when stash restore hits conflicts
+          if (result.error_type === 'stash_pop_conflict') {
             addAlert('warning', t('alerts.checkoutSuccess'), result.message);
           }
         } else {
@@ -566,7 +572,7 @@ function App() {
         console.error('Error checking out with stash:', error);
         completeOperation({ success: false, message: String(error) });
         addLogEntry(
-          activeTab?.path || '',
+          targetRepoPath,
           'Checkout',
           `Checkout '${checkoutConflictBranch}' with stash`,
           command,
@@ -588,7 +594,6 @@ function App() {
       completeOperation,
       addLogEntry,
       setTabCurrentBranch,
-      refreshActiveTab,
       addAlert,
       getErrorTitle,
       t,
@@ -665,29 +670,38 @@ function App() {
   // Open repository dialog
   const handleOpenRepo = useCallback(async () => {
     try {
-      // Use Rust command with proper parent window for macOS compatibility
       const selected = await invoke<string | null>('pick_folder');
 
       if (selected) {
-        await openRepository(selected);
-        refreshRecentRepos();
+        const opened = await openRepository(selected);
+        if (opened) {
+          refreshRecentRepos();
+        } else {
+          addAlert('error', t('alerts.gitError'), `Failed to open repository: ${selected}`);
+        }
       }
     } catch (error) {
       console.error('Error opening repository:', error);
+      addAlert('error', t('alerts.gitError'), String(error));
     }
-  }, [openRepository, refreshRecentRepos]);
+  }, [openRepository, refreshRecentRepos, addAlert, t]);
 
   // Open a specific repository by path (used by recent repos dropdown and menu)
   const handleOpenRecentRepo = useCallback(
     async (path: string) => {
       try {
-        await openRepository(path);
-        refreshRecentRepos();
+        const opened = await openRepository(path);
+        if (opened) {
+          refreshRecentRepos();
+        } else {
+          addAlert('error', t('alerts.gitError'), `Failed to open repository: ${path}`);
+        }
       } catch (error) {
         console.error('Error opening recent repository:', error);
+        addAlert('error', t('alerts.gitError'), String(error));
       }
     },
-    [openRepository, refreshRecentRepos]
+    [openRepository, refreshRecentRepos, addAlert, t]
   );
 
   const handleBranchSelect = useCallback((_branch: BranchInfo) => {
@@ -808,12 +822,22 @@ function App() {
   // Add Remote handler
   const handleAddRemote = useCallback(
     async (name: string, url: string) => {
+      const targetTab = useRepositoryStore.getState().getActiveTab();
+      if (!targetTab?.path) {
+        throw new Error('No active repository');
+      }
+      const targetTabId = targetTab.id;
+      const targetRepoPath = targetTab.path;
       const command = `git remote add ${name} ${url}`;
 
       try {
-        const result = await invoke<GitOperationResult>('git_add_remote', { name, url });
+        const result = await invoke<GitOperationResult>('git_add_remote', {
+          repoPath: targetRepoPath,
+          name,
+          url,
+        });
         addLogEntry(
-          activeTab?.path || '',
+          targetRepoPath,
           'Other',
           `Add remote '${name}'`,
           command,
@@ -823,22 +847,27 @@ function App() {
 
         if (!result.success) {
           addAlert('error', 'Add Remote Failed', result.message);
+          throw new Error(result.message);
         }
+
+        await useRepositoryStore.getState().refreshTab(targetTabId);
       } catch (error) {
-        const errorMessage = String(error);
-        addLogEntry(
-          activeTab?.path || '',
-          'Other',
-          `Add remote '${name}'`,
-          command,
-          errorMessage,
-          false
-        );
-        addAlert('error', 'Add Remote Error', errorMessage);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (!(error instanceof Error)) {
+          addLogEntry(
+            targetRepoPath,
+            'Other',
+            `Add remote '${name}'`,
+            command,
+            errorMessage,
+            false
+          );
+          addAlert('error', 'Add Remote Error', errorMessage);
+        }
         throw error;
       }
     },
-    [activeTab?.path, addLogEntry, addAlert]
+    [addLogEntry, addAlert]
   );
 
   // Stash handlers
@@ -934,12 +963,14 @@ function App() {
     async (branch: BranchInfo) => {
       if (!activeTab?.path || isGitLoading) return;
 
+      const repoPath = activeTab.path;
       setMergeBranch(branch);
       setIsMergePreviewLoading(true);
       setMergeModalOpen(true);
 
       try {
         const preview = await invoke<MergePreview>('get_merge_preview', {
+          repoPath,
           sourceBranch: branch.name,
         });
         setMergePreview(preview);
@@ -984,12 +1015,14 @@ function App() {
     async (branch: BranchInfo) => {
       if (!activeTab?.path || isGitLoading) return;
 
+      const repoPath = activeTab.path;
       setRebaseBranch(branch);
       setIsRebasePreviewLoading(true);
       setRebaseModalOpen(true);
 
       try {
         const preview = await invoke<RebasePreview>('get_rebase_preview', {
+          repoPath,
           targetBranch: branch.name,
         });
         setRebasePreview(preview);
@@ -1034,12 +1067,14 @@ function App() {
     async (branch: BranchInfo) => {
       if (!activeTab?.path || isGitLoading) return;
 
+      const repoPath = activeTab.path;
       setInteractiveRebaseBranch(branch);
       setIsInteractiveRebaseLoading(true);
       setInteractiveRebaseModalOpen(true);
 
       try {
         const commits = await invoke<InteractiveRebaseEntry[]>('get_interactive_rebase_commits', {
+          repoPath,
           targetBranch: branch.name,
         });
         setInteractiveRebaseCommits(commits);
@@ -1084,33 +1119,46 @@ function App() {
     ]
   );
 
-  // Load Git Flow configuration
-  const loadGitFlowConfig = useCallback(async () => {
-    if (!activeTab?.path) return;
+  // Load Git Flow configuration for current repository
+  const loadGitFlowConfig = useCallback(async (repoPathOverride?: string) => {
+    const repoPath = repoPathOverride ?? useRepositoryStore.getState().getActiveTab()?.path;
+    if (!repoPath) {
+      setGitFlowConfig(null);
+      setCurrentBranchFlowInfo(null);
+      return;
+    }
 
     try {
-      const config = await invoke<GitFlowConfig>('get_gitflow_config');
+      const config = await invoke<GitFlowConfig>('get_gitflow_config', { repoPath });
+      if (useRepositoryStore.getState().getActiveTab()?.path !== repoPath) return;
       setGitFlowConfig(config);
 
       if (config.initialized) {
-        const flowInfo = await invoke<CurrentBranchFlowInfo>('get_current_branch_flow_info');
+        const flowInfo = await invoke<CurrentBranchFlowInfo>('get_current_branch_flow_info', {
+          repoPath,
+        });
+        if (useRepositoryStore.getState().getActiveTab()?.path !== repoPath) return;
         setCurrentBranchFlowInfo(flowInfo);
       } else {
         setCurrentBranchFlowInfo(null);
       }
     } catch (error) {
+      if (useRepositoryStore.getState().getActiveTab()?.path !== repoPath) return;
       console.error('Error loading git flow config:', error);
       setGitFlowConfig(null);
       setCurrentBranchFlowInfo(null);
     }
-  }, [activeTab?.path]);
+  }, []);
 
-  // Load git flow config when active tab changes
+  // Load git flow config when active tab or its branch changes; clear when no tabs open
   useEffect(() => {
-    if (activeTab?.path) {
-      loadGitFlowConfig();
+    if (!activeTab?.path) {
+      setGitFlowConfig(null);
+      setCurrentBranchFlowInfo(null);
+      return;
     }
-  }, [activeTab?.path, loadGitFlowConfig]);
+    loadGitFlowConfig(activeTab.path);
+  }, [activeTab?.path, activeTab?.currentBranch, loadGitFlowConfig]);
 
   // Git Flow handlers for BranchDropdown
   const handleNewBranch = useCallback(() => {
@@ -1251,7 +1299,10 @@ function App() {
   // Execute fetch with options
   const handleFetchWithOptions = useCallback(
     async (options: FetchOptions) => {
-      if (!activeTab?.path || isGitLoading) return;
+      const targetTab = useRepositoryStore.getState().getActiveTab();
+      if (!targetTab?.path || useGitOperationStore.getState().isLoading) return;
+      const targetTabId = targetTab.id;
+      const targetRepoPath = targetTab.path;
 
       saveOptions({ fetch: options });
 
@@ -1264,6 +1315,7 @@ function App() {
       const doFetch = async () => {
         try {
           const result = await invoke<GitOperationResult>('git_fetch_with_options', {
+            repoPath: targetRepoPath,
             remote: options.all ? null : options.remote,
             all: options.all,
           });
@@ -1274,7 +1326,7 @@ function App() {
 
           completeOperation(result);
           addLogEntry(
-            activeTab?.path || '',
+            targetRepoPath,
             'Fetch',
             `Fetch ${target}`,
             command,
@@ -1284,8 +1336,7 @@ function App() {
           closeModal();
 
           if (result.success) {
-            // Refresh to update branch ahead/behind counts
-            await refreshActiveTab();
+            await useRepositoryStore.getState().refreshTab(targetTabId);
           } else {
             const errorTitle = getErrorTitle(result.error_type, 'Fetch');
             addAlert('error', errorTitle, result.message);
@@ -1293,14 +1344,7 @@ function App() {
         } catch (error) {
           console.error('Error fetching:', error);
           completeOperation({ success: false, message: String(error) });
-          addLogEntry(
-            activeTab?.path || '',
-            'Fetch',
-            `Fetch ${target}`,
-            command,
-            String(error),
-            false
-          );
+          addLogEntry(targetRepoPath, 'Fetch', `Fetch ${target}`, command, String(error), false);
           addAlert('error', 'Fetch Error', String(error));
           closeModal();
         }
@@ -1309,12 +1353,9 @@ function App() {
       await doFetch();
     },
     [
-      activeTab?.path,
-      isGitLoading,
       saveOptions,
       startOperation,
       closeModal,
-      refreshActiveTab,
       completeOperation,
       addLogEntry,
       addAlert,
@@ -1326,7 +1367,10 @@ function App() {
   // Execute pull with options
   const handlePullWithOptions = useCallback(
     async (options: PullOptions) => {
-      if (!activeTab?.path || isGitLoading) return;
+      const targetTab = useRepositoryStore.getState().getActiveTab();
+      if (!targetTab?.path || useGitOperationStore.getState().isLoading) return;
+      const targetTabId = targetTab.id;
+      const targetRepoPath = targetTab.path;
 
       saveOptions({ pull: options });
 
@@ -1339,6 +1383,7 @@ function App() {
       const doPull = async () => {
         try {
           const result = await invoke<GitOperationResult>('git_pull_with_options', {
+            repoPath: targetRepoPath,
             remote: options.remote,
             branch: options.branch,
             rebase: options.rebase,
@@ -1351,7 +1396,7 @@ function App() {
 
           completeOperation(result);
           addLogEntry(
-            activeTab?.path || '',
+            targetRepoPath,
             'Pull',
             `Pull ${target}`,
             command,
@@ -1361,11 +1406,9 @@ function App() {
 
           if (result.success) {
             closeModal();
-            // Refresh to update branch ahead/behind counts
-            await refreshActiveTab();
+            await useRepositoryStore.getState().refreshTab(targetTabId);
             setLocalChangesRefreshKey((k) => k + 1);
           } else if (result.error_type === 'divergent_branches') {
-            // Close the pull modal and show divergent branches modal
             closeModal();
             setPendingPullOptions(options);
             setDivergentBranchesModalOpen(true);
@@ -1377,14 +1420,7 @@ function App() {
         } catch (error) {
           console.error('Error pulling:', error);
           completeOperation({ success: false, message: String(error) });
-          addLogEntry(
-            activeTab?.path || '',
-            'Pull',
-            `Pull ${target}`,
-            command,
-            String(error),
-            false
-          );
+          addLogEntry(targetRepoPath, 'Pull', `Pull ${target}`, command, String(error), false);
           addAlert('error', 'Pull Error', String(error));
           closeModal();
         }
@@ -1393,8 +1429,6 @@ function App() {
       await doPull();
     },
     [
-      activeTab?.path,
-      isGitLoading,
       saveOptions,
       startOperation,
       completeOperation,
@@ -1402,7 +1436,6 @@ function App() {
       closeModal,
       addAlert,
       handleSshVerificationRequired,
-      refreshActiveTab,
       setLocalChangesRefreshKey,
       getErrorTitle,
     ]
@@ -1411,7 +1444,10 @@ function App() {
   // Execute push with options
   const handlePushWithOptions = useCallback(
     async (options: PushOptions) => {
-      if (!activeTab?.path || isGitLoading) return;
+      const targetTab = useRepositoryStore.getState().getActiveTab();
+      if (!targetTab?.path || useGitOperationStore.getState().isLoading) return;
+      const targetTabId = targetTab.id;
+      const targetRepoPath = targetTab.path;
 
       saveOptions({
         push: {
@@ -1430,6 +1466,7 @@ function App() {
       const doPush = async () => {
         try {
           const result = await invoke<GitOperationResult>('git_push_with_options', {
+            repoPath: targetRepoPath,
             branch: options.branch,
             remote: options.remote,
             remoteBranch: options.remoteBranch,
@@ -1443,7 +1480,7 @@ function App() {
 
           completeOperation(result);
           addLogEntry(
-            activeTab?.path || '',
+            targetRepoPath,
             'Push',
             `Push to ${target}`,
             command,
@@ -1453,8 +1490,7 @@ function App() {
           closeModal();
 
           if (result.success) {
-            // Refresh to update branch ahead/behind counts
-            await refreshActiveTab();
+            await useRepositoryStore.getState().refreshTab(targetTabId);
           } else {
             const errorTitle = getErrorTitle(result.error_type, 'Push');
             addAlert('error', errorTitle, result.message);
@@ -1462,14 +1498,7 @@ function App() {
         } catch (error) {
           console.error('Error pushing:', error);
           completeOperation({ success: false, message: String(error) });
-          addLogEntry(
-            activeTab?.path || '',
-            'Push',
-            `Push to ${target}`,
-            command,
-            String(error),
-            false
-          );
+          addLogEntry(targetRepoPath, 'Push', `Push to ${target}`, command, String(error), false);
           addAlert('error', 'Push Error', String(error));
           closeModal();
         }
@@ -1478,8 +1507,6 @@ function App() {
       await doPush();
     },
     [
-      activeTab?.path,
-      isGitLoading,
       saveOptions,
       startOperation,
       completeOperation,
@@ -1487,7 +1514,6 @@ function App() {
       addLogEntry,
       addAlert,
       handleSshVerificationRequired,
-      refreshActiveTab,
       getErrorTitle,
     ]
   );
@@ -1612,9 +1638,9 @@ function App() {
     setIsResizing(null);
   }, [setIsResizing]);
 
-  // Add/remove resize event listeners
+  // Add/remove resize event listeners (scoped to sidebar so it never collides with ActivityLogPanel)
   useEffect(() => {
-    if (isResizing) {
+    if (isResizing === 'sidebar') {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', stopResize);
       document.body.style.cursor = 'col-resize';
@@ -1629,148 +1655,155 @@ function App() {
     }
   }, [isResizing, handleMouseMove, stopResize]);
 
-  // File watcher: start when active tab changes
+  // File watcher: switch watched repo atomically (Rust stops previous watcher under lock)
   useEffect(() => {
-    if (!activeTab?.path) return;
-
-    // Start watcher for active tab's repository
-    invoke('start_file_watcher', { path: activeTab.path }).catch((error) => {
-      console.error('Failed to start file watcher:', error);
-    });
-
-    return () => {
+    if (!activeTab?.path) {
       invoke('stop_file_watcher').catch((error) => {
         console.error('Failed to stop file watcher:', error);
       });
-    };
+      return;
+    }
+
+    invoke('start_file_watcher', { path: activeTab.path }).catch((error) => {
+      console.error('Failed to start file watcher:', error);
+    });
   }, [activeTab?.path]);
+
+  // Stop file watcher on app unmount
+  useEffect(() => {
+    return () => {
+      invoke('stop_file_watcher').catch(() => {});
+    };
+  }, []);
 
   // File watcher: listen for file change events
   useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    const setupListener = async () => {
-      unlisten = await listen<{ repo_path: string; timestamp: number }>(
-        'repo-files-changed',
-        async (event) => {
-          const state = useRepositoryStore.getState();
-          const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
+    listen<{ repo_path: string; timestamp: number }>('repo-files-changed', async (event) => {
+      const state = useRepositoryStore.getState();
+      const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
 
-          if (matchingTab) {
-            // Check actual file status to determine if there are pending changes
-            // This avoids false positives from .git directory changes (e.g., after fetch)
-            try {
-              const result = await invoke<{ unstaged: unknown[]; staged: unknown[] }>(
-                'get_file_status_separated'
-              );
-              const hasChanges = result.unstaged.length > 0 || result.staged.length > 0;
-              setTabHasPendingChanges(matchingTab.id, hasChanges);
-            } catch (error) {
-              console.error('Error checking file status:', error);
-            }
-
-            // If this is the active tab, also refresh the local changes view
-            if (matchingTab.id === state.activeTabId) {
-              setLocalChangesRefreshKey((k) => k + 1);
-            }
-          }
+      if (matchingTab) {
+        try {
+          const result = await invoke<{ unstaged: unknown[]; staged: unknown[] }>(
+            'get_file_status_separated',
+            { repoPath: matchingTab.path }
+          );
+          const hasChanges = result.unstaged.length > 0 || result.staged.length > 0;
+          setTabHasPendingChanges(matchingTab.id, hasChanges);
+        } catch (error) {
+          console.error('Error checking file status:', error);
         }
-      );
-    };
 
-    setupListener();
+        if (matchingTab.id === useRepositoryStore.getState().activeTabId) {
+          setLocalChangesRefreshKey((k) => k + 1);
+        }
+      }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
   }, [setTabHasPendingChanges]);
 
-  // Branch watcher: listen for branch change events (when .git/HEAD changes)
+  // Branch watcher: listen for branch change events (when .git/HEAD or refs change)
   useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    const setupListener = async () => {
-      unlisten = await listen<{ repo_path: string; timestamp: number }>(
-        'repo-branch-changed',
-        async (event) => {
-          const state = useRepositoryStore.getState();
-          const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
+    listen<{ repo_path: string; timestamp: number }>('repo-branch-changed', async (event) => {
+      const state = useRepositoryStore.getState();
+      const matchingTab = state.tabs.find((tab) => tab.path === event.payload.repo_path);
 
-          if (matchingTab && matchingTab.id === state.activeTabId) {
-            // Refresh the entire repository data when branch changes
-            await refreshActiveTab();
-            // Also refresh local changes view
-            setLocalChangesRefreshKey((k) => k + 1);
-          }
+      if (matchingTab) {
+        await useRepositoryStore.getState().refreshTab(matchingTab.id);
+        if (matchingTab.id === useRepositoryStore.getState().activeTabId) {
+          setLocalChangesRefreshKey((k) => k + 1);
         }
-      );
-    };
-
-    setupListener();
+      }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
-  }, [refreshActiveTab]);
+  }, []);
 
   // Menu event: listen for "Open Repository" from native menu
   useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    const setupListener = async () => {
-      unlisten = await listen('menu-open-repository', () => {
-        handleOpenRepo();
-      });
-    };
-
-    setupListener();
+    listen('menu-open-repository', () => {
+      handleOpenRepo();
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
   }, [handleOpenRepo]);
 
   // Menu event: listen for "About Forky" from native menu
   useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    const setupListener = async () => {
-      unlisten = await listen('menu-about', () => {
-        setAboutModalOpen(true);
-      });
-    };
-
-    setupListener();
+    listen('menu-about', () => {
+      setAboutModalOpen(true);
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
   // Menu event: listen for "Open Recent" from native menu
   useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    const setupListener = async () => {
-      unlisten = await listen<string>('menu-open-recent-repo', (event) => {
-        handleOpenRecentRepo(event.payload);
-      });
-    };
-
-    setupListener();
+    listen<string>('menu-open-recent-repo', (event) => {
+      handleOpenRecentRepo(event.payload);
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      disposed = true;
+      unlisten?.();
     };
   }, [handleOpenRecentRepo]);
 
@@ -2025,9 +2058,9 @@ function App() {
         {sshVerification.isOpen && (
           <SshHostVerificationModal
             isOpen={true}
-            onClose={closeSshVerification}
+            onClose={handleRejectSshHost}
             onAccept={handleAcceptSshHost}
-            onReject={closeSshVerification}
+            onReject={handleRejectSshHost}
             hostInfo={sshVerification.hostInfo}
             isLoading={isSshLoading}
           />

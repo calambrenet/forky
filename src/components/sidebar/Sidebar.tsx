@@ -134,40 +134,6 @@ const CollapsibleSection: FC<CollapsibleSectionProps> = ({
   );
 };
 
-// Sorting function for remote branches
-const sortRemoteBranches = (branches: BranchInfo[], sortOrder: RemoteSortOrder): BranchInfo[] => {
-  const sorted = [...branches];
-
-  switch (sortOrder) {
-    case 'alphabetically':
-      return sorted.sort((a, b) => a.name.localeCompare(b.name));
-
-    case 'alphabetically-master-top':
-      return sorted.sort((a, b) => {
-        const aIsMain = a.name.includes('/main') || a.name.includes('/master');
-        const bIsMain = b.name.includes('/main') || b.name.includes('/master');
-        if (aIsMain && !bIsMain) return -1;
-        if (!aIsMain && bIsMain) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-    case 'alphabetically-backward':
-      return sorted.sort((a, b) => b.name.localeCompare(a.name));
-
-    case 'alphabetically-backward-master-top':
-      return sorted.sort((a, b) => {
-        const aIsMain = a.name.includes('/main') || a.name.includes('/master');
-        const bIsMain = b.name.includes('/main') || b.name.includes('/master');
-        if (aIsMain && !bIsMain) return -1;
-        if (!aIsMain && bIsMain) return 1;
-        return b.name.localeCompare(a.name);
-      });
-
-    default:
-      return sorted;
-  }
-};
-
 export const Sidebar: FC<SidebarProps> = memo(
   ({
     repoName,
@@ -199,8 +165,8 @@ export const Sidebar: FC<SidebarProps> = memo(
     expandTagsSection,
   }) => {
     const { t } = useTranslation();
-    const localBranches = branches.filter((b) => !b.is_remote);
-    const remoteBranchesUnsorted = branches.filter((b) => b.is_remote);
+    const localBranches = useMemo(() => branches.filter((b) => !b.is_remote), [branches]);
+    const remoteBranches = useMemo(() => branches.filter((b) => b.is_remote), [branches]);
 
     // Filter state
     const [filter, setFilter] = useState('');
@@ -277,14 +243,11 @@ export const Sidebar: FC<SidebarProps> = memo(
       return headBranch?.name || null;
     }, [localBranches]);
 
-    // Sort remote branches based on preference
-    const remoteBranches = sortRemoteBranches(remoteBranchesUnsorted, remoteSortOrder);
-
-    // Build tree structures
+    // Build tree structures (sorting remote branches inside buildRemoteTree so user preference applies)
     const localBranchTree = useMemo(() => buildBranchTree(localBranches), [localBranches]);
     const remoteTree = useMemo(
-      () => buildRemoteTree(remoteBranches, remotes),
-      [remoteBranches, remotes]
+      () => buildRemoteTree(remoteBranches, remotes, remoteSortOrder),
+      [remoteBranches, remotes, remoteSortOrder]
     );
     const tagTree = useMemo(() => buildTagTree(tags), [tags]);
 
@@ -319,39 +282,25 @@ export const Sidebar: FC<SidebarProps> = memo(
       [expandedPathsArray, setExpandedPathsArray]
     );
 
-    // Expand all folders that match filter
-    useEffect(() => {
-      if (filter.trim()) {
-        // When filtering, expand all folders that have matching children
-        const pathsToExpand = new Set<string>();
+    // Derive expanded folders while filtering purely in memo (avoids infinite effect loop & preserves saved state)
+    const effectiveExpandedPaths = useMemo(() => {
+      if (!filter.trim()) return expandedPaths;
 
-        const collectPaths = (nodes: TreeNode[]) => {
-          for (const node of nodes) {
-            if (node.type === 'folder' || node.type === 'remote') {
-              pathsToExpand.add(node.fullPath);
-            }
-            collectPaths(node.children);
+      const combined = new Set(expandedPaths);
+      const collectPaths = (nodes: TreeNode[]) => {
+        for (const node of nodes) {
+          if (node.type === 'folder' || node.type === 'remote') {
+            combined.add(node.fullPath);
           }
-        };
-
-        collectPaths(filteredLocalBranchTree);
-        collectPaths(filteredRemoteTree);
-        collectPaths(filteredTagTree);
-
-        if (pathsToExpand.size > 0) {
-          const newSet = new Set(expandedPathsArray);
-          pathsToExpand.forEach((p) => newSet.add(p));
-          setExpandedPathsArray(Array.from(newSet));
+          collectPaths(node.children);
         }
-      }
-    }, [
-      filter,
-      filteredLocalBranchTree,
-      filteredRemoteTree,
-      filteredTagTree,
-      expandedPathsArray,
-      setExpandedPathsArray,
-    ]);
+      };
+
+      collectPaths(filteredLocalBranchTree);
+      collectPaths(filteredRemoteTree);
+      collectPaths(filteredTagTree);
+      return combined;
+    }, [filter, expandedPaths, filteredLocalBranchTree, filteredRemoteTree, filteredTagTree]);
 
     const handleBranchClick = useCallback(
       (branch: BranchInfo) => {
@@ -735,7 +684,7 @@ export const Sidebar: FC<SidebarProps> = memo(
             {filteredLocalBranchTree.length > 0 ? (
               <BranchTree
                 nodes={filteredLocalBranchTree}
-                expandedPaths={expandedPaths}
+                expandedPaths={effectiveExpandedPaths}
                 onToggleExpand={handleToggleExpand}
                 onBranchClick={handleBranchClick}
                 onBranchDoubleClick={handleLocalBranchDoubleClick}
@@ -758,7 +707,7 @@ export const Sidebar: FC<SidebarProps> = memo(
             {filteredRemoteTree.length > 0 ? (
               <BranchTree
                 nodes={filteredRemoteTree}
-                expandedPaths={expandedPaths}
+                expandedPaths={effectiveExpandedPaths}
                 onToggleExpand={handleToggleExpand}
                 onBranchClick={handleBranchClick}
                 onBranchDoubleClick={handleRemoteBranchDoubleClick}
@@ -782,7 +731,7 @@ export const Sidebar: FC<SidebarProps> = memo(
             {filteredTagTree.length > 0 ? (
               <BranchTree
                 nodes={filteredTagTree}
-                expandedPaths={expandedPaths}
+                expandedPaths={effectiveExpandedPaths}
                 onToggleExpand={handleToggleExpand}
                 onTagClick={handleTagClick}
               />

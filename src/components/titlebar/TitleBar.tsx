@@ -75,8 +75,15 @@ export const TitleBar: FC<TitleBarProps> = ({ children }) => {
           target.closest('.menu-container') ||
           target.closest('.menu-dropdown') ||
           target.closest('.menu-item') ||
+          target.closest('.toolbar-dropdown-container') ||
+          target.closest('.toolbar-split-btn') ||
           target.closest('.stash-dropdown') ||
-          target.closest('.stash-dropdown-item')
+          target.closest('.stash-dropdown-item') ||
+          target.closest('.branch-dropdown') ||
+          target.closest('.merge-dropdown') ||
+          target.closest('.recent-repos-dropdown') ||
+          target.closest('.branch-selector') ||
+          target.closest('.repo-info-box')
         ) {
           return;
         }

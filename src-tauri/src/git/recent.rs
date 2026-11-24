@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tauri::Manager;
+
+static RECENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecentRepo {
@@ -16,6 +19,14 @@ fn recent_repos_file(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
         .app_config_dir()
         .ok()
         .map(|dir| dir.join("recent_repos.json"))
+}
+
+fn normalize_path(path: &str) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| Path::new(path).to_path_buf())
+        .to_string_lossy()
+        .trim_end_matches(['/', '\\'])
+        .to_string()
 }
 
 /// Carga la lista de repositorios recientes desde disco.
@@ -35,14 +46,14 @@ pub fn load(app_handle: &tauri::AppHandle) -> Vec<RecentRepo> {
     serde_json::from_str(&content).unwrap_or_default()
 }
 
-/// Añade o actualiza un repositorio en la lista de recientes.
+/// Añade o actualiza un repositorio en la lista de recientes de forma atómica.
 /// Mantiene un máximo de 5 entradas ordenadas por última apertura.
-/// Devuelve la lista actualizada.
 pub fn add(app_handle: &tauri::AppHandle, path: &str, name: &str) -> Vec<RecentRepo> {
+    let _guard = RECENT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut repos = load(app_handle);
 
-    // Eliminar entrada existente para este path
-    repos.retain(|r| r.path != path);
+    let normalized_new = normalize_path(path);
+    repos.retain(|r| normalize_path(&r.path) != normalized_new);
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -52,7 +63,7 @@ pub fn add(app_handle: &tauri::AppHandle, path: &str, name: &str) -> Vec<RecentR
     repos.insert(
         0,
         RecentRepo {
-            path: path.to_string(),
+            path: path.trim_end_matches(['/', '\\']).to_string(),
             name: name.to_string(),
             last_opened: now,
         },
@@ -60,13 +71,15 @@ pub fn add(app_handle: &tauri::AppHandle, path: &str, name: &str) -> Vec<RecentR
 
     repos.truncate(5);
 
-    // Persistir en disco
     if let Some(file_path) = recent_repos_file(app_handle) {
         if let Some(parent) = file_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(&repos) {
-            let _ = fs::write(file_path, json);
+            let tmp_path = file_path.with_extension("json.tmp");
+            if fs::write(&tmp_path, json).is_ok() {
+                let _ = fs::rename(&tmp_path, &file_path);
+            }
         }
     }
 

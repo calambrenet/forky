@@ -8,7 +8,7 @@
 }
 
 /* Warning style for force push checkbox */
-.checkbox-container:has(input:checked) .checkbox-label:contains('Force') {
+.checkbox-container.warning:has(input:checked) .checkbox-label {
   color: var(--accent-orange);
 }
 

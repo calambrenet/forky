@@ -32,6 +32,10 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
     const containerRef = useRef<HTMLDivElement>(null);
     const detailContentRef = useRef<HTMLDivElement>(null);
     const graphRef = useRef<CommitGraphHandle>(null);
+    const commitsReqIdRef = useRef(0);
+    const branchHeadsReqIdRef = useRef(0);
+    const filesReqIdRef = useRef(0);
+    const diffReqIdRef = useRef(0);
 
     // Derive selectedCommit from selectedCommitId
     const selectedCommit = useMemo(() => {
@@ -39,26 +43,48 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       return commits.find((c) => c.id === selectedCommitId) || null;
     }, [selectedCommitId, commits]);
 
-    const loadCommits = useCallback(async (limit: number = 100) => {
-      try {
-        const result = await invoke<CommitInfo[]>('get_commits', { limit });
-        setCommits(result);
-        setHasMore(result.length >= limit);
-      } catch (error) {
-        console.error('Error loading commits:', error);
-      }
-    }, []);
+    const loadCommits = useCallback(
+      async (limit: number = 100) => {
+        const reqId = ++commitsReqIdRef.current;
+        try {
+          const result = await invoke<CommitInfo[]>('get_commits', { repoPath, limit });
+          if (reqId !== commitsReqIdRef.current) return;
+          setCommits(result);
+          setHasMore(result.length >= limit);
+        } catch (error) {
+          if (reqId !== commitsReqIdRef.current) return;
+          console.error('Error loading commits:', error);
+          setCommits([]);
+          setHasMore(false);
+        }
+      },
+      [repoPath]
+    );
 
     const loadBranchHeads = useCallback(async () => {
+      const reqId = ++branchHeadsReqIdRef.current;
       try {
-        const result = await invoke<BranchHead[]>('get_branch_heads');
+        const result = await invoke<BranchHead[]>('get_branch_heads', { repoPath });
+        if (reqId !== branchHeadsReqIdRef.current) return;
         setBranchHeads(result);
       } catch (error) {
+        if (reqId !== branchHeadsReqIdRef.current) return;
         console.error('Error loading branch heads:', error);
+        setBranchHeads([]);
       }
-    }, []);
+    }, [repoPath]);
 
     useEffect(() => {
+      // Clear stale view state when switching repositories
+      filesReqIdRef.current += 1;
+      diffReqIdRef.current += 1;
+      setCommits([]);
+      setBranchHeads([]);
+      setCommitFiles([]);
+      setSelectedFile(null);
+      setDiffInfo(null);
+      setIsLoadingFiles(false);
+      setIsLoadingDiff(false);
       loadCommits();
       loadBranchHeads();
     }, [loadCommits, loadBranchHeads, repoPath]);
@@ -66,66 +92,96 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
     const loadMore = useCallback(async () => {
       if (!hasMore) return;
       const newLimit = commits.length + 100;
+      const reqId = ++commitsReqIdRef.current;
       try {
-        const result = await invoke<CommitInfo[]>('get_commits', { limit: newLimit });
+        const result = await invoke<CommitInfo[]>('get_commits', { repoPath, limit: newLimit });
+        if (reqId !== commitsReqIdRef.current) return;
         setCommits(result);
         setHasMore(result.length >= newLimit);
       } catch (error) {
+        if (reqId !== commitsReqIdRef.current) return;
         console.error('Error loading more commits:', error);
       }
-    }, [commits.length, hasMore]);
+    }, [commits.length, hasMore, repoPath]);
 
-    const loadCommitFiles = useCallback(async (commit: CommitInfo) => {
-      setIsLoadingFiles(true);
-      try {
-        const files = await invoke<FileStatus[]>('get_commit_files', { commitId: commit.id });
-        setCommitFiles(files);
-      } catch (error) {
-        console.error('Error loading commit files:', error);
-        setCommitFiles([]);
-      } finally {
-        setIsLoadingFiles(false);
-      }
-    }, []);
+    const loadCommitFiles = useCallback(
+      async (commit: CommitInfo) => {
+        const reqId = ++filesReqIdRef.current;
+        setIsLoadingFiles(true);
+        try {
+          const files = await invoke<FileStatus[]>('get_commit_files', {
+            repoPath,
+            commitId: commit.id,
+          });
+          if (reqId !== filesReqIdRef.current) return;
+          setCommitFiles(files);
+        } catch (error) {
+          if (reqId !== filesReqIdRef.current) return;
+          console.error('Error loading commit files:', error);
+          setCommitFiles([]);
+        } finally {
+          if (reqId === filesReqIdRef.current) {
+            setIsLoadingFiles(false);
+          }
+        }
+      },
+      [repoPath]
+    );
 
-    const loadDiff = useCallback(async (commit: CommitInfo, file: FileStatus) => {
-      setIsLoadingDiff(true);
-      try {
-        const diff = await invoke<DiffInfo>('get_commit_diff', {
-          commitId: commit.id,
-          filePath: file.path,
-        });
-        setDiffInfo(diff);
-      } catch (error) {
-        console.error('Error loading diff:', error);
-        setDiffInfo(null);
-      } finally {
-        setIsLoadingDiff(false);
-      }
-    }, []);
+    const loadDiff = useCallback(
+      async (commit: CommitInfo, file: FileStatus) => {
+        const reqId = ++diffReqIdRef.current;
+        setIsLoadingDiff(true);
+        try {
+          const diff = await invoke<DiffInfo>('get_commit_diff', {
+            repoPath,
+            commitId: commit.id,
+            filePath: file.path,
+          });
+          if (reqId !== diffReqIdRef.current) return;
+          setDiffInfo(diff);
+        } catch (error) {
+          if (reqId !== diffReqIdRef.current) return;
+          console.error('Error loading diff:', error);
+          setDiffInfo(null);
+        } finally {
+          if (reqId === diffReqIdRef.current) {
+            setIsLoadingDiff(false);
+          }
+        }
+      },
+      [repoPath]
+    );
 
-    const handleCommitClick = (commit: CommitInfo) => {
-      onCommitSelect?.(commit.id);
+    const handleCommitClick = useCallback(
+      (commit: CommitInfo) => {
+        onCommitSelect?.(commit.id);
+      },
+      [onCommitSelect]
+    );
+
+    // Single source of truth for loading commit files & resetting file/diff selection
+    useEffect(() => {
+      diffReqIdRef.current += 1;
       setSelectedFile(null);
       setDiffInfo(null);
-      loadCommitFiles(commit);
-    };
+      setIsLoadingDiff(false);
 
-    // Load commit files when selectedCommit changes (from external navigation)
-    useEffect(() => {
       if (selectedCommit) {
         loadCommitFiles(selectedCommit);
+      } else {
+        filesReqIdRef.current += 1;
+        setCommitFiles([]);
+        setIsLoadingFiles(false);
       }
-      // Using selectedCommitId instead of selectedCommit to avoid unnecessary re-renders
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedCommitId, loadCommitFiles]);
+    }, [selectedCommit, loadCommitFiles]);
 
-    // Scroll to commit when selectedCommitId changes externally
+    // Scroll to commit when selectedCommitId changes or commits finish loading
     useEffect(() => {
-      if (selectedCommitId && graphRef.current) {
+      if (selectedCommitId && commits.length > 0 && graphRef.current) {
         graphRef.current.scrollToCommit(selectedCommitId);
       }
-    }, [selectedCommitId]);
+    }, [selectedCommitId, commits.length]);
 
     const handleFileSelect = (file: FileStatus) => {
       setSelectedFile(file);
@@ -257,7 +313,13 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
                       <span className="line-number old">{line.old_line_no ?? ''}</span>
                       <span className="line-number new">{line.new_line_no ?? ''}</span>
                       <span className="line-prefix">
-                        {line.line_type === 'add' ? '+' : line.line_type === 'delete' ? '-' : ' '}
+                        {line.line_type === 'add'
+                          ? '+'
+                          : line.line_type === 'delete'
+                            ? '-'
+                            : line.line_type === 'no_newline'
+                              ? '\\'
+                              : ' '}
                       </span>
                       <span className="line-content">{line.content}</span>
                     </div>

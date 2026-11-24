@@ -91,120 +91,191 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       isLoading: false,
     });
 
-    // Hunk hover state
+    // Hunk hover & in-flight state
     const [hoveredHunkIndex, setHoveredHunkIndex] = useState<number | null>(null);
+    const [busyHunkKey, setBusyHunkKey] = useState<string | null>(null);
+
+    const statusReqIdRef = useRef(0);
+    const diffReqIdRef = useRef(0);
+    const imageReqIdRef = useRef(0);
 
     // Get store actions for updating pending changes indicator and file statuses
     const { setTabHasPendingChanges, updateTabState } = useRepositoryStore.getState();
 
-    const loadFileStatus = useCallback(async () => {
+    const loadFileStatus = useCallback(async (): Promise<FileStatusSeparated | null> => {
+      const reqId = ++statusReqIdRef.current;
       try {
-        const result = await invoke<FileStatusSeparated>('get_file_status_separated');
+        const result = await invoke<FileStatusSeparated>('get_file_status_separated', {
+          repoPath,
+        });
+        if (reqId !== statusReqIdRef.current) return null;
+
         setUnstaged(result.unstaged);
         setStaged(result.staged);
 
-        // Update the store with file statuses and pending changes indicator
-        const { activeTabId } = useRepositoryStore.getState();
-        if (activeTabId) {
+        const state = useRepositoryStore.getState();
+        const matchingTab = state.tabs.find((t) => t.path === repoPath);
+        if (matchingTab) {
           const allFiles = [...result.unstaged, ...result.staged];
-          const hasChanges = allFiles.length > 0;
-
-          // Update fileStatuses in store (for sidebar counter)
-          updateTabState(activeTabId, { fileStatuses: allFiles });
-          setTabHasPendingChanges(activeTabId, hasChanges);
+          updateTabState(matchingTab.id, { fileStatuses: allFiles });
+          setTabHasPendingChanges(matchingTab.id, allFiles.length > 0);
         }
+        return result;
       } catch (error) {
+        if (reqId !== statusReqIdRef.current) return null;
         console.error('Error loading file status:', error);
+        return null;
       }
-    }, [setTabHasPendingChanges, updateTabState]);
+    }, [repoPath, setTabHasPendingChanges, updateTabState]);
+
+    useEffect(() => {
+      // Reset view state on repository switch so previous repo's diff/file never leaks
+      diffReqIdRef.current += 1;
+      imageReqIdRef.current += 1;
+      setSelectedFile(null);
+      setDiffInfo(null);
+      setImageDiff({ oldImage: null, newImage: null, isLoading: false });
+      setLastCommitMessage(null);
+      setIsLoadingDiff(false);
+    }, [repoPath]);
 
     useEffect(() => {
       loadFileStatus();
-    }, [loadFileStatus, repoPath, refreshKey]);
+    }, [loadFileStatus, refreshKey]);
 
-    const loadImageContent = useCallback(async (file: FileStatus) => {
-      setImageDiff({ oldImage: null, newImage: null, isLoading: true });
+    const loadImageContent = useCallback(
+      async (file: FileStatus) => {
+        const reqId = ++imageReqIdRef.current;
+        setImageDiff({ oldImage: null, newImage: null, isLoading: true });
 
-      try {
-        let oldImage: ImageContent | null = null;
-        let newImage: ImageContent | null = null;
+        try {
+          let oldImage: ImageContent | null = null;
+          let newImage: ImageContent | null = null;
 
-        // Determine what images to load based on file status
-        if (file.status === 'untracked' || file.status === 'new') {
-          // New file: only show new image
-          newImage = await invoke<ImageContent>('get_image_content', { filePath: file.path });
-        } else if (file.status === 'deleted') {
-          // Deleted file: only show old image from HEAD
-          oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
-        } else if (file.status === 'modified') {
-          // Modified file: show both old and new
-          // For staged files, get old from HEAD, new from index
-          // For unstaged files, get old from index (or HEAD if not staged), new from working dir
-          if (file.staged) {
-            try {
-              oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
-            } catch {
-              // File might be new in this branch
+          if (file.status === 'untracked' || file.status === 'new') {
+            newImage = await invoke<ImageContent>('get_image_content', {
+              repoPath,
+              filePath: file.path,
+            });
+          } else if (file.status === 'deleted') {
+            oldImage = await invoke<ImageContent>('get_image_from_head', {
+              repoPath,
+              filePath: file.path,
+            });
+          } else if (file.status === 'modified') {
+            if (file.staged) {
+              try {
+                oldImage = await invoke<ImageContent>('get_image_from_head', {
+                  repoPath,
+                  filePath: file.path,
+                });
+              } catch {
+                // File might be new in this branch
+              }
+              newImage = await invoke<ImageContent>('get_image_from_index', {
+                repoPath,
+                filePath: file.path,
+              });
+            } else {
+              try {
+                oldImage = await invoke<ImageContent>('get_image_from_head', {
+                  repoPath,
+                  filePath: file.path,
+                });
+              } catch {
+                // File might be new
+              }
+              newImage = await invoke<ImageContent>('get_image_content', {
+                repoPath,
+                filePath: file.path,
+              });
             }
-            newImage = await invoke<ImageContent>('get_image_from_index', { filePath: file.path });
-          } else {
-            try {
-              oldImage = await invoke<ImageContent>('get_image_from_head', { filePath: file.path });
-            } catch {
-              // File might be new
-            }
-            newImage = await invoke<ImageContent>('get_image_content', { filePath: file.path });
           }
-        }
 
-        setImageDiff({ oldImage, newImage, isLoading: false });
-      } catch (error) {
-        console.error('Error loading image content:', error);
-        setImageDiff({ oldImage: null, newImage: null, isLoading: false });
-      }
-    }, []);
+          if (reqId !== imageReqIdRef.current) return;
+          setImageDiff({ oldImage, newImage, isLoading: false });
+        } catch (error) {
+          if (reqId !== imageReqIdRef.current) return;
+          console.error('Error loading image content:', error);
+          setImageDiff({ oldImage: null, newImage: null, isLoading: false });
+        }
+      },
+      [repoPath]
+    );
 
     const loadDiff = useCallback(
       async (file: FileStatus) => {
+        const reqId = ++diffReqIdRef.current;
+        imageReqIdRef.current += 1; // Cancel any in-flight image load from previous selection
         setIsLoadingDiff(true);
         try {
           const diff = await invoke<DiffInfo>('get_working_diff', {
+            repoPath,
             filePath: file.path,
             staged: file.staged,
             fileStatus: file.status,
           });
+          if (reqId !== diffReqIdRef.current) return;
           setDiffInfo(diff);
 
-          // If it's a binary image, also load the image content
           if (diff.is_binary && diff.binary_type === 'image') {
-            loadImageContent(file);
+            void loadImageContent(file);
           } else {
             setImageDiff({ oldImage: null, newImage: null, isLoading: false });
           }
         } catch (error) {
+          if (reqId !== diffReqIdRef.current) return;
           console.error('Error loading diff:', error);
           setDiffInfo(null);
           setImageDiff({ oldImage: null, newImage: null, isLoading: false });
         } finally {
-          setIsLoadingDiff(false);
+          if (reqId === diffReqIdRef.current) {
+            setIsLoadingDiff(false);
+          }
         }
       },
-      [loadImageContent]
+      [repoPath, loadImageContent]
+    );
+
+    // Reconcile selectedFile against fresh unstaged/staged lists so we never leave an orphaned selection
+    const reconcileSelection = useCallback(
+      (
+        fresh: FileStatusSeparated | null,
+        preferredPath: string | undefined,
+        preferredStaged: boolean
+      ) => {
+        if (!fresh || !preferredPath) return;
+        const primaryList = preferredStaged ? fresh.staged : fresh.unstaged;
+        const secondaryList = preferredStaged ? fresh.unstaged : fresh.staged;
+        const match =
+          primaryList.find((f) => f.path === preferredPath) ||
+          secondaryList.find((f) => f.path === preferredPath) ||
+          null;
+
+        setSelectedFile(match);
+        if (match) {
+          void loadDiff(match);
+        } else {
+          diffReqIdRef.current += 1;
+          imageReqIdRef.current += 1;
+          setDiffInfo(null);
+          setImageDiff({ oldImage: null, newImage: null, isLoading: false });
+        }
+      },
+      [loadDiff]
     );
 
     const handleFileSelect = (file: FileStatus) => {
       setSelectedFile(file);
-      loadDiff(file);
+      void loadDiff(file);
     };
 
     const handleStageFile = async (file: FileStatus) => {
       try {
-        await invoke('stage_file', { filePath: file.path });
-        await loadFileStatus();
-        if (selectedFile?.path === file.path) {
-          const newFile = { ...file, staged: true };
-          setSelectedFile(newFile);
-          loadDiff(newFile);
+        await invoke('stage_file', { repoPath, filePath: file.path });
+        const fresh = await loadFileStatus();
+        if (selectedFile?.path === file.path && selectedFile.staged === file.staged) {
+          reconcileSelection(fresh, file.path, true);
         }
       } catch (error) {
         console.error('Error staging file:', error);
@@ -213,12 +284,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     const handleUnstageFile = async (file: FileStatus) => {
       try {
-        await invoke('unstage_file', { filePath: file.path });
-        await loadFileStatus();
-        if (selectedFile?.path === file.path) {
-          const newFile = { ...file, staged: false };
-          setSelectedFile(newFile);
-          loadDiff(newFile);
+        await invoke('unstage_file', { repoPath, filePath: file.path });
+        const fresh = await loadFileStatus();
+        if (selectedFile?.path === file.path && selectedFile.staged === file.staged) {
+          reconcileSelection(fresh, file.path, false);
         }
       } catch (error) {
         console.error('Error unstaging file:', error);
@@ -228,9 +297,12 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     const handleStageAll = async () => {
       try {
         for (const file of unstaged) {
-          await invoke('stage_file', { filePath: file.path });
+          await invoke('stage_file', { repoPath, filePath: file.path });
         }
-        await loadFileStatus();
+        const fresh = await loadFileStatus();
+        if (selectedFile) {
+          reconcileSelection(fresh, selectedFile.path, true);
+        }
       } catch (error) {
         console.error('Error staging all files:', error);
       }
@@ -239,9 +311,12 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     const handleUnstageAll = async () => {
       try {
         for (const file of staged) {
-          await invoke('unstage_file', { filePath: file.path });
+          await invoke('unstage_file', { repoPath, filePath: file.path });
         }
-        await loadFileStatus();
+        const fresh = await loadFileStatus();
+        if (selectedFile) {
+          reconcileSelection(fresh, selectedFile.path, false);
+        }
       } catch (error) {
         console.error('Error unstaging all files:', error);
       }
@@ -256,20 +331,19 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
       try {
         await invoke('discard_file', {
+          repoPath,
           filePath: file.path,
           isUntracked,
         });
 
-        // Refresh file status
-        await loadFileStatus();
+        const fresh = await loadFileStatus();
 
-        // Clear selection if the discarded file was selected
-        if (selectedFile?.path === file.path) {
-          setSelectedFile(null);
-          setDiffInfo(null);
+        if (selectedFile?.path === file.path && selectedFile.staged === file.staged) {
+          reconcileSelection(fresh, file.path, file.staged);
         }
       } catch (error) {
         console.error('Error discarding changes:', error);
+        useUIStore.getState().addAlert('error', t('alerts.gitError'), String(error));
       }
     };
 
@@ -285,46 +359,57 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
       })),
     });
 
+    const getHunkKey = (hunk: DiffHunk) =>
+      `${hunk.old_start}-${hunk.old_lines}-${hunk.new_start}-${hunk.new_lines}`;
+
     // Hunk operation handlers
     const handleStageHunk = async (hunk: DiffHunk) => {
       if (!selectedFile) return;
+      const hunkKey = getHunkKey(hunk);
+      if (busyHunkKey === hunkKey) return;
+
+      setBusyHunkKey(hunkKey);
       const filePath = selectedFile.path;
       const hunkData = convertToHunkData(hunk);
 
       try {
         await invoke('stage_hunk', {
+          repoPath,
           filePath,
           hunk: hunkData,
         });
-        await loadFileStatus();
-        // Reload the diff for the same file
-        const updatedFile = { ...selectedFile, staged: false };
-        setSelectedFile(updatedFile);
-        loadDiff(updatedFile);
+        const fresh = await loadFileStatus();
+        reconcileSelection(fresh, filePath, false);
       } catch (error) {
         console.error('Error staging hunk:', error);
-        alert(`Error staging hunk: ${error}`);
+        useUIStore.getState().addAlert('error', t('alerts.gitError'), String(error));
+      } finally {
+        setBusyHunkKey(null);
       }
     };
 
     const handleUnstageHunk = async (hunk: DiffHunk) => {
       if (!selectedFile) return;
+      const hunkKey = getHunkKey(hunk);
+      if (busyHunkKey === hunkKey) return;
+
+      setBusyHunkKey(hunkKey);
       const filePath = selectedFile.path;
       const hunkData = convertToHunkData(hunk);
 
       try {
         await invoke('unstage_hunk', {
+          repoPath,
           filePath,
           hunk: hunkData,
         });
-        await loadFileStatus();
-        // Reload the diff for the same file
-        const updatedFile = { ...selectedFile, staged: true };
-        setSelectedFile(updatedFile);
-        loadDiff(updatedFile);
+        const fresh = await loadFileStatus();
+        reconcileSelection(fresh, filePath, true);
       } catch (error) {
         console.error('Error unstaging hunk:', error);
-        alert(`Error unstaging hunk: ${error}`);
+        useUIStore.getState().addAlert('error', t('alerts.gitError'), String(error));
+      } finally {
+        setBusyHunkKey(null);
       }
     };
 
@@ -334,21 +419,26 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     const handleConfirmDiscardHunk = async (hunk: DiffHunk) => {
       if (!selectedFile) return;
+      const hunkKey = getHunkKey(hunk);
+      if (busyHunkKey === hunkKey) return;
+
+      setBusyHunkKey(hunkKey);
       const filePath = selectedFile.path;
       const hunkData = convertToHunkData(hunk);
 
       try {
         await invoke('discard_hunk', {
+          repoPath,
           filePath,
           hunk: hunkData,
         });
-        await loadFileStatus();
-        // Reload the diff for the same file
-        loadDiff(selectedFile);
+        const fresh = await loadFileStatus();
+        reconcileSelection(fresh, filePath, selectedFile.staged);
       } catch (error) {
         console.error('Error discarding hunk:', error);
-        alert(`Error discarding hunk: ${error}`);
+        useUIStore.getState().addAlert('error', t('alerts.gitError'), String(error));
       } finally {
+        setBusyHunkKey(null);
         setDiscardHunkModal({ isOpen: false, hunk: null });
       }
     };
@@ -362,27 +452,28 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
     };
 
     // Commit handlers
-    const handleAmendChange = useCallback(async (amend: boolean) => {
-      if (amend) {
-        try {
-          const message = await invoke<CommitMessage>('get_last_commit_message');
-          setLastCommitMessage(message);
-        } catch (error) {
-          console.error('Error loading last commit message:', error);
+    const handleAmendChange = useCallback(
+      async (amend: boolean) => {
+        if (amend) {
+          try {
+            const message = await invoke<CommitMessage>('get_last_commit_message', { repoPath });
+            setLastCommitMessage(message);
+          } catch (error) {
+            console.error('Error loading last commit message:', error);
+            setLastCommitMessage(null);
+          }
+        } else {
           setLastCommitMessage(null);
         }
-      } else {
-        setLastCommitMessage(null);
-      }
-    }, []);
+      },
+      [repoPath]
+    );
 
     const handleCommit = useCallback(
-      async (subject: string, description: string, amend: boolean) => {
+      async (subject: string, description: string, amend: boolean): Promise<boolean> => {
         setIsCommitLoading(true);
-        // Yield to let React flush the loading state before the blocking invoke
         await new Promise((r) => setTimeout(r, 0));
 
-        // Build the full commit message
         const fullMessage = description ? `${subject}\n\n${description}` : subject;
         const command = amend ? `git commit --amend -m "${subject}"` : `git commit -m "${subject}"`;
 
@@ -394,6 +485,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             message: string;
             error_type?: string;
           }>('git_commit', {
+            repoPath,
             message: fullMessage,
             amend,
           });
@@ -408,18 +500,21 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             result.success
           );
 
-          // Always refresh repository state: even on failure, the working copy
-          // or hooks may have touched files, so the UI should stay consistent.
           await loadFileStatus();
           onRefreshRepository?.();
 
           if (result.success) {
             setSelectedFile(null);
             setDiffInfo(null);
-          } else if (result.error_type === 'missing_identity') {
-            // Offer the user a one-click path to configure their Git identity
-            setMissingIdentityOpen(true);
+            return true;
           }
+
+          if (result.error_type === 'missing_identity') {
+            setMissingIdentityOpen(true);
+          } else {
+            useUIStore.getState().addAlert('error', t('alerts.gitError'), result.message);
+          }
+          return false;
         } catch (error) {
           const errorMessage = String(error);
           completeOperation({ success: false, message: errorMessage });
@@ -431,9 +526,10 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             errorMessage,
             false
           );
-          // Refresh on thrown errors too, in case state changed
+          useUIStore.getState().addAlert('error', t('alerts.gitError'), errorMessage);
           await loadFileStatus();
           onRefreshRepository?.();
+          return false;
         } finally {
           setIsCommitLoading(false);
         }
@@ -445,6 +541,7 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         addLogEntry,
         onRefreshRepository,
         repoPath,
+        t,
       ]
     );
 
@@ -488,6 +585,8 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
 
     const getStatusIcon = (status: string) => {
       switch (status) {
+        case 'conflicted':
+          return { icon: '!', color: 'var(--accent-red)', label: t('fileStatus.conflicted') };
         case 'new':
         case 'untracked':
           return { icon: 'A', color: 'var(--accent-green)', label: t('fileStatus.added') };
@@ -750,47 +849,50 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
             <span className="diff-file-status">{getStatusIcon(selectedFile.status).label}</span>
           </div>
           <div className="diff-hunks">
-            {diffInfo.hunks.map((hunk, hunkIndex) => (
-              <div
-                key={hunkIndex}
-                className="diff-hunk"
-                onMouseEnter={() => setHoveredHunkIndex(hunkIndex)}
-                onMouseLeave={() => setHoveredHunkIndex(null)}
-              >
-                <div className="diff-hunk-header">
-                  <span className="hunk-info">
-                    @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
-                  </span>
-                  {hoveredHunkIndex === hunkIndex && (
-                    <div className="hunk-actions">
-                      {isStaged ? (
-                        // Staged file: only show Unstage button
-                        <button
-                          className="hunk-action-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUnstageHunk(hunk);
-                          }}
-                          title={t('localChanges.unstageHunk')}
-                        >
-                          {t('localChanges.unstage')}
-                        </button>
-                      ) : (
-                        // Unstaged file: show Stage and Discard buttons
-                        <>
+            {diffInfo.hunks.map((hunk, hunkIndex) => {
+              const hunkKey = getHunkKey(hunk);
+              const isHunkBusy = busyHunkKey === hunkKey;
+              return (
+                <div
+                  key={`${hunkKey}-${hunkIndex}`}
+                  className="diff-hunk"
+                  onMouseEnter={() => setHoveredHunkIndex(hunkIndex)}
+                  onMouseLeave={() => setHoveredHunkIndex(null)}
+                >
+                  <div className="diff-hunk-header">
+                    <span className="hunk-info">
+                      @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                    </span>
+                    {hoveredHunkIndex === hunkIndex && (
+                      <div className="hunk-actions">
+                        {isStaged ? (
                           <button
-                            className="hunk-action-btn stage"
+                            className="hunk-action-btn"
+                            disabled={isHunkBusy}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleStageHunk(hunk);
+                              void handleUnstageHunk(hunk);
                             }}
-                            title={t('localChanges.stageHunk')}
+                            title={t('localChanges.unstageHunk')}
                           >
-                            {t('localChanges.stage')}
+                            {t('localChanges.unstage')}
                           </button>
-                          {!isUntracked && (
+                        ) : !isUntracked ? (
+                          <>
+                            <button
+                              className="hunk-action-btn stage"
+                              disabled={isHunkBusy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleStageHunk(hunk);
+                              }}
+                              title={t('localChanges.stageHunk')}
+                            >
+                              {t('localChanges.stage')}
+                            </button>
                             <button
                               className="hunk-action-btn discard"
+                              disabled={isHunkBusy}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDiscardHunk(hunk);
@@ -799,26 +901,32 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
                             >
                               {t('localChanges.discard')}
                             </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                  <div className="diff-lines">
+                    {hunk.lines.map((line, lineIndex) => (
+                      <div key={lineIndex} className={`diff-line ${line.line_type}`}>
+                        <span className="line-number old">{line.old_line_no ?? ''}</span>
+                        <span className="line-number new">{line.new_line_no ?? ''}</span>
+                        <span className="line-prefix">
+                          {line.line_type === 'add'
+                            ? '+'
+                            : line.line_type === 'delete'
+                              ? '-'
+                              : line.line_type === 'no_newline'
+                                ? '\\'
+                                : ' '}
+                        </span>
+                        <span className="line-content">{line.content}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="diff-lines">
-                  {hunk.lines.map((line, lineIndex) => (
-                    <div key={lineIndex} className={`diff-line ${line.line_type}`}>
-                      <span className="line-number old">{line.old_line_no ?? ''}</span>
-                      <span className="line-number new">{line.new_line_no ?? ''}</span>
-                      <span className="line-prefix">
-                        {line.line_type === 'add' ? '+' : line.line_type === 'delete' ? '-' : ' '}
-                      </span>
-                      <span className="line-content">{line.content}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
@@ -928,15 +1036,13 @@ export const LocalChangesView: FC<LocalChangesViewProps> = memo(
         <Resizer direction="horizontal" onMouseDown={handleResizeStart} isResizing={isResizing} />
         <div className="diff-panel">
           {renderDiffContent()}
-          {staged.length > 0 && (
-            <CommitPanel
-              stagedCount={staged.length}
-              onCommit={handleCommit}
-              isLoading={isCommitLoading}
-              lastCommitMessage={lastCommitMessage}
-              onAmendChange={handleAmendChange}
-            />
-          )}
+          <CommitPanel
+            stagedCount={staged.length}
+            onCommit={handleCommit}
+            isLoading={isCommitLoading}
+            lastCommitMessage={lastCommitMessage}
+            onAmendChange={handleAmendChange}
+          />
         </div>
         {renderContextMenu()}
         <DiscardChangesModal

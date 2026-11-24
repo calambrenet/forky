@@ -41,7 +41,9 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(
 
     const handleCancel = () => {
       onCancel();
-      onClose();
+      if (onClose !== onCancel) {
+        onClose();
+      }
     };
 
     const getTitle = () => {
@@ -82,7 +84,7 @@ export const GitCredentialModal: FC<GitCredentialModalProps> = memo(
     };
 
     return (
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isOpen} onClose={isLoading ? undefined : handleCancel}>
         <ModalHeader
           icon={<KeyRound size={24} />}
           title={getTitle()}

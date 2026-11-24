@@ -38,11 +38,10 @@ export const TrackRemoteBranchModal: FC<TrackRemoteBranchModalProps> = memo(
       return localBranches.map((b) => b.name);
     }, [localBranches]);
 
-    // Reset when modal opens with new remote branch
+    // Reset branch name when modal opens with a new remote branch (validity comes from BranchNameInput)
     useEffect(() => {
       if (isOpen) {
         setLocalBranchName(getDefaultLocalBranchName(remoteBranch));
-        setIsValid(false);
       }
     }, [isOpen, remoteBranch]);
 

@@ -1,5 +1,6 @@
 import type { FC } from 'react';
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   RotateCcw,
@@ -7,7 +8,6 @@ import {
   GripVertical,
   ChevronDown,
   Check,
-  Edit3,
   Layers,
   Trash2,
 } from 'lucide-react';
@@ -28,19 +28,24 @@ interface InteractiveRebaseModalProps {
   isLoadingCommits: boolean;
 }
 
+// Reword and Edit require interactive message-editing/pause-resume UI not supported here
 const ACTION_OPTIONS: { value: RebaseAction; label: string; icon: React.ReactNode }[] = [
   { value: 'pick', label: 'Pick', icon: <Check size={12} /> },
-  { value: 'reword', label: 'Reword', icon: <Edit3 size={12} /> },
-  { value: 'edit', label: 'Edit', icon: <Edit3 size={12} /> },
   { value: 'squash', label: 'Squash', icon: <Layers size={12} /> },
   { value: 'fixup', label: 'Fixup', icon: <Layers size={12} /> },
   { value: 'drop', label: 'Drop', icon: <Trash2 size={12} /> },
 ];
 
+interface OpenDropdownState {
+  index: number;
+  top: number;
+  left: number;
+}
+
 interface CommitRowProps {
   entry: InteractiveRebaseEntry;
   index: number;
-  onActionChange: (index: number, action: RebaseAction) => void;
+  onToggleDropdown: (index: number, buttonEl: HTMLButtonElement) => void;
   onDragStart: (index: number) => void;
   onDragOver: (index: number) => void;
   onDragEnd: () => void;
@@ -52,21 +57,14 @@ const CommitRow: FC<CommitRowProps> = memo(
   ({
     entry,
     index,
-    onActionChange,
+    onToggleDropdown,
     onDragStart,
     onDragOver,
     onDragEnd,
     isDragging,
     isDragOver,
   }) => {
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-    const handleActionSelect = (action: RebaseAction) => {
-      onActionChange(index, action);
-      setIsDropdownOpen(false);
-    };
-
-    const currentAction = ACTION_OPTIONS.find((a) => a.value === entry.action);
+    const currentAction = ACTION_OPTIONS.find((a) => a.value === entry.action) ?? ACTION_OPTIONS[0];
 
     return (
       <div
@@ -85,27 +83,14 @@ const CommitRow: FC<CommitRowProps> = memo(
 
         <div className="row-action-dropdown">
           <button
+            type="button"
             className={`action-button action-${entry.action}`}
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            onClick={(e) => onToggleDropdown(index, e.currentTarget)}
           >
-            {currentAction?.icon}
-            <span>{currentAction?.label}</span>
+            {currentAction.icon}
+            <span>{currentAction.label}</span>
             <ChevronDown size={12} />
           </button>
-          {isDropdownOpen && (
-            <div className="action-dropdown-menu">
-              {ACTION_OPTIONS.map((option) => (
-                <div
-                  key={option.value}
-                  className={`action-option ${entry.action === option.value ? 'selected' : ''}`}
-                  onClick={() => handleActionSelect(option.value)}
-                >
-                  {option.icon}
-                  <span>{option.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="row-commit-id">{entry.short_id}</div>
@@ -126,33 +111,84 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [openDropdown, setOpenDropdown] = useState<OpenDropdownState | null>(null);
+    const dropdownMenuRef = useRef<HTMLDivElement>(null);
+    const initializedForOpenRef = useRef(false);
 
-    // Update entries when commits change
+    // Initialize entries once when modal opens and commits finish loading (so parent re-renders never wipe edits)
     useEffect(() => {
-      if (isOpen) {
+      if (!isOpen) {
+        initializedForOpenRef.current = false;
+        setEntries([]);
+        setAutostash(true);
+        setIsLoading(false);
+        setOpenDropdown(null);
+        return;
+      }
+
+      if (!isLoadingCommits && !initializedForOpenRef.current) {
+        initializedForOpenRef.current = true;
         setEntries([...commits]);
         setAutostash(true);
         setIsLoading(false);
       }
-    }, [isOpen, commits]);
+    }, [isOpen, isLoadingCommits, commits]);
 
-    // Reset when modal closes
+    // Close row action dropdown on click outside, scroll, or Escape (without closing parent Modal)
     useEffect(() => {
-      if (!isOpen) {
-        setEntries([]);
-        setIsLoading(false);
-      }
-    }, [isOpen]);
+      if (!openDropdown) return;
+
+      const handleMouseDown = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (dropdownMenuRef.current?.contains(target) || target.closest('.action-button')) {
+          return;
+        }
+        setOpenDropdown(null);
+      };
+
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenDropdown(null);
+        }
+      };
+
+      document.addEventListener('mousedown', handleMouseDown);
+      document.addEventListener('keydown', handleEscape, true);
+      return () => {
+        document.removeEventListener('mousedown', handleMouseDown);
+        document.removeEventListener('keydown', handleEscape, true);
+      };
+    }, [openDropdown]);
+
+    const handleToggleDropdown = useCallback((index: number, buttonEl: HTMLButtonElement) => {
+      setOpenDropdown((prev) => {
+        if (prev?.index === index) return null;
+        const rect = buttonEl.getBoundingClientRect();
+        const estimatedHeight = ACTION_OPTIONS.length * 32 + 8;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const top =
+          spaceBelow < estimatedHeight && rect.top > estimatedHeight
+            ? rect.top - estimatedHeight - 4
+            : rect.bottom + 4;
+        return { index, top, left: rect.left };
+      });
+    }, []);
 
     const handleActionChange = useCallback((index: number, action: RebaseAction) => {
       setEntries((prev) => {
         const newEntries = [...prev];
-        newEntries[index] = { ...newEntries[index], action };
+        if (newEntries[index]) {
+          newEntries[index] = { ...newEntries[index], action };
+        }
         return newEntries;
       });
+      setOpenDropdown(null);
     }, []);
 
     const handleDragStart = useCallback((index: number) => {
+      setOpenDropdown(null);
       setDragIndex(index);
     }, []);
 
@@ -176,11 +212,9 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
     const handleRebase = useCallback(() => {
       if (isLoading || isLoadingCommits || entries.length === 0) return;
 
-      // Set loading state immediately
+      setOpenDropdown(null);
       setIsLoading(true);
 
-      // Use requestAnimationFrame to allow React to render the loading state
-      // before the blocking git operation starts
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           onRebase(entries, autostash);
@@ -188,14 +222,9 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
       });
     }, [isLoading, isLoadingCommits, entries, autostash, onRebase]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !isLoading && !isLoadingCommits && entries.length > 0) {
-        handleRebase();
-      }
-    };
-
     const targetBranchName = targetBranch?.name || '';
     const isRebaseDisabled = isLoading || isLoadingCommits || entries.length === 0;
+    const activeEntry = openDropdown ? entries[openDropdown.index] : null;
 
     return (
       <Modal isOpen={isOpen} onClose={isLoading ? undefined : onClose}>
@@ -226,7 +255,7 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
             </div>
 
             {/* Commits list */}
-            <div className="interactive-rebase-commits" onKeyDown={handleKeyDown}>
+            <div className="interactive-rebase-commits">
               <div className="commits-header">
                 <span className="header-drag"></span>
                 <span className="header-action">{t('modals.interactiveRebase.action')}</span>
@@ -234,7 +263,7 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
                 <span className="header-message">{t('modals.interactiveRebase.message')}</span>
                 <span className="header-author">{t('modals.interactiveRebase.author')}</span>
               </div>
-              <div className="commits-list">
+              <div className="commits-list" onScroll={() => openDropdown && setOpenDropdown(null)}>
                 {isLoadingCommits ? (
                   <div className="commits-loading">
                     <RotateCcw size={20} className="spinning" />
@@ -251,7 +280,7 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
                       key={entry.commit_id}
                       entry={entry}
                       index={index}
-                      onActionChange={handleActionChange}
+                      onToggleDropdown={handleToggleDropdown}
                       onDragStart={handleDragStart}
                       onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
@@ -287,6 +316,34 @@ export const InteractiveRebaseModal: FC<InteractiveRebaseModalProps> = memo(
             {t('modals.interactiveRebase.startRebase')}
           </button>
         </ModalFooter>
+
+        {/* Portal menu prevents clipping inside .commits-list overflow container */}
+        {openDropdown &&
+          activeEntry &&
+          createPortal(
+            <div
+              ref={dropdownMenuRef}
+              className="action-dropdown-menu"
+              style={{
+                position: 'fixed',
+                top: openDropdown.top,
+                left: openDropdown.left,
+                zIndex: 2200,
+              }}
+            >
+              {ACTION_OPTIONS.map((option) => (
+                <div
+                  key={option.value}
+                  className={`action-option ${activeEntry.action === option.value ? 'selected' : ''}`}
+                  onClick={() => handleActionChange(openDropdown.index, option.value)}
+                >
+                  {option.icon}
+                  <span>{option.label}</span>
+                </div>
+              ))}
+            </div>,
+            document.body
+          )}
       </Modal>
     );
   }

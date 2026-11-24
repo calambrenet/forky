@@ -39,13 +39,18 @@ interface RepositoryStore {
   closeTabsToRight: (tabIndex: number) => void;
   closeTabsToLeft: (tabIndex: number) => void;
   updateTabState: (tabId: string, updates: Partial<TabState>) => void;
+  refreshTab: (tabId: string) => Promise<void>;
   refreshActiveTab: () => Promise<void>;
   setIsRestoring: (isRestoring: boolean) => void;
   setTabHasPendingChanges: (tabId: string, hasPendingChanges: boolean) => void;
   setTabCurrentBranch: (tabId: string, branchName: string) => void;
 
   // Internal actions
-  _loadRepositoryData: (tabId: string, persistedData?: PersistedTabData) => Promise<void>;
+  _loadRepositoryData: (
+    tabId: string,
+    repoPath: string,
+    persistedData?: PersistedTabData
+  ) => Promise<void>;
   _restoreRepositories: () => Promise<void>;
 }
 
@@ -61,6 +66,11 @@ const createEmptyTabState = (): TabState => ({
   selectedFile: null,
   viewMode: 'local-changes',
 });
+
+// Per-tab monotonic generation counter to discard out-of-order `_loadRepositoryData` resolutions
+const loadGenerationByTab: Record<string, number> = {};
+
+let restorationStarted = false;
 
 export const useRepositoryStore = create<RepositoryStore>()(
   subscribeWithSelector(
@@ -87,34 +97,40 @@ export const useRepositoryStore = create<RepositoryStore>()(
         openRepository: async (path: string) => {
           const state = get();
 
-          // Check if already open
-          const existing = state.tabs.find((t) => t.path === path);
-          if (existing) {
-            await get().selectTab(existing.id);
+          const existingBefore = state.tabs.find((t) => t.path === path);
+          if (existingBefore) {
+            await get().selectTab(existingBefore.id);
             return true;
           }
 
           try {
             const info = await invoke<RepositoryInfo>('open_repository', { path });
 
+            // Re-check against the canonical path returned by Rust (prevents duplicates via trailing slash / subdir)
+            const existingCanonical = get().tabs.find((t) => t.path === info.path);
+            if (existingCanonical) {
+              await get().selectTab(existingCanonical.id);
+              return true;
+            }
+
             const newTab: RepositoryTab = {
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
               path: info.path,
               name: info.name,
               currentBranch: info.current_branch,
               hasPendingChanges: false,
             };
 
-            set((state) => ({
-              tabs: [...state.tabs, newTab],
+            set((curr) => ({
+              tabs: [...curr.tabs, newTab],
               activeTabId: newTab.id,
               tabStates: {
-                ...state.tabStates,
+                ...curr.tabStates,
                 [newTab.id]: createEmptyTabState(),
               },
             }));
 
-            await get()._loadRepositoryData(newTab.id);
+            await get()._loadRepositoryData(newTab.id, newTab.path);
             return true;
           } catch (error) {
             console.error('Error opening repository:', error);
@@ -128,15 +144,10 @@ export const useRepositoryStore = create<RepositoryStore>()(
           if (!tab) return;
 
           set({ activeTabId: tabId });
-
-          try {
-            await invoke('open_repository', { path: tab.path });
-          } catch (error) {
-            console.error('Error switching repository:', error);
-          }
         },
 
         closeTab: (tabId: string) => {
+          delete loadGenerationByTab[tabId];
           set((state) => {
             const newTabs = state.tabs.filter((t) => t.id !== tabId);
             const newTabStates = { ...state.tabStates };
@@ -148,11 +159,6 @@ export const useRepositoryStore = create<RepositoryStore>()(
               const closedIndex = state.tabs.findIndex((t) => t.id === tabId);
               const newActiveIndex = Math.min(closedIndex, newTabs.length - 1);
               newActiveId = newTabs[newActiveIndex].id;
-
-              // Switch to new active repository
-              invoke('open_repository', { path: newTabs[newActiveIndex].path }).catch(
-                console.error
-              );
             } else if (newTabs.length === 0) {
               newActiveId = null;
             }
@@ -170,14 +176,13 @@ export const useRepositoryStore = create<RepositoryStore>()(
           const tabToKeep = state.tabs.find((t) => t.id === tabId);
           if (!tabToKeep) return;
 
-          // Remove tabStates for closed tabs
-          const newTabStates: Record<string, TabState> = {};
-          newTabStates[tabId] = state.tabStates[tabId] || createEmptyTabState();
-
-          // Switch to the kept tab if it's not already active
-          if (state.activeTabId !== tabId) {
-            invoke('open_repository', { path: tabToKeep.path }).catch(console.error);
+          for (const t of state.tabs) {
+            if (t.id !== tabId) delete loadGenerationByTab[t.id];
           }
+
+          const newTabStates: Record<string, TabState> = {
+            [tabId]: state.tabStates[tabId] || createEmptyTabState(),
+          };
 
           set({
             tabs: [tabToKeep],
@@ -187,6 +192,9 @@ export const useRepositoryStore = create<RepositoryStore>()(
         },
 
         closeAllTabs: () => {
+          for (const key of Object.keys(loadGenerationByTab)) {
+            delete loadGenerationByTab[key];
+          }
           set({
             tabs: [],
             activeTabId: null,
@@ -201,20 +209,16 @@ export const useRepositoryStore = create<RepositoryStore>()(
           const tabsToKeep = state.tabs.slice(0, tabIndex + 1);
           const tabsToClose = state.tabs.slice(tabIndex + 1);
 
-          // Remove tabStates for closed tabs
           const newTabStates = { ...state.tabStates };
           tabsToClose.forEach((tab) => {
             delete newTabStates[tab.id];
+            delete loadGenerationByTab[tab.id];
           });
 
-          // If active tab is being closed, switch to the rightmost remaining tab
           let newActiveId = state.activeTabId;
           const activeTabIndex = state.tabs.findIndex((t) => t.id === state.activeTabId);
           if (activeTabIndex > tabIndex) {
             newActiveId = tabsToKeep[tabsToKeep.length - 1].id;
-            invoke('open_repository', { path: tabsToKeep[tabsToKeep.length - 1].path }).catch(
-              console.error
-            );
           }
 
           set({
@@ -231,18 +235,16 @@ export const useRepositoryStore = create<RepositoryStore>()(
           const tabsToClose = state.tabs.slice(0, tabIndex);
           const tabsToKeep = state.tabs.slice(tabIndex);
 
-          // Remove tabStates for closed tabs
           const newTabStates = { ...state.tabStates };
           tabsToClose.forEach((tab) => {
             delete newTabStates[tab.id];
+            delete loadGenerationByTab[tab.id];
           });
 
-          // If active tab is being closed, switch to the leftmost remaining tab
           let newActiveId = state.activeTabId;
           const activeTabIndex = state.tabs.findIndex((t) => t.id === state.activeTabId);
           if (activeTabIndex < tabIndex) {
             newActiveId = tabsToKeep[0].id;
-            invoke('open_repository', { path: tabsToKeep[0].path }).catch(console.error);
           }
 
           set({
@@ -254,6 +256,7 @@ export const useRepositoryStore = create<RepositoryStore>()(
 
         updateTabState: (tabId: string, updates: Partial<TabState>) => {
           set((state) => {
+            if (!state.tabs.some((t) => t.id === tabId)) return state;
             const current = state.tabStates[tabId] || createEmptyTabState();
             return {
               tabStates: {
@@ -264,10 +267,17 @@ export const useRepositoryStore = create<RepositoryStore>()(
           });
         },
 
+        refreshTab: async (tabId: string) => {
+          const tab = get().tabs.find((t) => t.id === tabId);
+          if (tab) {
+            await get()._loadRepositoryData(tab.id, tab.path);
+          }
+        },
+
         refreshActiveTab: async () => {
-          const activeTabId = get().activeTabId;
-          if (activeTabId) {
-            await get()._loadRepositoryData(activeTabId);
+          const activeTab = get().getActiveTab();
+          if (activeTab) {
+            await get()._loadRepositoryData(activeTab.id, activeTab.path);
           }
         },
 
@@ -288,7 +298,14 @@ export const useRepositoryStore = create<RepositoryStore>()(
         },
 
         // Internal actions
-        _loadRepositoryData: async (tabId: string, persistedData?: PersistedTabData) => {
+        _loadRepositoryData: async (
+          tabId: string,
+          repoPath: string,
+          persistedData?: PersistedTabData
+        ) => {
+          const generation = (loadGenerationByTab[tabId] ?? 0) + 1;
+          loadGenerationByTab[tabId] = generation;
+
           try {
             const [
               branchesData,
@@ -299,18 +316,34 @@ export const useRepositoryStore = create<RepositoryStore>()(
               commitsData,
               statusData,
             ] = await Promise.all([
-              invoke<BranchInfo[]>('get_branches'),
-              invoke<BranchHead[]>('get_branch_heads'),
-              invoke<TagInfo[]>('get_tags'),
-              invoke<StashInfo[]>('get_stashes'),
-              invoke<string[]>('get_remotes'),
-              invoke<CommitInfo[]>('get_commits', { limit: 100 }),
-              invoke<FileStatus[]>('get_file_status'),
+              invoke<BranchInfo[]>('get_branches', { repoPath }),
+              invoke<BranchHead[]>('get_branch_heads', { repoPath }),
+              invoke<TagInfo[]>('get_tags', { repoPath }),
+              invoke<StashInfo[]>('get_stashes', { repoPath }),
+              invoke<string[]>('get_remotes', { repoPath }),
+              invoke<CommitInfo[]>('get_commits', { repoPath, limit: 100 }),
+              invoke<FileStatus[]>('get_file_status', { repoPath }),
             ]);
 
+            // Drop stale responses or responses for closed tabs
+            if (loadGenerationByTab[tabId] !== generation) return;
+
+            const headBranch = branchesData.find((b) => b.is_head)?.name ?? null;
+            const hasPendingChanges = statusData.length > 0;
+
             set((state) => {
+              if (!state.tabs.some((t) => t.id === tabId)) return state;
               const existingState = state.tabStates[tabId];
               return {
+                tabs: state.tabs.map((tab) =>
+                  tab.id === tabId
+                    ? {
+                        ...tab,
+                        hasPendingChanges,
+                        currentBranch: headBranch ?? tab.currentBranch,
+                      }
+                    : tab
+                ),
                 tabStates: {
                   ...state.tabStates,
                   [tabId]: {
@@ -329,73 +362,70 @@ export const useRepositoryStore = create<RepositoryStore>()(
                 },
               };
             });
-
-            // Mark tab as having pending changes if there are file changes
-            if (statusData.length > 0) {
-              get().setTabHasPendingChanges(tabId, true);
-            }
           } catch (error) {
             console.error('Error loading repository data:', error);
           }
         },
 
         _restoreRepositories: async () => {
-          const state = get();
+          try {
+            const initialTabs = get().tabs;
+            const initialTabStates = get().tabStates;
 
-          if (state.tabs.length === 0) {
-            set({ isRestoring: false });
-            return;
-          }
+            if (initialTabs.length === 0) {
+              return;
+            }
 
-          const validTabs: RepositoryTab[] = [];
+            const validTabs: RepositoryTab[] = [];
+            const validTabIds = new Set<string>();
 
-          for (const tab of state.tabs) {
-            try {
-              const info = await invoke<RepositoryInfo>('open_repository', { path: tab.path });
-              validTabs.push({
-                ...tab,
-                currentBranch: info.current_branch,
-                hasPendingChanges: false,
-              });
+            for (const tab of initialTabs) {
+              try {
+                const info = await invoke<RepositoryInfo>('open_repository', { path: tab.path });
+                validTabs.push({
+                  ...tab,
+                  path: info.path,
+                  name: info.name,
+                  currentBranch: info.current_branch,
+                  hasPendingChanges: false,
+                });
+                validTabIds.add(tab.id);
+              } catch (error) {
+                console.error(`Failed to restore repository: ${tab.path}`, error);
+              }
+            }
 
-              // Get persisted tab data if available
-              const existingState = state.tabStates[tab.id];
+            // Prune invalid tabs and orphaned tabStates before loading data
+            const prunedTabStates: Record<string, TabState> = {};
+            for (const tab of validTabs) {
+              prunedTabStates[tab.id] = initialTabStates[tab.id] || createEmptyTabState();
+            }
+
+            let activeTabId = get().activeTabId;
+            if (!activeTabId || !validTabIds.has(activeTabId)) {
+              activeTabId = validTabs.length > 0 ? validTabs[0].id : null;
+            }
+
+            set({
+              tabs: validTabs,
+              activeTabId,
+              tabStates: prunedTabStates,
+            });
+
+            // Load repository data after setting tabs so `hasPendingChanges` & `currentBranch` are preserved
+            for (const tab of validTabs) {
+              const existingState = prunedTabStates[tab.id];
               const persistedData: PersistedTabData | undefined = existingState
                 ? {
                     viewMode: existingState.viewMode,
                     selectedCommitId: existingState.selectedCommitId,
                   }
                 : undefined;
-
-              await get()._loadRepositoryData(tab.id, persistedData);
-            } catch (error) {
-              console.error(`Failed to restore repository: ${tab.path}`, error);
+              await get()._loadRepositoryData(tab.id, tab.path, persistedData);
             }
+          } finally {
+            set({ isRestoring: false });
           }
-
-          // Determine active tab
-          let activeTabId = state.activeTabId;
-          const activeExists = validTabs.some((t) => t.id === activeTabId);
-
-          if (!activeExists && validTabs.length > 0) {
-            activeTabId = validTabs[0].id;
-          } else if (validTabs.length === 0) {
-            activeTabId = null;
-          }
-
-          // Re-open the active repository to set it as current in backend
-          if (activeTabId) {
-            const activeTab = validTabs.find((t) => t.id === activeTabId);
-            if (activeTab) {
-              await invoke('open_repository', { path: activeTab.path });
-            }
-          }
-
-          set({
-            tabs: validTabs,
-            activeTabId,
-            isRestoring: false,
-          });
         },
       }),
       {
@@ -403,14 +433,12 @@ export const useRepositoryStore = create<RepositoryStore>()(
         partialize: (state) => ({
           tabs: state.tabs,
           activeTabId: state.activeTabId,
-          // Only persist viewMode and selectedCommitId for each tab
           tabStates: Object.fromEntries(
             Object.entries(state.tabStates).map(([id, tabState]) => [
               id,
               {
                 viewMode: tabState.viewMode,
                 selectedCommitId: tabState.selectedCommitId,
-                // Don't persist runtime data
                 branches: [],
                 branchHeads: [],
                 tags: [],
@@ -423,26 +451,36 @@ export const useRepositoryStore = create<RepositoryStore>()(
             ])
           ),
         }),
+        onRehydrateStorage: () => (rehydratedState) => {
+          if (restorationStarted) return;
+          restorationStarted = true;
+          if (rehydratedState && rehydratedState.tabs.length > 0) {
+            void rehydratedState._restoreRepositories();
+          } else {
+            useRepositoryStore.getState().setIsRestoring(false);
+          }
+        },
       }
     )
   )
 );
 
-// Trigger restoration on store initialization
-// This runs once when the module loads
-const initializeStore = () => {
-  const state = useRepositoryStore.getState();
-  if (state.tabs.length > 0 && state.isRestoring) {
-    state._restoreRepositories();
-  } else {
-    state.setIsRestoring(false);
-  }
-};
+// Fallback in case localStorage is empty/unavailable and onRehydrateStorage wasn't triggered with tabs
+if (!restorationStarted) {
+  queueMicrotask(() => {
+    if (!restorationStarted) {
+      restorationStarted = true;
+      const state = useRepositoryStore.getState();
+      if (state.tabs.length > 0 && state.isRestoring) {
+        void state._restoreRepositories();
+      } else {
+        state.setIsRestoring(false);
+      }
+    }
+  });
+}
 
-// Call initialization after a small delay to ensure store is ready
-setTimeout(initializeStore, 0);
-
-// Selector hooks for optimized re-renders
+// Selector hooks
 export const useTabs = () => useRepositoryStore((state) => state.tabs);
 export const useActiveTabId = () => useRepositoryStore((state) => state.activeTabId);
 export const useIsRestoring = () => useRepositoryStore((state) => state.isRestoring);
@@ -459,20 +497,24 @@ export const useActiveTabState = () => {
   return activeTabId ? tabStates[activeTabId] || null : null;
 };
 
-// Specific data selectors for fine-grained subscriptions
+const EMPTY_BRANCHES: BranchInfo[] = [];
+const EMPTY_REMOTES: string[] = [];
+const EMPTY_FILE_STATUSES: FileStatus[] = [];
+const EMPTY_STASHES: StashInfo[] = [];
+
 export const useActiveTabBranches = () => {
   const tabState = useActiveTabState();
-  return tabState?.branches ?? [];
+  return tabState?.branches ?? EMPTY_BRANCHES;
 };
 
 export const useActiveTabRemotes = () => {
   const tabState = useActiveTabState();
-  return tabState?.remotes ?? [];
+  return tabState?.remotes ?? EMPTY_REMOTES;
 };
 
 export const useActiveTabFileStatuses = () => {
   const tabState = useActiveTabState();
-  return tabState?.fileStatuses ?? [];
+  return tabState?.fileStatuses ?? EMPTY_FILE_STATUSES;
 };
 
 export const useLocalChangesCount = () => {
@@ -482,5 +524,5 @@ export const useLocalChangesCount = () => {
 
 export const useActiveTabStashes = () => {
   const tabState = useActiveTabState();
-  return tabState?.stashes ?? [];
+  return tabState?.stashes ?? EMPTY_STASHES;
 };

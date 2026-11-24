@@ -4,7 +4,7 @@ use notify_debouncer_mini::{
     new_debouncer, notify::RecommendedWatcher, DebouncedEventKind, Debouncer,
 };
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -23,26 +23,18 @@ pub struct BranchChangeEvent {
     pub timestamp: u64,
 }
 
-/// State for the file watcher
+struct ActiveWatcher {
+    _debouncer: Debouncer<RecommendedWatcher>,
+    path: String,
+}
+
+/// State for the file watcher (single mutex prevents debouncer/path desync)
+#[derive(Default)]
 pub struct WatcherState {
-    pub debouncer: Mutex<Option<Debouncer<RecommendedWatcher>>>,
-    pub watched_path: Mutex<Option<String>>,
+    active: Mutex<Option<ActiveWatcher>>,
 }
 
-impl Default for WatcherState {
-    fn default() -> Self {
-        Self {
-            debouncer: Mutex::new(None),
-            watched_path: Mutex::new(None),
-        }
-    }
-}
-
-/// Paths to ignore when watching for changes
-const IGNORED_PATHS: &[&str] = &[
-    ".git/objects",
-    ".git/logs",
-    ".git/hooks",
+const IGNORED_COMPONENTS: &[&str] = &[
     "node_modules",
     "target",
     ".next",
@@ -52,49 +44,89 @@ const IGNORED_PATHS: &[&str] = &[
     ".turbo",
 ];
 
-/// Check if a path should be ignored
-fn should_ignore_path(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    IGNORED_PATHS
-        .iter()
-        .any(|ignored| path_str.contains(ignored))
+const IGNORED_GIT_ENTRIES: &[&str] = &["objects", "logs", "hooks", "index.lock"];
+
+fn relative_components<'a>(repo_root: &Path, path: &'a Path) -> Vec<&'a std::ffi::OsStr> {
+    let rel = path.strip_prefix(repo_root).unwrap_or(path);
+    rel.components()
+        .filter_map(|c| match c {
+            Component::Normal(s) => Some(s),
+            _ => None,
+        })
+        .collect()
 }
 
-/// Check if a path is the .git/HEAD file (branch checkout)
-fn is_git_head_file(path: &Path) -> bool {
-    path.ends_with(".git/HEAD") || path.ends_with(".git\\HEAD")
+/// Check if a path relative to `repo_root` should be ignored (component-based, cross-platform)
+pub(crate) fn should_ignore_path(repo_root: &Path, path: &Path) -> bool {
+    let comps = relative_components(repo_root, path);
+    if comps.is_empty() {
+        return false;
+    }
+
+    for (idx, comp) in comps.iter().enumerate() {
+        let Some(name) = comp.to_str() else {
+            continue;
+        };
+        if IGNORED_COMPONENTS.contains(&name) {
+            return true;
+        }
+        if name == ".git" {
+            if let Some(next) = comps.get(idx + 1).and_then(|c| c.to_str()) {
+                if IGNORED_GIT_ENTRIES.contains(&next) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Check if a path is the `.git/HEAD` file (branch checkout)
+fn is_git_head_file(repo_root: &Path, path: &Path) -> bool {
+    let comps = relative_components(repo_root, path);
+    matches!(
+        comps.as_slice(),
+        [a, b] if a.to_str() == Some(".git") && b.to_str() == Some("HEAD")
+    )
 }
 
 /// Check if a path is a git ref change that affects ahead/behind counts.
-/// This covers: fetch, push, pull from an external terminal.
-fn is_git_ref_change(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    // Remote tracking refs updated by fetch/pull/push
-    path_str.contains(".git/refs/remotes")
-        || path_str.contains(".git\\refs\\remotes")
-        // Local branch refs updated by pull/rebase/merge
-        || path_str.contains(".git/refs/heads")
-        || path_str.contains(".git\\refs\\heads")
-        // FETCH_HEAD written by every fetch/pull
-        || path_str.ends_with(".git/FETCH_HEAD")
-        || path_str.ends_with(".git\\FETCH_HEAD")
-        // packed-refs updated after a gc or manual pack
-        || path_str.ends_with(".git/packed-refs")
-        || path_str.ends_with(".git\\packed-refs")
+fn is_git_ref_change(repo_root: &Path, path: &Path) -> bool {
+    let comps = relative_components(repo_root, path);
+    let names: Vec<&str> = comps.iter().filter_map(|c| c.to_str()).collect();
+    match names.as_slice() {
+        [".git", "refs", "remotes", ..] => true,
+        [".git", "refs", "heads", ..] => true,
+        [".git", "FETCH_HEAD"] => true,
+        [".git", "packed-refs"] => true,
+        _ => false,
+    }
+}
+
+fn is_relevant_kind(kind: DebouncedEventKind) -> bool {
+    matches!(
+        kind,
+        DebouncedEventKind::Any | DebouncedEventKind::AnyContinuous
+    )
 }
 
 /// Start watching a repository path for file changes
 pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), String> {
     let watcher_state = app_handle.state::<WatcherState>();
+    let mut guard = watcher_state
+        .active
+        .lock()
+        .map_err(|e| format!("Failed to lock watcher state: {}", e))?;
 
-    // Stop any existing watcher first
-    stop_watching_internal(&watcher_state)?;
+    // Drop any existing watcher atomically under the single lock
+    *guard = None;
 
     let app_handle_clone = app_handle.clone();
     let repo_path_clone = repo_path.clone();
+    let repo_root = PathBuf::from(&repo_path);
 
-    // Create debouncer with 500ms delay
-    let debouncer = new_debouncer(
+    let mut debouncer = new_debouncer(
         Duration::from_millis(500),
         move |result: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             match result {
@@ -104,13 +136,10 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                         .unwrap_or_default()
                         .as_secs();
 
-                    // Emit repo-branch-changed when:
-                    // - .git/HEAD changes (local checkout)
-                    // - remote tracking refs, FETCH_HEAD, or packed-refs change
-                    //   (push/pull/fetch from an external terminal)
                     let has_branch_change = events.iter().any(|e| {
-                        e.kind == DebouncedEventKind::Any
-                            && (is_git_head_file(&e.path) || is_git_ref_change(&e.path))
+                        is_relevant_kind(e.kind)
+                            && (is_git_head_file(&repo_root, &e.path)
+                                || is_git_ref_change(&repo_root, &e.path))
                     });
 
                     if has_branch_change {
@@ -124,24 +153,19 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
                         }
                     }
 
-                    // Filter out ignored paths and git internal files for file changes
-                    let relevant_events: Vec<_> = events
-                        .iter()
-                        .filter(|e| {
-                            e.kind == DebouncedEventKind::Any
-                                && !should_ignore_path(&e.path)
-                                && !is_git_head_file(&e.path)
-                                && !is_git_ref_change(&e.path)
-                        })
-                        .collect();
+                    let has_file_changes = events.iter().any(|e| {
+                        is_relevant_kind(e.kind)
+                            && !should_ignore_path(&repo_root, &e.path)
+                            && !is_git_head_file(&repo_root, &e.path)
+                            && !is_git_ref_change(&repo_root, &e.path)
+                    });
 
-                    if !relevant_events.is_empty() {
+                    if has_file_changes {
                         let event = FileChangeEvent {
                             repo_path: repo_path_clone.clone(),
                             timestamp,
                         };
 
-                        // Emit event to frontend
                         if let Err(e) = app_handle_clone.emit("repo-files-changed", event) {
                             eprintln!("Failed to emit file change event: {}", e);
                         }
@@ -155,37 +179,16 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
     )
     .map_err(|e| format!("Failed to create debouncer: {}", e))?;
 
-    // Store the debouncer and path
-    {
-        let mut debouncer_guard = watcher_state
-            .debouncer
-            .lock()
-            .map_err(|e| format!("Failed to lock debouncer: {}", e))?;
-        *debouncer_guard = Some(debouncer);
-    }
+    // Start watching BEFORE storing so an error never leaves stale state
+    debouncer
+        .watcher()
+        .watch(Path::new(&repo_path), notify::RecursiveMode::Recursive)
+        .map_err(|e| format!("Failed to watch path: {}", e))?;
 
-    {
-        let mut path_guard = watcher_state
-            .watched_path
-            .lock()
-            .map_err(|e| format!("Failed to lock watched_path: {}", e))?;
-        *path_guard = Some(repo_path.clone());
-    }
-
-    // Start watching the repository path
-    {
-        let mut debouncer_guard = watcher_state
-            .debouncer
-            .lock()
-            .map_err(|e| format!("Failed to lock debouncer: {}", e))?;
-
-        if let Some(ref mut debouncer) = *debouncer_guard {
-            debouncer
-                .watcher()
-                .watch(Path::new(&repo_path), notify::RecursiveMode::Recursive)
-                .map_err(|e| format!("Failed to watch path: {}", e))?;
-        }
-    }
+    *guard = Some(ActiveWatcher {
+        _debouncer: debouncer,
+        path: repo_path,
+    });
 
     Ok(())
 }
@@ -193,30 +196,57 @@ pub fn start_watching(app_handle: AppHandle, repo_path: String) -> Result<(), St
 /// Stop the file watcher
 pub fn stop_watching(app_handle: &AppHandle) -> Result<(), String> {
     let watcher_state = app_handle.state::<WatcherState>();
-    stop_watching_internal(&watcher_state)
-}
-
-fn stop_watching_internal(watcher_state: &WatcherState) -> Result<(), String> {
-    let mut debouncer_guard = watcher_state
-        .debouncer
+    let mut guard = watcher_state
+        .active
         .lock()
-        .map_err(|e| format!("Failed to lock debouncer: {}", e))?;
-
-    // Drop the debouncer to stop watching
-    *debouncer_guard = None;
-
-    let mut path_guard = watcher_state
-        .watched_path
-        .lock()
-        .map_err(|e| format!("Failed to lock watched_path: {}", e))?;
-    *path_guard = None;
-
+        .map_err(|e| format!("Failed to lock watcher state: {}", e))?;
+    *guard = None;
     Ok(())
 }
 
 /// Get the currently watched path
 pub fn get_watched_path(app_handle: &AppHandle) -> Option<String> {
     let watcher_state = app_handle.state::<WatcherState>();
-    let guard = watcher_state.watched_path.lock().ok()?;
-    guard.clone()
+    let guard = watcher_state.active.lock().ok()?;
+    guard.as_ref().map(|w| w.path.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_ignore_path_matches_components_not_substrings() {
+        let root = Path::new("/Users/dev/builds/my-app");
+        // Repo living under "builds/" and files containing "build"/"dist" must NOT be ignored
+        assert!(!should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/src/buildConfig.ts")
+        ));
+        assert!(!should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/src/distance.rs")
+        ));
+        // Actual ignored directories and transient git internals MUST be ignored
+        assert!(should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/build/output.js")
+        ));
+        assert!(should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/node_modules/pkg/index.js")
+        ));
+        assert!(should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/.git/objects/ab/1234")
+        ));
+        assert!(should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/.git/index.lock")
+        ));
+        assert!(!should_ignore_path(
+            root,
+            Path::new("/Users/dev/builds/my-app/.git/HEAD")
+        ));
+    }
 }

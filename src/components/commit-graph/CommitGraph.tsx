@@ -52,7 +52,7 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           } else if (diffDays === 1) {
             return t('commits.yesterday');
-          } else if (diffDays < 7) {
+          } else if (diffDays > 1 && diffDays < 7) {
             return t('commits.daysAgo', { count: diffDays });
           } else {
             return date.toLocaleDateString([], {
@@ -156,34 +156,17 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
     };
 
-    // Render all graph lines
+    // Render all graph lines that intersect the visible row range (including continuing lines)
     const renderGraphLines = () => {
       const paths: React.ReactElement[] = [];
-      const renderedPaths = new Set<string>();
 
-      visibleNodes.forEach((node) => {
-        node.parentConnections.forEach((conn, connIndex) => {
-          const pathKey = `${node.commit.id}-${conn.parentSha}`;
-          if (renderedPaths.has(pathKey)) return;
-          renderedPaths.add(pathKey);
-
-          const pathD = generatePath(node.lane, node.row, conn.parentLane, conn.parentRow);
-          const color = getLaneColor(node.lane);
-
-          paths.push(
-            <path
-              key={`${node.commit.id}-${connIndex}`}
-              d={pathD}
-              stroke={color}
-              strokeWidth={2}
-              fill="none"
-            />
-          );
-        });
-
-        // Draw continuing lines for commits that are parents of earlier visible commits
-        // This ensures the line continues through the visible area
-      });
+      for (const edge of graphData.edges) {
+        if (edge.fromRow > endRow || edge.toRow < startRow) continue;
+        const pathD = generatePath(edge.fromLane, edge.fromRow, edge.toLane, edge.toRow);
+        paths.push(
+          <path key={edge.key} d={pathD} stroke={edge.color} strokeWidth={2} fill="none" />
+        );
+      }
 
       return paths;
     };

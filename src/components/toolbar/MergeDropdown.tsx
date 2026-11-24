@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import type { FC, RefObject } from 'react';
 import { useEffect, useRef, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GitBranch, Globe } from 'lucide-react';
@@ -10,17 +10,23 @@ interface MergeDropdownProps {
   currentBranch: string | null;
   onBranchSelect: (branch: BranchInfo) => void;
   onClose: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
 }
 
 export const MergeDropdown: FC<MergeDropdownProps> = memo(
-  ({ branches, currentBranch, onBranchSelect, onClose }) => {
+  ({ branches, currentBranch, onBranchSelect, onClose, triggerRef }) => {
     const { t } = useTranslation();
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Close on click outside
+    // Close on click outside (excluding trigger button so clicking it toggles closed cleanly)
     useEffect(() => {
       const handleClickOutside = (e: MouseEvent) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        const target = e.target as Node;
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(target) &&
+          !triggerRef?.current?.contains(target)
+        ) {
           onClose();
         }
       };
@@ -31,18 +37,14 @@ export const MergeDropdown: FC<MergeDropdownProps> = memo(
         }
       };
 
-      // Add listeners with a small delay to prevent immediate close
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-        document.addEventListener('keydown', handleEscape);
-      }, 50);
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
 
       return () => {
-        clearTimeout(timeoutId);
         document.removeEventListener('mousedown', handleClickOutside);
         document.removeEventListener('keydown', handleEscape);
       };
-    }, [onClose]);
+    }, [onClose, triggerRef]);
 
     // Filter and group branches
     const { localBranches, remoteBranches } = useMemo(() => {

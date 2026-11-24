@@ -6,7 +6,7 @@ import './CommitPanel.css';
 
 interface CommitPanelProps {
   stagedCount: number;
-  onCommit: (subject: string, description: string, amend: boolean) => Promise<void>;
+  onCommit: (subject: string, description: string, amend: boolean) => Promise<boolean>;
   isLoading: boolean;
   lastCommitMessage?: { subject: string; body: string } | null;
   onAmendChange: (amend: boolean) => void;
@@ -45,16 +45,19 @@ export const CommitPanel: FC<CommitPanelProps> = ({
   );
 
   const handleCommit = useCallback(async () => {
+    if (isLoading) return;
     if (!subject.trim()) return;
     if (stagedCount === 0 && !amend) return;
 
-    await onCommit(subject.trim(), description.trim(), amend);
+    const succeeded = await onCommit(subject.trim(), description.trim(), amend);
 
-    // Clear form after successful commit
-    setSubject('');
-    setDescription('');
-    setAmend(false);
-  }, [subject, description, amend, stagedCount, onCommit]);
+    if (succeeded) {
+      setSubject('');
+      setDescription('');
+      setAmend(false);
+      onAmendChange(false);
+    }
+  }, [isLoading, subject, description, amend, stagedCount, onCommit, onAmendChange]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

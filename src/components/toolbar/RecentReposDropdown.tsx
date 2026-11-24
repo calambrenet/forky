@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import type { FC, RefObject } from 'react';
 import { useEffect, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen } from 'lucide-react';
@@ -14,16 +14,22 @@ interface RecentReposDropdownProps {
   repos: RecentRepo[];
   onRepoClick: (path: string) => void;
   onClose: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
 }
 
 export const RecentReposDropdown: FC<RecentReposDropdownProps> = memo(
-  ({ repos, onRepoClick, onClose }) => {
+  ({ repos, onRepoClick, onClose, triggerRef }) => {
     const { t } = useTranslation();
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       const handleClickOutside = (e: MouseEvent) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        const target = e.target as Node;
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(target) &&
+          !triggerRef?.current?.contains(target)
+        ) {
           onClose();
         }
       };
@@ -32,17 +38,14 @@ export const RecentReposDropdown: FC<RecentReposDropdownProps> = memo(
         if (e.key === 'Escape') onClose();
       };
 
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-        document.addEventListener('keydown', handleEscape);
-      }, 50);
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
 
       return () => {
-        clearTimeout(timeoutId);
         document.removeEventListener('mousedown', handleClickOutside);
         document.removeEventListener('keydown', handleEscape);
       };
-    }, [onClose]);
+    }, [onClose, triggerRef]);
 
     const truncatePath = (path: string, maxLength = 45): string => {
       if (path.length <= maxLength) return path;

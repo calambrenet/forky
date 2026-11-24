@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -115,6 +115,10 @@ export const Toolbar: FC<ToolbarProps> = memo(
     const [stashDropdownOpen, setStashDropdownOpen] = useState(false);
     const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false);
     const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+    const openTriggerRef = useRef<HTMLButtonElement>(null);
+    const stashTriggerRef = useRef<HTMLButtonElement>(null);
+    const branchTriggerRef = useRef<HTMLButtonElement>(null);
+    const mergeTriggerRef = useRef<HTMLButtonElement>(null);
 
     const handleOpenInTerminal = async () => {
       if (!repoPath) {
@@ -137,7 +141,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
     };
 
     const handleAbout = () => {
-      // TODO: Show about dialog
+      onAbout?.();
     };
 
     const handleHelp = () => {
@@ -166,8 +170,9 @@ export const Toolbar: FC<ToolbarProps> = memo(
               <span className="btn-label">{t('toolbar.open')}</span>
             </button>
             <button
+              ref={openTriggerRef}
               className="toolbar-btn split-dropdown-trigger"
-              onClick={() => setOpenDropdownOpen(!openDropdownOpen)}
+              onClick={() => setOpenDropdownOpen((prev) => !prev)}
               title={t('recentReposDropdown.title')}
             >
               <ChevronDown size={10} />
@@ -177,6 +182,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
                 repos={recentRepos}
                 onRepoClick={(path) => onOpenRecentRepo?.(path)}
                 onClose={() => setOpenDropdownOpen(false)}
+                triggerRef={openTriggerRef}
               />
             )}
           </div>
@@ -219,8 +225,9 @@ export const Toolbar: FC<ToolbarProps> = memo(
               <span className="btn-label">{t('toolbar.stash')}</span>
             </button>
             <button
+              ref={stashTriggerRef}
               className="toolbar-btn split-dropdown-trigger"
-              onClick={() => setStashDropdownOpen(!stashDropdownOpen)}
+              onClick={() => setStashDropdownOpen((prev) => !prev)}
               disabled={isLoading}
             >
               <ChevronDown size={10} />
@@ -231,6 +238,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
                 onStashClick={(stash) => onStashSelect?.(stash)}
                 onSaveSnapshot={() => onSaveSnapshot?.()}
                 onClose={() => setStashDropdownOpen(false)}
+                triggerRef={stashTriggerRef}
               />
             )}
           </div>
@@ -252,9 +260,10 @@ export const Toolbar: FC<ToolbarProps> = memo(
         <div className="toolbar-right">
           <div className="toolbar-dropdown-container">
             <button
+              ref={branchTriggerRef}
               className="toolbar-btn"
               title={t('toolbar.branch')}
-              onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
+              onClick={() => setBranchDropdownOpen((prev) => !prev)}
               disabled={isLoading || !currentBranch}
             >
               <GitBranch size={ICON_SIZE} />
@@ -285,14 +294,16 @@ export const Toolbar: FC<ToolbarProps> = memo(
                   setBranchDropdownOpen(false);
                 }}
                 onClose={() => setBranchDropdownOpen(false)}
+                triggerRef={branchTriggerRef}
               />
             )}
           </div>
           <div className="toolbar-dropdown-container">
             <button
+              ref={mergeTriggerRef}
               className="toolbar-btn"
               title={t('toolbar.merge')}
-              onClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
+              onClick={() => setMergeDropdownOpen((prev) => !prev)}
               disabled={isLoading || !currentBranch}
             >
               <GitMerge size={ICON_SIZE} />
@@ -307,6 +318,7 @@ export const Toolbar: FC<ToolbarProps> = memo(
                   setMergeDropdownOpen(false);
                 }}
                 onClose={() => setMergeDropdownOpen(false)}
+                triggerRef={mergeTriggerRef}
               />
             )}
           </div>

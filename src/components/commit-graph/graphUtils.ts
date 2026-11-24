@@ -16,6 +16,15 @@ export interface ParentConnection {
   type: 'straight' | 'merge-left' | 'merge-right' | 'branch-left' | 'branch-right';
 }
 
+export interface GraphEdge {
+  key: string;
+  fromRow: number;
+  fromLane: number;
+  toRow: number;
+  toLane: number;
+  color: string;
+}
+
 export interface BranchLabel {
   name: string;
   isHead: boolean;
@@ -24,6 +33,7 @@ export interface BranchLabel {
 
 export interface GraphData {
   nodes: GraphNode[];
+  edges: GraphEdge[];
   maxLane: number;
 }
 
@@ -42,17 +52,13 @@ const BRANCH_COLORS = [
 
 export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchHead[]): GraphData {
   if (commits.length === 0) {
-    return { nodes: [], maxLane: 0 };
+    return { nodes: [], edges: [], maxLane: 0 };
   }
 
   const nodes: GraphNode[] = [];
   const commitToNode = new Map<string, GraphNode>();
-  const commitToRow = new Map<string, number>();
-
-  // Track active lanes (which commit SHA is currently in each lane)
   const activeLanes: (string | null)[] = [];
 
-  // Map branch heads to their commits for labels
   const branchHeadsMap = new Map<string, BranchHead[]>();
   branchHeads.forEach((branch) => {
     const existing = branchHeadsMap.get(branch.commit_sha) || [];
@@ -60,31 +66,27 @@ export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchH
     branchHeadsMap.set(branch.commit_sha, existing);
   });
 
-  // Assign color to each branch
   const branchColors = new Map<string, string>();
   branchHeads.forEach((branch, index) => {
     branchColors.set(branch.name, BRANCH_COLORS[index % BRANCH_COLORS.length]);
   });
 
-  // First pass: create nodes and assign rows
-  commits.forEach((commit, index) => {
-    commitToRow.set(commit.id, index);
-  });
+  let maxLane = 0;
 
-  // Second pass: assign lanes
   commits.forEach((commit, row) => {
     let lane = -1;
 
-    // Check if any of the parent commits are in active lanes
-    // If so, this commit might continue that lane
+    // Claim the first lane expecting this commit, and free any duplicate lanes pointing to it
     for (let i = 0; i < activeLanes.length; i++) {
       if (activeLanes[i] === commit.id) {
-        lane = i;
-        break;
+        if (lane === -1) {
+          lane = i;
+        } else {
+          activeLanes[i] = null;
+        }
       }
     }
 
-    // If no lane found, find the first empty lane or create new one
     if (lane === -1) {
       lane = activeLanes.indexOf(null);
       if (lane === -1) {
@@ -93,33 +95,37 @@ export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchH
       }
     }
 
-    // Update the lane with the first parent (main line of history)
+    // Update the lane with the first parent unless another lane already tracks it
     if (commit.parent_ids.length > 0) {
-      activeLanes[lane] = commit.parent_ids[0];
+      const firstParent = commit.parent_ids[0];
+      const existingParentLane = activeLanes.indexOf(firstParent);
+      if (existingParentLane !== -1 && existingParentLane !== lane) {
+        activeLanes[lane] = null;
+      } else {
+        activeLanes[lane] = firstParent;
+      }
     } else {
       activeLanes[lane] = null;
     }
 
-    // For merge commits, assign additional parents to new lanes if needed
-    if (commit.parent_ids.length > 1) {
-      for (let i = 1; i < commit.parent_ids.length; i++) {
-        const parentId = commit.parent_ids[i];
-        // Check if parent is already in a lane
-        let parentLane = activeLanes.indexOf(parentId);
-        if (parentLane === -1) {
-          // Find empty lane or create new one for branch parent
-          parentLane = activeLanes.indexOf(null);
-          if (parentLane === -1) {
-            parentLane = activeLanes.length;
-            activeLanes.push(parentId);
-          } else {
-            activeLanes[parentLane] = parentId;
-          }
+    // Assign additional merge parents to free lanes if not already tracked
+    for (let i = 1; i < commit.parent_ids.length; i++) {
+      const parentId = commit.parent_ids[i];
+      if (activeLanes.indexOf(parentId) === -1) {
+        const emptyLane = activeLanes.indexOf(null);
+        if (emptyLane === -1) {
+          activeLanes.push(parentId);
+        } else {
+          activeLanes[emptyLane] = parentId;
         }
       }
     }
 
-    // Get branch labels for this commit
+    // Trim trailing null slots so activeLanes stays compact
+    while (activeLanes.length > 0 && activeLanes[activeLanes.length - 1] === null) {
+      activeLanes.pop();
+    }
+
     const commitBranches = branchHeadsMap.get(commit.id) || [];
     const branchLabels: BranchLabel[] = commitBranches.map((b) => ({
       name: b.name,
@@ -127,13 +133,16 @@ export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchH
       color: branchColors.get(b.name) || BRANCH_COLORS[0],
     }));
 
-    // Calculate the maximum active lane at this row
     let maxActiveLane = lane;
     for (let i = activeLanes.length - 1; i >= 0; i--) {
       if (activeLanes[i] !== null) {
         maxActiveLane = Math.max(maxActiveLane, i);
         break;
       }
+    }
+
+    if (maxActiveLane > maxLane) {
+      maxLane = maxActiveLane;
     }
 
     const node: GraphNode = {
@@ -149,9 +158,17 @@ export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchH
     commitToNode.set(commit.id, node);
   });
 
-  // Third pass: calculate parent connections
+  // Precompute flat edges so virtualized rendering draws continuing lines crossing the viewport
+  const edges: GraphEdge[] = [];
+  const seenEdges = new Set<string>();
+
   nodes.forEach((node) => {
+    const color = getLaneColor(node.lane);
     node.commit.parent_ids.forEach((parentId, index) => {
+      const edgeKey = `${node.commit.id}-${parentId}`;
+      if (seenEdges.has(edgeKey)) return;
+      seenEdges.add(edgeKey);
+
       const parentNode = commitToNode.get(parentId);
       if (parentNode) {
         let type: ParentConnection['type'] = 'straight';
@@ -168,21 +185,36 @@ export function calculateGraphLayout(commits: CommitInfo[], branchHeads: BranchH
           parentRow: parentNode.row,
           type,
         });
+
+        edges.push({
+          key: edgeKey,
+          fromRow: node.row,
+          fromLane: node.lane,
+          toRow: parentNode.row,
+          toLane: parentNode.lane,
+          color,
+        });
       } else {
-        // Parent is outside the visible range, draw line going down
         node.parentConnections.push({
           parentSha: parentId,
           parentLane: node.lane,
           parentRow: node.row + 1,
           type: 'straight',
         });
+
+        edges.push({
+          key: edgeKey,
+          fromRow: node.row,
+          fromLane: node.lane,
+          toRow: node.row + 1,
+          toLane: node.lane,
+          color,
+        });
       }
     });
   });
 
-  const maxLane = Math.max(...nodes.map((n) => n.lane), 0);
-
-  return { nodes, maxLane };
+  return { nodes, edges, maxLane };
 }
 
 export function getLaneColor(lane: number): string {
@@ -200,7 +232,7 @@ export function formatDate(dateStr: string): string {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffDays === 1) {
       return 'Yesterday';
-    } else if (diffDays < 7) {
+    } else if (diffDays > 1 && diffDays < 7) {
       return `${diffDays} days ago`;
     } else {
       return date.toLocaleDateString([], {

@@ -1,5 +1,20 @@
 use std::process::Command;
+use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn apply_no_window(cmd: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SystemTheme {
@@ -16,7 +31,11 @@ pub struct GitStatus {
 /// Checks if Git is installed on the system
 #[tauri::command]
 pub fn check_git_installed() -> GitStatus {
-    match Command::new("git").arg("--version").output() {
+    let mut cmd = Command::new("git");
+    cmd.arg("--version");
+    apply_no_window(&mut cmd);
+
+    match cmd.output() {
         Ok(output) => {
             if output.status.success() {
                 let version_output = String::from_utf8_lossy(&output.stdout);
@@ -45,52 +64,86 @@ pub fn check_git_installed() -> GitStatus {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn find_in_path(binary: &str) -> Option<std::path::PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join(binary);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Opens a terminal emulator in the specified directory
 #[tauri::command]
 pub fn open_in_terminal(path: String) -> Result<(), String> {
-    // Pre-compute the shell command for xterm-style terminals
-    let shell_cmd = format!("cd '{}' && exec $SHELL", path);
+    let target_dir = std::path::Path::new(&path);
+    if !target_dir.is_dir() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
 
-    // List of common terminal emulators to try (in order of preference)
-    let terminals: Vec<(&str, Vec<&str>)> = vec![
-        // Modern terminals
-        ("kitty", vec!["--directory", &path]),
-        ("alacritty", vec!["--working-directory", &path]),
-        ("wezterm", vec!["start", "--cwd", &path]),
-        // GNOME
-        ("gnome-terminal", vec!["--working-directory", &path]),
-        ("kgx", vec!["--working-directory", &path]), // GNOME Console
-        // KDE
-        ("konsole", vec!["--workdir", &path]),
-        // XFCE
-        ("xfce4-terminal", vec!["--working-directory", &path]),
-        // Other popular terminals
-        ("tilix", vec!["--working-directory", &path]),
-        ("terminator", vec!["--working-directory", &path]),
-        ("mate-terminal", vec!["--working-directory", &path]),
-        // Fallback
-        ("xterm", vec!["-e", &shell_cmd]),
-        ("x-terminal-emulator", vec!["-e", &shell_cmd]),
-    ];
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-a", "Terminal", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open Terminal: {}", e))?;
+        return Ok(());
+    }
 
-    for (terminal, args) in terminals.iter() {
-        // Check if terminal exists
-        if let Ok(output) = Command::new("which").arg(terminal).output() {
-            if output.status.success() {
-                // Terminal found, try to spawn it
-                match Command::new(terminal).args(args.clone()).spawn() {
+    #[cfg(target_os = "windows")]
+    {
+        let mut wt = Command::new("wt");
+        wt.args(["-d", &path]);
+        if wt.spawn().is_ok() {
+            return Ok(());
+        }
+
+        Command::new("cmd")
+            .args(["/C", "start", "cmd"])
+            .current_dir(target_dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let terminals: &[(&str, &[&str])] = &[
+            ("kitty", &["--directory"]),
+            ("alacritty", &["--working-directory"]),
+            ("wezterm", &["start", "--cwd"]),
+            ("gnome-terminal", &["--working-directory"]),
+            ("kgx", &["--working-directory"]),
+            ("konsole", &["--workdir"]),
+            ("xfce4-terminal", &["--working-directory"]),
+            ("tilix", &["--working-directory"]),
+            ("terminator", &["--working-directory"]),
+            ("mate-terminal", &["--working-directory"]),
+            ("xterm", &[]),
+            ("x-terminal-emulator", &[]),
+        ];
+
+        for (terminal, flag_args) in terminals {
+            if let Some(bin_path) = find_in_path(terminal) {
+                let mut cmd = Command::new(bin_path);
+                cmd.current_dir(target_dir);
+                if !flag_args.is_empty() {
+                    cmd.args(*flag_args).arg(&path);
+                }
+                match cmd.spawn() {
                     Ok(_) => return Ok(()),
                     Err(e) => {
-                        // Log error but continue to next terminal
                         eprintln!("Failed to spawn {}: {}", terminal, e);
-                        continue;
                     }
                 }
             }
         }
-    }
 
-    Err("No terminal emulator found. Please install a terminal like gnome-terminal, konsole, kitty, or alacritty.".to_string())
+        Err("No terminal emulator found. Please install a terminal like gnome-terminal, konsole, kitty, or alacritty.".to_string())
+    }
 }
 
 /// Detects the system theme on macOS using the defaults system
@@ -126,8 +179,39 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
     Ok(get_macos_theme())
 }
 
+/// Windows: detects system theme via registry `AppsUseLightTheme`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn get_system_theme() -> Result<SystemTheme, String> {
+    let mut cmd = Command::new("reg");
+    cmd.args([
+        "query",
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        "/v",
+        "AppsUseLightTheme",
+    ]);
+    apply_no_window(&mut cmd);
+
+    if let Ok(output) = cmd.output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // 0x0 = dark, 0x1 = light
+            let theme = if stdout.contains("0x0") { "dark" } else { "light" };
+            return Ok(SystemTheme {
+                theme: theme.to_string(),
+                source: "windows-registry".to_string(),
+            });
+        }
+    }
+
+    Ok(SystemTheme {
+        theme: "light".to_string(),
+        source: "default".to_string(),
+    })
+}
+
 /// Linux / other: detects system theme via GNOME settings, GTK theme, XDG portal, or env vars.
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 #[tauri::command]
 pub fn get_system_theme() -> Result<SystemTheme, String> {
     // Try GNOME color-scheme first (GNOME 42+, Ubuntu, Pop!_OS…)
@@ -204,17 +288,19 @@ pub fn get_system_theme() -> Result<SystemTheme, String> {
 pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let (tx, rx) = std::sync::mpsc::channel();
 
-    app.dialog()
-        .file()
-        .set_title("Select Git Repository")
-        .pick_folder(move |folder_path| {
-            let result = folder_path.map(|p| p.to_string());
-            let _ = tx.send(result);
-        });
+    let mut dialog = app.dialog().file().set_title("Select Git Repository");
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
 
-    match rx.recv() {
-        Ok(Some(path)) => Ok(Some(path)),
-        Ok(None) => Ok(None),
-        Err(_) => Err("Dialog was cancelled or failed".to_string()),
+    dialog.pick_folder(move |folder_path| {
+        let result = folder_path.map(|p| p.to_string());
+        let _ = tx.send(result);
+    });
+
+    match tauri::async_runtime::spawn_blocking(move || rx.recv()).await {
+        Ok(Ok(Some(path))) => Ok(Some(path)),
+        Ok(Ok(None)) => Ok(None),
+        _ => Err("Dialog was cancelled or failed".to_string()),
     }
 }

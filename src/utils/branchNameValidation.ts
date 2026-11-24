@@ -6,6 +6,7 @@
 // Forbidden: space, ~, ^, :, ?, *, [, \, control chars, @{ sequence
 // Also blocked for safety: ], {, }, <, >, |, ", ', `
 const INVALID_CHARS_REGEX = /[\\~^:?*[\]@{}<>|"'`]/g;
+const INVALID_CHARS_TEST_REGEX = /[\\~^:?*[\]@{}<>|"'`]/;
 const MULTIPLE_DOTS_REGEX = /\.{2,}/g;
 const MULTIPLE_HYPHENS_REGEX = /-{2,}/g;
 const MULTIPLE_SLASHES_REGEX = /\/{2,}/g;
@@ -78,12 +79,12 @@ export function sanitizeBranchName(value: string, options: SanitizeOptions = {})
 
   let result = value;
 
-  if (convertSpacesToHyphens) {
-    result = result.replace(WHITESPACE_REGEX, '-');
-  }
-
   if (trimWhitespace) {
     result = result.trim();
+  }
+
+  if (convertSpacesToHyphens) {
+    result = result.replace(WHITESPACE_REGEX, '-');
   }
 
   if (removeInvalidChars) {
@@ -157,18 +158,23 @@ export function validateBranchName(
         ? sanitizePrefixName(value)
         : sanitizeBranchName(value);
 
-  if (!sanitizedValue || sanitizedValue.length === 0) {
+  const trimmedRaw = value.trim();
+  if (!trimmedRaw || !sanitizedValue) {
     errors.push(ValidationError.EMPTY);
     return { isValid: false, errors, sanitizedValue };
   }
 
-  const valueToValidate = mode === 'prefix' ? sanitizedValue.replace(/\/$/, '') : sanitizedValue;
+  // Validate the actual input so invalid chars / .. / // / length errors are never hidden by pre-sanitization
+  const valueToValidate = mode === 'prefix' ? trimmedRaw.replace(/\/$/, '') : trimmedRaw;
 
-  if (/^[.-]/.test(valueToValidate)) {
+  if (/^[./-]/.test(valueToValidate)) {
     errors.push(ValidationError.INVALID_START);
   }
 
-  if (/[.-]$|\.lock$/i.test(valueToValidate)) {
+  if (
+    /[.-]$|\.lock$/i.test(valueToValidate) ||
+    (mode !== 'prefix' && valueToValidate.endsWith('/'))
+  ) {
     errors.push(ValidationError.INVALID_END);
   }
 
@@ -176,11 +182,15 @@ export function validateBranchName(
     errors.push(ValidationError.DOUBLE_DOTS);
   }
 
-  if (mode === 'branch' && /\/\//.test(valueToValidate)) {
+  if (mode !== 'tag' && /\/\//.test(valueToValidate)) {
     errors.push(ValidationError.DOUBLE_SLASHES);
   }
 
-  if (INVALID_CHARS_REGEX.test(valueToValidate)) {
+  if (
+    INVALID_CHARS_TEST_REGEX.test(valueToValidate) ||
+    /\s/.test(valueToValidate) ||
+    (mode === 'tag' && valueToValidate.includes('/'))
+  ) {
     errors.push(ValidationError.INVALID_CHARS);
   }
 
@@ -190,7 +200,7 @@ export function validateBranchName(
     errors.push(ValidationError.ALREADY_EXISTS);
   }
 
-  if (sanitizedValue.length > 255) {
+  if (valueToValidate.length > 255) {
     errors.push(ValidationError.TOO_LONG);
   }
 

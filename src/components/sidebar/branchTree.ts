@@ -1,4 +1,4 @@
-import type { BranchInfo, TagInfo } from '../../types/git';
+import type { BranchInfo, TagInfo, RemoteSortOrder } from '../../types/git';
 
 // Tree node types
 export interface TreeNode {
@@ -59,7 +59,11 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
 }
 
 // Build tree for remote branches grouped by remote name
-export function buildRemoteTree(branches: BranchInfo[], remotes: string[]): TreeNode[] {
+export function buildRemoteTree(
+  branches: BranchInfo[],
+  remotes: string[],
+  sortOrder: RemoteSortOrder = 'alphabetically'
+): TreeNode[] {
   const root: TreeNode[] = [];
 
   // Create remote folder nodes first
@@ -117,9 +121,9 @@ export function buildRemoteTree(branches: BranchInfo[], remotes: string[]): Tree
     }
   }
 
-  // Sort the tree
+  // Sort the tree honoring the user's selected remote sort order
   for (const remoteNode of root) {
-    sortTree(remoteNode.children);
+    sortTree(remoteNode.children, sortOrder);
   }
 
   return root;
@@ -168,20 +172,35 @@ export function buildTagTree(tags: TagInfo[]): TreeNode[] {
   return root;
 }
 
-// Sort tree: folders first, then items, alphabetically
-function sortTree(nodes: TreeNode[]): void {
+function isMainOrMaster(node: TreeNode): boolean {
+  return node.type === 'branch' && (node.name === 'main' || node.name === 'master');
+}
+
+// Sort tree: optionally pin main/master on top, then folders first, then items
+function sortTree(nodes: TreeNode[], sortOrder: RemoteSortOrder = 'alphabetically'): void {
+  const masterTop =
+    sortOrder === 'alphabetically-master-top' || sortOrder === 'alphabetically-backward-master-top';
+  const backward =
+    sortOrder === 'alphabetically-backward' || sortOrder === 'alphabetically-backward-master-top';
+
   nodes.sort((a, b) => {
+    if (masterTop) {
+      const aIsMain = isMainOrMaster(a);
+      const bIsMain = isMainOrMaster(b);
+      if (aIsMain && !bIsMain) return -1;
+      if (!aIsMain && bIsMain) return 1;
+    }
+
     // Folders come first
     if (a.type === 'folder' && b.type !== 'folder') return -1;
     if (a.type !== 'folder' && b.type === 'folder') return 1;
-    // Then alphabetically
-    return a.name.localeCompare(b.name);
+
+    return backward ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name);
   });
 
-  // Recursively sort children
   for (const node of nodes) {
     if (node.children.length > 0) {
-      sortTree(node.children);
+      sortTree(node.children, sortOrder);
     }
   }
 }
