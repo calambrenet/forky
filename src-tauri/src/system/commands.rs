@@ -186,20 +186,42 @@ fn get_macos_theme() -> SystemTheme {
     }
 }
 
-/// macOS: detects system theme via `defaults read -g AppleInterfaceStyle`.
-/// Returns "dark" if dark mode, "light" otherwise.
+/// macOS: detects system theme via Cocoa `effectiveAppearance` on the main window
+/// (accurate in Light, Dark, and Automatic day/night mode), falling back to `defaults`.
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub async fn get_system_theme() -> Result<SystemTheme, String> {
+pub async fn get_system_theme(app: tauri::AppHandle) -> Result<SystemTheme, String> {
+    if let Some(theme) = app.get_webview_window("main").and_then(|w| w.theme().ok()) {
+        let resolved = match theme {
+            tauri::Theme::Dark => "dark",
+            _ => "light",
+        };
+        return Ok(SystemTheme {
+            theme: resolved.to_string(),
+            source: "macos-effective-appearance".to_string(),
+        });
+    }
+
     tauri::async_runtime::spawn_blocking(get_macos_theme)
         .await
         .map_err(|e| format!("Background task failed: {}", e))
 }
 
-/// Windows: detects system theme via registry `AppsUseLightTheme`.
+/// Windows: detects system theme via window theme, falling back to registry `AppsUseLightTheme`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn get_system_theme() -> Result<SystemTheme, String> {
+pub async fn get_system_theme(app: tauri::AppHandle) -> Result<SystemTheme, String> {
+    if let Some(theme) = app.get_webview_window("main").and_then(|w| w.theme().ok()) {
+        let resolved = match theme {
+            tauri::Theme::Dark => "dark",
+            _ => "light",
+        };
+        return Ok(SystemTheme {
+            theme: resolved.to_string(),
+            source: "windows-window-theme".to_string(),
+        });
+    }
+
     tauri::async_runtime::spawn_blocking(get_windows_theme)
         .await
         .map_err(|e| format!("Background task failed: {}", e))

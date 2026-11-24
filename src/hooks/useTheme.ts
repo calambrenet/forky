@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLocalStorage } from './useLocalStorage';
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -10,101 +11,122 @@ interface SystemTheme {
   source: string;
 }
 
+function getMediaSystemTheme(): ResolvedTheme {
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
+}
+
+function readStoredUserTheme(): Theme {
+  try {
+    const raw = localStorage.getItem('forky-theme');
+    if (!raw) return 'system';
+    const parsed = JSON.parse(raw);
+    return parsed === 'light' || parsed === 'dark' || parsed === 'system' ? parsed : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+/**
+ * Apply `data-theme` synchronously before React mounts so the first frame uses
+ * the right light/dark palette without a white flash.
+ */
+export function applyInitialTheme(): void {
+  const userTheme = readStoredUserTheme();
+  const resolved: ResolvedTheme = userTheme === 'system' ? getMediaSystemTheme() : userTheme;
+  document.documentElement.setAttribute('data-theme', resolved);
+}
+
 export function useTheme() {
   const [userTheme, setUserTheme] = useLocalStorage<Theme>('forky-theme', 'system');
-  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('light');
-  const lastThemeRef = useRef<string>('light');
-  const initialCheckDone = useRef(false);
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getMediaSystemTheme);
+  const lastThemeRef = useRef<ResolvedTheme>(systemTheme);
 
-  // Detect system theme using Rust command (works reliably on Linux)
+  const updateSystemTheme = useCallback((next: ResolvedTheme) => {
+    if (next !== lastThemeRef.current) {
+      lastThemeRef.current = next;
+      setSystemTheme(next);
+    }
+  }, []);
+
   const detectSystemTheme = useCallback(async (): Promise<ResolvedTheme> => {
     try {
       const result = await invoke<SystemTheme>('get_system_theme');
       return result.theme === 'dark' ? 'dark' : 'light';
     } catch (e) {
       console.warn('Failed to get system theme from Rust, using fallback:', e);
-
-      // Fallback to media query
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      return prefersDark ? 'dark' : 'light';
+      return getMediaSystemTheme();
     }
   }, []);
 
-  // Initial theme detection (only once, no polling)
+  // Listen to WebView media query and native Tauri window theme events (covers macOS Auto day/night transitions)
   useEffect(() => {
-    if (initialCheckDone.current) return;
-    initialCheckDone.current = true;
+    let cancelled = false;
+    let unlistenTauriTheme: (() => void) | undefined;
 
-    let mounted = true;
-
-    const checkTheme = async () => {
-      if (!mounted) return;
-
-      const detectedTheme = await detectSystemTheme();
-
-      if (mounted && detectedTheme !== lastThemeRef.current) {
-        lastThemeRef.current = detectedTheme;
-        setSystemTheme(detectedTheme);
-      }
-    };
-
-    void checkTheme();
-
-    return () => {
-      mounted = false;
-    };
-  }, [detectSystemTheme]);
-
-  // Listen for media query changes (efficient event-based approach)
-  useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
     const handleMediaChange = (e: MediaQueryListEvent) => {
-      const newTheme = e.matches ? 'dark' : 'light';
-      if (newTheme !== lastThemeRef.current) {
-        lastThemeRef.current = newTheme;
-        setSystemTheme(newTheme);
-      }
+      updateSystemTheme(e.matches ? 'dark' : 'light');
     };
-
     mediaQuery.addEventListener('change', handleMediaChange);
 
-    return () => {
-      mediaQuery.removeEventListener('change', handleMediaChange);
-    };
-  }, []);
+    try {
+      getCurrentWindow()
+        .onThemeChanged(({ payload }) => {
+          if (!cancelled && (payload === 'dark' || payload === 'light')) {
+            updateSystemTheme(payload);
+          }
+        })
+        .then((unlisten) => {
+          if (cancelled) {
+            unlisten();
+          } else {
+            unlistenTauriTheme = unlisten;
+          }
+        })
+        .catch(() => {});
+    } catch {
+      // Ignore outside Tauri runtime
+    }
 
-  // Re-detect system theme on window focus ONLY when userTheme === 'system' (no React state re-renders on Alt+Tab)
+    return () => {
+      cancelled = true;
+      mediaQuery.removeEventListener('change', handleMediaChange);
+      unlistenTauriTheme?.();
+    };
+  }, [updateSystemTheme]);
+
+  // Sync with OS theme on mount (StrictMode-safe), when switching to 'system', and on window focus
   useEffect(() => {
     if (userTheme !== 'system') return;
 
-    let mounted = true;
+    let cancelled = false;
 
-    const handleFocus = async () => {
-      const detectedTheme = await detectSystemTheme();
-      if (mounted && detectedTheme !== lastThemeRef.current) {
-        lastThemeRef.current = detectedTheme;
-        setSystemTheme(detectedTheme);
+    const syncTheme = async () => {
+      const detected = await detectSystemTheme();
+      if (!cancelled) {
+        updateSystemTheme(detected);
       }
     };
 
-    window.addEventListener('focus', handleFocus);
+    void syncTheme();
+    window.addEventListener('focus', syncTheme);
 
     return () => {
-      mounted = false;
-      window.removeEventListener('focus', handleFocus);
+      cancelled = true;
+      window.removeEventListener('focus', syncTheme);
     };
-  }, [userTheme, detectSystemTheme]);
+  }, [userTheme, detectSystemTheme, updateSystemTheme]);
 
-  // Resolve the actual theme to use
   const resolvedTheme: ResolvedTheme = userTheme === 'system' ? systemTheme : userTheme;
 
-  // Apply theme to document
-  useEffect(() => {
+  // Apply synchronously before browser paint
+  useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', resolvedTheme);
   }, [resolvedTheme]);
 
-  // Set theme function
   const setTheme = useCallback(
     (theme: Theme) => {
       setUserTheme(theme);
@@ -112,7 +134,6 @@ export function useTheme() {
     [setUserTheme]
   );
 
-  // Toggle between light and dark (skipping system)
   const toggleTheme = useCallback(() => {
     const newTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
     setUserTheme(newTheme);
