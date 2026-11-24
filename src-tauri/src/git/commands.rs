@@ -3,6 +3,7 @@ use crate::git::repository::{
     GitIdentity, GitOperationResult, HunkData, ImageContent, InteractiveRebaseEntry, PullOptions,
     PushOptions, RepositoryInfo, RepositorySnapshot, StashInfo, TagInfo,
 };
+use crate::git::validation::open_validated_repo;
 
 async fn run_blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, String> + Send + 'static,
@@ -43,7 +44,7 @@ pub async fn get_recent_repos(
 #[tauri::command]
 pub async fn get_branches(repo_path: String) -> Result<Vec<BranchInfo>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_branches(&repo)
     })
     .await
@@ -52,7 +53,7 @@ pub async fn get_branches(repo_path: String) -> Result<Vec<BranchInfo>, String> 
 #[tauri::command]
 pub async fn get_branch_heads(repo_path: String) -> Result<Vec<BranchHead>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_branch_heads(&repo)
     })
     .await
@@ -70,7 +71,7 @@ pub async fn get_commits(
     offset: Option<usize>,
 ) -> Result<Vec<CommitInfo>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_commits(&repo, limit.unwrap_or(100), offset.unwrap_or(0))
     })
     .await
@@ -79,7 +80,7 @@ pub async fn get_commits(
 #[tauri::command]
 pub async fn get_file_status(repo_path: String) -> Result<Vec<FileStatus>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_file_status(&repo)
     })
     .await
@@ -88,7 +89,7 @@ pub async fn get_file_status(repo_path: String) -> Result<Vec<FileStatus>, Strin
 #[tauri::command]
 pub async fn get_tags(repo_path: String) -> Result<Vec<TagInfo>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_tags(&repo)
     })
     .await
@@ -97,7 +98,7 @@ pub async fn get_tags(repo_path: String) -> Result<Vec<TagInfo>, String> {
 #[tauri::command]
 pub async fn get_remotes(repo_path: String) -> Result<Vec<String>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_remotes(&repo)
     })
     .await
@@ -106,7 +107,7 @@ pub async fn get_remotes(repo_path: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn get_repository_info(repo_path: String) -> Result<RepositoryInfo, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_repository_info(&repo)
     })
     .await
@@ -121,7 +122,7 @@ pub struct FileStatusSeparated {
 #[tauri::command]
 pub async fn get_file_status_separated(repo_path: String) -> Result<FileStatusSeparated, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         let (unstaged, staged) = repository::get_file_status_separated(&repo)?;
         Ok(FileStatusSeparated { unstaged, staged })
     })
@@ -136,7 +137,7 @@ pub async fn get_working_diff(
     file_status: String,
 ) -> Result<DiffInfo, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
 
         if file_status == "untracked" {
             return repository::get_untracked_file_diff(&repo, &file_path);
@@ -164,7 +165,7 @@ pub async fn get_commit_diff(
     file_path: String,
 ) -> Result<DiffInfo, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_commit_diff(&repo, &commit_id, &file_path)
     })
     .await
@@ -176,7 +177,7 @@ pub async fn get_commit_files(
     commit_id: String,
 ) -> Result<Vec<FileStatus>, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_commit_files(&repo, &commit_id)
     })
     .await
@@ -185,7 +186,7 @@ pub async fn get_commit_files(
 #[tauri::command]
 pub async fn stage_file(repo_path: String, file_path: String) -> Result<(), String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::stage_file(&repo, &file_path)
     })
     .await
@@ -194,7 +195,7 @@ pub async fn stage_file(repo_path: String, file_path: String) -> Result<(), Stri
 #[tauri::command]
 pub async fn stage_files(repo_path: String, file_paths: Vec<String>) -> Result<(), String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::stage_files(&repo, &file_paths)
     })
     .await
@@ -203,7 +204,7 @@ pub async fn stage_files(repo_path: String, file_paths: Vec<String>) -> Result<(
 #[tauri::command]
 pub async fn unstage_file(repo_path: String, file_path: String) -> Result<(), String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::unstage_file(&repo, &file_path)
     })
     .await
@@ -212,7 +213,7 @@ pub async fn unstage_file(repo_path: String, file_path: String) -> Result<(), St
 #[tauri::command]
 pub async fn unstage_files(repo_path: String, file_paths: Vec<String>) -> Result<(), String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::unstage_files(&repo, &file_paths)
     })
     .await
@@ -321,7 +322,7 @@ pub async fn git_commit(
 #[tauri::command]
 pub async fn get_last_commit_message(repo_path: String) -> Result<CommitMessage, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_last_commit_message(&repo)
     })
     .await
@@ -502,7 +503,7 @@ pub async fn get_image_content(
     file_path: String,
 ) -> Result<ImageContent, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_image_content(&repo, &file_path)
     })
     .await
@@ -514,7 +515,7 @@ pub async fn get_image_from_head(
     file_path: String,
 ) -> Result<ImageContent, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_image_from_head(&repo, &file_path)
     })
     .await
@@ -526,7 +527,7 @@ pub async fn get_image_from_index(
     file_path: String,
 ) -> Result<ImageContent, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_image_from_index(&repo, &file_path)
     })
     .await
@@ -653,7 +654,7 @@ pub async fn git_interactive_rebase(
 #[tauri::command]
 pub async fn get_gitflow_config(repo_path: String) -> Result<repository::GitFlowConfig, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_gitflow_config(&repo)
     })
     .await
@@ -664,7 +665,7 @@ pub async fn get_current_branch_flow_info(
     repo_path: String,
 ) -> Result<repository::CurrentBranchFlowInfo, String> {
     run_blocking(move || {
-        let repo = repository::open_repository(&repo_path)?;
+        let repo = open_validated_repo(&repo_path)?;
         repository::get_current_branch_flow_info(&repo)
     })
     .await

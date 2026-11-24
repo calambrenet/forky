@@ -1113,6 +1113,7 @@ version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "dunce",
  "git2",
  "notify",
  "notify-debouncer-mini",
@@ -1124,6 +1125,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-opener",
+ "tempfile",
 ]
 
 [[package]]
