@@ -350,6 +350,12 @@ pub struct BranchHead {
     pub name: String,
     pub commit_sha: String,
     pub is_head: bool,
+    #[serde(default)]
+    pub is_remote: bool,
+    #[serde(default)]
+    pub remote_name: Option<String>,
+    #[serde(default)]
+    pub upstream: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -362,6 +368,7 @@ pub struct TagInfo {
 pub struct StashInfo {
     pub index: usize,
     pub id: String,
+    pub commit_sha: String,
     pub message: String,
     pub branch: String,
     pub timestamp: i64,
@@ -389,6 +396,8 @@ pub struct RepositorySnapshot {
     pub branch_heads: Vec<BranchHead>,
     pub tags: Vec<TagInfo>,
     pub remotes: Vec<String>,
+    #[serde(default)]
+    pub remote_urls: HashMap<String, String>,
     pub stashes: Vec<StashInfo>,
     pub unstaged: Vec<FileStatus>,
     pub staged: Vec<FileStatus>,
@@ -567,14 +576,6 @@ pub fn get_branches_and_heads(
                 let is_head = branch.is_head();
                 let local_oid = branch.get().peel_to_commit().ok().map(|c| c.id());
 
-                if let (Some(non_empty_name), Some(oid)) = (name_opt, local_oid) {
-                    heads.push(BranchHead {
-                        name: non_empty_name.to_string(),
-                        commit_sha: oid.to_string(),
-                        is_head,
-                    });
-                }
-
                 // Get upstream and calculate ahead/behind
                 let (upstream, ahead, behind) = match branch.upstream() {
                     Ok(upstream_branch) => {
@@ -586,6 +587,17 @@ pub fn get_branches_and_heads(
                     }
                     Err(_) => (None, None, None),
                 };
+
+                if let (Some(non_empty_name), Some(oid)) = (name_opt, local_oid) {
+                    heads.push(BranchHead {
+                        name: non_empty_name.to_string(),
+                        commit_sha: oid.to_string(),
+                        is_head,
+                        is_remote: false,
+                        remote_name: None,
+                        upstream: upstream.clone(),
+                    });
+                }
 
                 branches.push(BranchInfo {
                     name,
@@ -611,10 +623,18 @@ pub fn get_branches_and_heads(
                 if let (Some(non_empty_name), Ok(commit)) =
                     (name_opt, branch.get().peel_to_commit())
                 {
+                    let remote_name = repo
+                        .branch_remote_name(&format!("refs/remotes/{}", non_empty_name))
+                        .ok()
+                        .and_then(|buf| buf.as_str().map(String::from))
+                        .or_else(|| non_empty_name.split('/').next().map(String::from));
                     heads.push(BranchHead {
                         name: non_empty_name.to_string(),
                         commit_sha: commit.id().to_string(),
                         is_head: false,
+                        is_remote: true,
+                        remote_name,
+                        upstream: None,
                     });
                 }
                 branches.push(BranchInfo {
@@ -648,6 +668,7 @@ pub fn get_repository_snapshot(repo_path: &str) -> Result<RepositorySnapshot, St
     let (branches, branch_heads) = get_branches_and_heads(&repo)?;
     let tags = get_tags(&repo)?;
     let remotes = get_remotes(&repo)?;
+    let remote_urls = get_remote_urls(&repo);
     let (unstaged, staged) = get_file_status_separated(&repo)?;
     let stashes = get_stashes_from_repo(&mut repo)?;
 
@@ -656,6 +677,7 @@ pub fn get_repository_snapshot(repo_path: &str) -> Result<RepositorySnapshot, St
         branch_heads,
         tags,
         remotes,
+        remote_urls,
         stashes,
         unstaged,
         staged,
@@ -666,18 +688,38 @@ const MAX_AUTO_PAGINATED_COMMITS: usize = 50_000;
 const TARGET_COMMIT_TRAILING_BUFFER: usize = 20;
 
 pub fn get_commits(
-    repo: &Repository,
+    repo: &mut Repository,
     limit: usize,
     offset: usize,
     target_commit_id: Option<&str>,
 ) -> Result<Vec<CommitInfo>, String> {
+    use std::collections::HashSet;
+
     if repo.is_empty().unwrap_or(false) {
         return Ok(Vec::new());
     }
 
-    let mut revwalk = repo.revwalk().map_err(|e| e.message().to_string())?;
+    // Collect stashes before borrowing `repo` for `revwalk`, and identify Git's internal
+    // stash helper commits (parent 1 = index, parent 2 = untracked) so they don't clutter the graph.
+    let mut stash_oids = HashSet::new();
+    let _ = repo.stash_foreach(|_, _, oid| {
+        stash_oids.insert(*oid);
+        true
+    });
 
-    // Push local branches, remote branches, tags, and HEAD so every sidebar ref is reachable
+    let mut stash_helper_oids = HashSet::new();
+    for &stash_oid in &stash_oids {
+        if let Ok(stash_commit) = repo.find_commit(stash_oid) {
+            for helper_oid in stash_commit.parent_ids().skip(1) {
+                stash_helper_oids.insert(helper_oid);
+            }
+        }
+    }
+
+    let mut revwalk = repo.revwalk().map_err(|e| e.message().to_string())?;
+    let mut real_ref_oids = HashSet::new();
+
+    // Push local branches, remote branches, tags, stashes, and HEAD so every ref is reachable
     let mut pushed_any = false;
     for branch_type in [BranchType::Local, BranchType::Remote] {
         if let Ok(branches) = repo.branches(Some(branch_type)) {
@@ -686,6 +728,7 @@ pub fn get_commits(
                     continue;
                 }
                 if let Ok(commit) = branch.get().peel_to_commit() {
+                    real_ref_oids.insert(commit.id());
                     if revwalk.push(commit.id()).is_ok() {
                         pushed_any = true;
                     }
@@ -697,6 +740,7 @@ pub fn get_commits(
     if let Ok(tag_refs) = repo.references_glob("refs/tags/*") {
         for reference in tag_refs.flatten() {
             if let Ok(commit) = reference.peel_to_commit() {
+                real_ref_oids.insert(commit.id());
                 if revwalk.push(commit.id()).is_ok() {
                     pushed_any = true;
                 }
@@ -704,13 +748,24 @@ pub fn get_commits(
         }
     }
 
+    if let Ok(head_commit) = repo.head().and_then(|h| h.peel_to_commit()) {
+        real_ref_oids.insert(head_commit.id());
+    }
     if revwalk.push_head().is_ok() {
         pushed_any = true;
+    }
+
+    for &stash_oid in &stash_oids {
+        if revwalk.push(stash_oid).is_ok() {
+            pushed_any = true;
+        }
     }
 
     if !pushed_any {
         return Ok(Vec::new());
     }
+
+    stash_helper_oids.retain(|oid| !real_ref_oids.contains(oid) && !stash_oids.contains(oid));
 
     // Sort by topological order with time
     revwalk
@@ -722,7 +777,11 @@ pub fn get_commits(
     let mut found_target_at: Option<usize> = None;
     let mut commits = Vec::with_capacity(page_size);
 
-    for oid in revwalk.skip(offset).flatten() {
+    for oid in revwalk
+        .flatten()
+        .filter(|oid| !stash_helper_oids.contains(oid))
+        .skip(offset)
+    {
         let Ok(commit) = repo.find_commit(oid) else {
             continue;
         };
@@ -738,6 +797,12 @@ pub fn get_commits(
             found_target_at = Some(commits.len());
         }
 
+        let parent_ids = if stash_oids.contains(&oid) {
+            commit.parent_ids().take(1).map(|id| id.to_string()).collect()
+        } else {
+            commit.parent_ids().map(|id| id.to_string()).collect()
+        };
+
         commits.push(CommitInfo {
             short_id: id.chars().take(7).collect(),
             id,
@@ -745,7 +810,7 @@ pub fn get_commits(
             author: commit.author().name().unwrap_or("Unknown").to_string(),
             author_email: commit.author().email().unwrap_or("").to_string(),
             date: datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
-            parent_ids: commit.parent_ids().map(|id| id.to_string()).collect(),
+            parent_ids,
         });
 
         match target {
@@ -849,6 +914,20 @@ pub fn get_remotes(repo: &Repository) -> Result<Vec<String>, String> {
     Ok(remotes.iter().filter_map(|r| r.map(String::from)).collect())
 }
 
+pub fn get_remote_urls(repo: &Repository) -> HashMap<String, String> {
+    let mut urls = HashMap::new();
+    if let Ok(remotes) = repo.remotes() {
+        for name in remotes.iter().flatten() {
+            if let Ok(remote) = repo.find_remote(name) {
+                if let Some(url) = remote.url().or_else(|| remote.pushurl()) {
+                    urls.insert(name.to_string(), url.to_string());
+                }
+            }
+        }
+    }
+    urls
+}
+
 /// Get diff for a file in the working directory (unstaged changes)
 pub fn get_working_diff(
     repo: &Repository,
@@ -877,6 +956,19 @@ pub fn get_working_diff(
     parse_diff(&diff, file_path)
 }
 
+/// If `commit` is a 3-parent `git stash -u` commit, its 3rd parent (index 2) is an orphan commit
+/// containing the stashed untracked files.
+fn stash_untracked_tree<'repo>(commit: &git2::Commit<'repo>) -> Option<git2::Tree<'repo>> {
+    if commit.parent_count() != 3 {
+        return None;
+    }
+    let untracked_parent = commit.parent(2).ok()?;
+    if untracked_parent.parent_count() != 0 {
+        return None;
+    }
+    untracked_parent.tree().ok()
+}
+
 /// Get diff for a file in a specific commit
 pub fn get_commit_diff(
     repo: &Repository,
@@ -903,6 +995,19 @@ pub fn get_commit_diff(
             Some(&mut diff_opts),
         )
         .map_err(|e| e.message().to_string())?;
+
+    if diff.deltas().len() == 0 {
+        if let Some(untracked_tree) = stash_untracked_tree(&commit) {
+            let mut u_opts = DiffOptions::new();
+            u_opts.pathspec(file_path);
+            u_opts.disable_pathspec_match(true);
+            u_opts.context_lines(3);
+            let u_diff = repo
+                .diff_tree_to_tree(None, Some(&untracked_tree), Some(&mut u_opts))
+                .map_err(|e| e.message().to_string())?;
+            return parse_diff(&u_diff, file_path);
+        }
+    }
 
     parse_diff(&diff, file_path)
 }
@@ -960,6 +1065,32 @@ pub fn get_commit_files(repo: &Repository, commit_id: &str) -> Result<Vec<FileSt
         None,
     )
     .map_err(|e| e.message().to_string())?;
+
+    if let Some(untracked_tree) = stash_untracked_tree(&commit) {
+        let u_diff = repo
+            .diff_tree_to_tree(None, Some(&untracked_tree), None)
+            .map_err(|e| e.message().to_string())?;
+        u_diff
+            .foreach(
+                &mut |delta, _| {
+                    if let Some(path) = delta.new_file().path() {
+                        let path_str = path.to_string_lossy().to_string();
+                        if !files.iter().any(|f| f.path == path_str) {
+                            files.push(FileStatus {
+                                path: path_str,
+                                status: "new".to_string(),
+                                staged: false,
+                            });
+                        }
+                    }
+                    true
+                },
+                None,
+                None,
+                None,
+            )
+            .map_err(|e| e.message().to_string())?;
+    }
 
     Ok(files)
 }
@@ -2905,6 +3036,7 @@ fn get_stashes_from_repo(repo: &mut Repository) -> Result<Vec<StashInfo>, String
             StashInfo {
                 index,
                 id: format!("stash@{{{}}}", index),
+                commit_sha: oid.to_string(),
                 message,
                 branch,
                 timestamp,
@@ -4656,18 +4788,18 @@ mod tests {
 
     #[test]
     fn get_commits_paginates_with_offset_without_gaps_or_overlaps() {
-        let (dir, repo) = create_temp_git_repo("pagination");
+        let (dir, mut repo) = create_temp_git_repo("pagination");
         for i in 1..=5 {
             commit_file(&repo, "log.txt", &format!("v{}\n", i), &format!("commit {}", i));
         }
 
-        let all = get_commits(&repo, 10, 0, None).unwrap();
+        let all = get_commits(&mut repo, 10, 0, None).unwrap();
         assert_eq!(all.len(), 5);
 
-        let page1 = get_commits(&repo, 2, 0, None).unwrap();
-        let page2 = get_commits(&repo, 2, 2, None).unwrap();
-        let page3 = get_commits(&repo, 2, 4, None).unwrap();
-        let page4 = get_commits(&repo, 2, 6, None).unwrap();
+        let page1 = get_commits(&mut repo, 2, 0, None).unwrap();
+        let page2 = get_commits(&mut repo, 2, 2, None).unwrap();
+        let page3 = get_commits(&mut repo, 2, 4, None).unwrap();
+        let page4 = get_commits(&mut repo, 2, 6, None).unwrap();
 
         assert_eq!(page1.len(), 2);
         assert_eq!(page2.len(), 2);
@@ -4685,9 +4817,43 @@ mod tests {
 
         // Auto-load multiple pages until an older branch commit is reached
         let oldest_id = all_ids.last().unwrap().clone();
-        let until_oldest = get_commits(&repo, 2, 0, Some(&oldest_id)).unwrap();
+        let until_oldest = get_commits(&mut repo, 2, 0, Some(&oldest_id)).unwrap();
         assert_eq!(until_oldest.len(), 5);
         assert!(until_oldest.iter().any(|c| c.id == oldest_id));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn get_commits_includes_stashes_and_hides_internal_stash_helpers() {
+        let (dir, mut repo) = create_temp_git_repo("stash_commits");
+        commit_file(&repo, "tracked.txt", "v1\n", "base commit");
+        let base_id = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
+
+        // Modify tracked file + create untracked file and stash with -u
+        std::fs::write(dir.join("tracked.txt"), "v2-stashed\n").unwrap();
+        std::fs::write(dir.join("untracked.txt"), "new-stashed\n").unwrap();
+        let sig = git2::Signature::now("Tester", "tester@example.com").unwrap();
+        let stash_oid = repo
+            .stash_save(&sig, "my stash", Some(git2::StashFlags::INCLUDE_UNTRACKED))
+            .unwrap();
+
+        let stashes = get_stashes_from_repo(&mut repo).unwrap();
+        assert_eq!(stashes.len(), 1);
+        assert_eq!(stashes[0].commit_sha, stash_oid.to_string());
+
+        // Should emit ONLY the stash commit + base commit (NOT the index/untracked helper commits)
+        let commits = get_commits(&mut repo, 10, 0, None).unwrap();
+        assert_eq!(commits.len(), 2);
+        let stash_commit = commits.iter().find(|c| c.id == stash_oid.to_string()).unwrap();
+        assert_eq!(stash_commit.parent_ids, vec![base_id]);
+
+        // Both tracked and untracked files in the stash should be inspectable
+        let files = get_commit_files(&repo, &stash_oid.to_string()).unwrap();
+        assert!(files.iter().any(|f| f.path == "tracked.txt" && f.status == "modified"));
+        assert!(files.iter().any(|f| f.path == "untracked.txt" && f.status == "new"));
+        let u_diff = get_commit_diff(&repo, &stash_oid.to_string(), "untracked.txt").unwrap();
+        assert_eq!(u_diff.hunks.len(), 1);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

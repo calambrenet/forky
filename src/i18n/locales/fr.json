@@ -114,7 +114,10 @@
     "sha": "SHA",
     "today": "Aujourd'hui",
     "yesterday": "Hier",
-    "daysAgo": "Il y a {{count}} jours"
+    "todayAt": "Aujourd'hui à {{time}}",
+    "yesterdayAt": "Hier à {{time}}",
+    "daysAgo": "Il y a {{count}} jours",
+    "uncommittedChanges": "Modifications locales ({{count}})"
   },
   "modals": {
     "fetch": {

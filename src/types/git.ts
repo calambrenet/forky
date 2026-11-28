@@ -21,6 +21,9 @@ export interface BranchHead {
   name: string;
   commit_sha: string;
   is_head: boolean;
+  is_remote?: boolean;
+  remote_name?: string | null;
+  upstream?: string | null;
 }
 
 export interface TagInfo {
@@ -31,6 +34,7 @@ export interface TagInfo {
 export interface StashInfo {
   index: number;
   id: string;
+  commit_sha: string;
   message: string;
   branch: string;
   timestamp: number;
@@ -84,6 +88,7 @@ export interface RepositorySnapshot {
   branch_heads: BranchHead[];
   tags: TagInfo[];
   remotes: string[];
+  remote_urls?: Record<string, string>;
   stashes: StashInfo[];
   unstaged: FileStatus[];
   staged: FileStatus[];
@@ -279,6 +284,7 @@ export interface TabState {
   tags: TagInfo[];
   stashes: StashInfo[];
   remotes: string[];
+  remoteUrls: Record<string, string>;
   unstaged: FileStatus[];
   staged: FileStatus[];
   fileStatuses: FileStatus[];

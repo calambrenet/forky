@@ -1693,6 +1693,10 @@ function App() {
   const handleOpenAbout = useCallback(() => setAboutModalOpen(true), []);
   const handleCloseAbout = useCallback(() => setAboutModalOpen(false), []);
   const handleOpenSettingsModal = useCallback(() => openSettings(), [openSettings]);
+  const handleSelectLocalChanges = useCallback(
+    () => handleViewModeChange('local-changes'),
+    [handleViewModeChange]
+  );
 
   const activeBranches = activeTabState?.branches ?? EMPTY_BRANCHES;
   const activeRemotes = activeTabState?.remotes ?? EMPTY_REMOTES;
@@ -2032,9 +2036,15 @@ function App() {
           ) : (
             <AllCommitsView
               repoPath={activeTab?.path ?? ''}
+              branchHeads={activeTabState.branchHeads}
+              tags={activeTabState.tags}
+              stashes={stashes}
+              remoteUrls={activeTabState.remoteUrls}
+              localChangesCount={localChangesCount}
               selectedCommitId={activeTabState.selectedCommitId}
               navigationSeq={commitNavigationSeq}
               onCommitSelect={handleSelectCommit}
+              onSelectLocalChanges={handleSelectLocalChanges}
             />
           )}
         </div>

@@ -5,7 +5,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { List, type RowComponentProps } from 'react-window';
 import type { CommitGraphHandle } from '../commit-graph';
 import { CommitGraph } from '../commit-graph';
-import type { CommitInfo, BranchHead, FileStatus, DiffInfo } from '../../types/git';
+import type {
+  CommitInfo,
+  BranchHead,
+  TagInfo,
+  StashInfo,
+  FileStatus,
+  DiffInfo,
+} from '../../types/git';
 import { Resizer } from '../resizer/Resizer';
 import { VirtualDiffViewer } from '../virtual-diff/VirtualDiffViewer';
 import './AllCommitsView.css';
@@ -16,9 +23,15 @@ const FILE_ITEM_HEIGHT = 42;
 
 interface AllCommitsViewProps {
   repoPath: string;
+  branchHeads?: BranchHead[];
+  tags?: TagInfo[];
+  stashes?: StashInfo[];
+  remoteUrls?: Record<string, string>;
+  localChangesCount?: number;
   selectedCommitId?: string | null;
   navigationSeq?: number;
   onCommitSelect?: (commitId: string) => void;
+  onSelectLocalChanges?: () => void;
 }
 
 function getStatusIcon(status: string) {
@@ -85,10 +98,22 @@ const VirtualCommitFileRow = ({
 };
 
 export const AllCommitsView: FC<AllCommitsViewProps> = memo(
-  ({ repoPath, selectedCommitId, navigationSeq = 0, onCommitSelect }) => {
+  ({
+    repoPath,
+    branchHeads: externalBranchHeads,
+    tags,
+    stashes,
+    remoteUrls,
+    localChangesCount = 0,
+    selectedCommitId,
+    navigationSeq = 0,
+    onCommitSelect,
+    onSelectLocalChanges,
+  }) => {
     const { t } = useTranslation();
     const [commits, setCommits] = useState<CommitInfo[]>([]);
-    const [branchHeads, setBranchHeads] = useState<BranchHead[]>([]);
+    const [internalBranchHeads, setInternalBranchHeads] = useState<BranchHead[]>([]);
+    const branchHeads = externalBranchHeads ?? internalBranchHeads;
     const [commitFiles, setCommitFiles] = useState<FileStatus[]>([]);
     const [selectedFile, setSelectedFile] = useState<FileStatus | null>(null);
     const [diffInfo, setDiffInfo] = useState<DiffInfo | null>(null);
@@ -123,48 +148,67 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       return commits.find((c) => c.id === selectedCommitId) || null;
     }, [selectedCommitId, commits]);
 
-    const loadCommits = useCallback(async () => {
-      const reqId = ++commitsReqIdRef.current;
-      isInitialLoadingRef.current = true;
-      isLoadingMoreRef.current = false;
-      const initialTarget = selectedCommitIdRef.current ?? null;
-      try {
-        const result = await invoke<CommitInfo[]>('get_commits', {
-          repoPath,
-          limit: COMMITS_PAGE_SIZE,
-          offset: 0,
-          targetCommitId: initialTarget,
-        });
-        if (reqId !== commitsReqIdRef.current) return;
-        if (initialTarget && !result.some((c) => c.id === initialTarget)) {
-          attemptedTargetCommitRef.current = initialTarget;
+    const commitsCountRef = useRef(0);
+    commitsCountRef.current = commits.length;
+
+    const loadCommits = useCallback(
+      async (preserveCount = false) => {
+        const reqId = ++commitsReqIdRef.current;
+        isInitialLoadingRef.current = true;
+        isLoadingMoreRef.current = false;
+        const initialTarget = selectedCommitIdRef.current ?? null;
+        const limit = preserveCount
+          ? Math.max(COMMITS_PAGE_SIZE, commitsCountRef.current)
+          : COMMITS_PAGE_SIZE;
+        try {
+          const result = await invoke<CommitInfo[]>('get_commits', {
+            repoPath,
+            limit,
+            offset: 0,
+            targetCommitId: initialTarget,
+          });
+          if (reqId !== commitsReqIdRef.current) return;
+          if (initialTarget && !result.some((c) => c.id === initialTarget)) {
+            attemptedTargetCommitRef.current = initialTarget;
+          }
+          setCommits(result);
+          setHasMore(result.length > 0 && result.length % COMMITS_PAGE_SIZE === 0);
+        } catch (error) {
+          if (reqId !== commitsReqIdRef.current) return;
+          console.error('Error loading commits:', error);
+          setCommits([]);
+          setHasMore(false);
+        } finally {
+          if (reqId === commitsReqIdRef.current) {
+            isInitialLoadingRef.current = false;
+          }
         }
-        setCommits(result);
-        setHasMore(result.length > 0 && result.length % COMMITS_PAGE_SIZE === 0);
-      } catch (error) {
-        if (reqId !== commitsReqIdRef.current) return;
-        console.error('Error loading commits:', error);
-        setCommits([]);
-        setHasMore(false);
-      } finally {
-        if (reqId === commitsReqIdRef.current) {
-          isInitialLoadingRef.current = false;
-        }
-      }
-    }, [repoPath]);
+      },
+      [repoPath]
+    );
 
     const loadBranchHeads = useCallback(async () => {
+      if (externalBranchHeads !== undefined) return;
       const reqId = ++branchHeadsReqIdRef.current;
       try {
         const result = await invoke<BranchHead[]>('get_branch_heads', { repoPath });
         if (reqId !== branchHeadsReqIdRef.current) return;
-        setBranchHeads(result);
+        setInternalBranchHeads(result);
       } catch (error) {
         if (reqId !== branchHeadsReqIdRef.current) return;
         console.error('Error loading branch heads:', error);
-        setBranchHeads([]);
+        setInternalBranchHeads([]);
       }
-    }, [repoPath]);
+    }, [externalBranchHeads, repoPath]);
+
+    // Signature of branch, tag, and stash tips to auto-refresh commit graph on git mutations
+    const refsSignature = useMemo(() => {
+      const b = branchHeads.map((h) => `${h.name}:${h.commit_sha}:${h.is_head ? 1 : 0}`).join('|');
+      const tg = (tags ?? []).map((item) => `${item.name}:${item.commit_sha}`).join('|');
+      const st = (stashes ?? []).map((item) => `${item.id}:${item.commit_sha}`).join('|');
+      return `${b}#${tg}#${st}`;
+    }, [branchHeads, tags, stashes]);
+    const prevRefsSigRef = useRef<{ repoPath: string; sig: string }>({ repoPath, sig: '' });
 
     useEffect(() => {
       // Clear stale view state when switching repositories
@@ -172,17 +216,31 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
       diffReqIdRef.current += 1;
       attemptedTargetCommitRef.current = null;
       pendingScrollCommitRef.current = selectedCommitIdRef.current ?? null;
+      prevRefsSigRef.current = { repoPath, sig: refsSignature };
       setCommits([]);
-      setBranchHeads([]);
+      setInternalBranchHeads([]);
       setCommitFiles([]);
       setSelectedFile(null);
       setDiffInfo(null);
       setIsLoadingFiles(false);
       setIsLoadingDiff(false);
       setHasMore(true);
-      void loadCommits();
+      void loadCommits(false);
       void loadBranchHeads();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loadCommits, loadBranchHeads, repoPath]);
+
+    useEffect(() => {
+      if (prevRefsSigRef.current.repoPath !== repoPath) {
+        prevRefsSigRef.current = { repoPath, sig: refsSignature };
+        return;
+      }
+      if (prevRefsSigRef.current.sig !== refsSignature) {
+        prevRefsSigRef.current = { repoPath, sig: refsSignature };
+        attemptedTargetCommitRef.current = null;
+        void loadCommits(true);
+      }
+    }, [repoPath, refsSignature, loadCommits]);
 
     // Incremental infinite-scroll pagination: fetch the next page when nearing the bottom
     const loadMore = useCallback(async () => {
@@ -527,8 +585,13 @@ export const AllCommitsView: FC<AllCommitsViewProps> = memo(
               ref={graphRef}
               commits={commits}
               branchHeads={branchHeads}
+              tags={tags}
+              stashes={stashes}
+              remoteUrls={remoteUrls}
+              localChangesCount={localChangesCount}
               selectedCommitId={selectedCommitId}
               onCommitClick={handleCommitClick}
+              onSelectLocalChanges={onSelectLocalChanges}
               onReachBottom={loadMore}
             />
           ) : (

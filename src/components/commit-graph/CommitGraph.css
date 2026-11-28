@@ -1,4 +1,7 @@
 .commit-graph-container {
+  --col-author-width: 150px;
+  --col-sha-width: 80px;
+  --col-date-width: 195px;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -14,7 +17,7 @@
   display: flex;
   align-items: center;
   height: 28px;
-  padding: 0;
+  padding: 0 var(--scrollbar-width, 0px) 0 0;
   background-color: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   font-size: 11px;
@@ -22,6 +25,7 @@
   color: var(--text-secondary);
   text-transform: uppercase;
   flex-shrink: 0;
+  user-select: none;
 }
 
 .header-graph {
@@ -31,27 +35,63 @@
 .header-description {
   flex: 1;
   padding: 0 8px;
-  min-width: 200px;
+  min-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-author,
+.header-sha,
+.header-date {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-author {
-  width: 140px;
-  padding: 0 8px;
-  flex-shrink: 0;
-}
-
-.header-date {
-  width: 130px;
-  padding: 0 8px;
-  flex-shrink: 0;
-  text-align: right;
+  width: var(--col-author-width);
 }
 
 .header-sha {
-  width: 80px;
-  padding: 0 8px 0 8px;
-  flex-shrink: 0;
-  text-align: right;
+  width: var(--col-sha-width);
+}
+
+.header-date {
+  width: var(--col-date-width);
+}
+
+/* Column resize handle */
+.col-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.col-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 1px;
+  background-color: var(--border-color);
+  transition: background-color 0.12s;
+}
+
+.col-resize-handle:hover::after {
+  width: 2px;
+  background-color: var(--accent-blue, #3b82f6);
 }
 
 /* Scrollable area */
@@ -84,8 +124,7 @@
   display: flex;
   align-items: center;
   cursor: pointer;
-  transition: background-color 0.1s;
-  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.08s;
 }
 
 .commit-row:hover {
@@ -93,71 +132,149 @@
 }
 
 .commit-row.selected {
-  background-color: var(--accent-blue);
+  background-color: var(--bg-selected);
 }
 
-.commit-row.selected .row-message,
-.commit-row.selected .row-author,
-.commit-row.selected .row-date,
-.commit-row.selected .row-sha {
-  color: white;
+.commit-row.selected .row-message-text {
+  color: var(--text-highlight);
+  font-weight: 500;
 }
 
-/* Graph space in each row (invisible, just for spacing) */
+.commit-row.is-uncommitted .uncommitted-label {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Graph space in each row */
 .row-graph {
   flex-shrink: 0;
   height: 100%;
 }
 
-/* Branch labels */
+/* Ref badges (branches, stashes, tags) */
 .row-labels {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-  padding-right: 8px;
+  padding-right: 6px;
 }
 
-.branch-label {
+.branch-label,
+.stash-label,
+.tag-label {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
-  border-radius: 3px;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: white;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-  max-width: 120px;
+  color: var(--text-primary);
+  max-width: 170px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ref-badge-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.branch-label {
+  --branch-color: #3b82f6;
+  border: 1px solid var(--branch-color);
+  background-color: color-mix(in srgb, var(--branch-color) 18%, var(--bg-secondary));
+}
+
+.branch-label .ref-badge-icon {
+  color: var(--branch-color);
+  flex-shrink: 0;
+}
+
+.branch-label.is-remote {
+  border-color: color-mix(in srgb, var(--branch-color) 65%, var(--border-color));
+  background-color: color-mix(in srgb, var(--branch-color) 10%, var(--bg-secondary));
+  color: var(--text-secondary);
+}
+
+.branch-label.is-head {
+  background-color: color-mix(in srgb, var(--branch-color) 30%, var(--bg-secondary));
+  color: var(--text-highlight);
+}
+
 .branch-label.is-head::before {
-  content: '';
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  background-color: white;
-  border-radius: 50%;
-  margin-right: 4px;
+  content: '✓';
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--branch-color);
+  flex-shrink: 0;
+}
+
+.stash-label {
+  --stash-color: #84cc16;
+  border: 1px solid color-mix(in srgb, var(--stash-color) 75%, var(--border-color));
+  background-color: color-mix(in srgb, var(--stash-color) 16%, var(--bg-secondary));
+}
+
+.stash-label .ref-badge-icon {
+  color: var(--stash-color);
+  flex-shrink: 0;
+}
+
+.tag-label {
+  --tag-color: #60a5fa;
+  border: 1px solid color-mix(in srgb, var(--tag-color) 75%, var(--border-color));
+  background-color: color-mix(in srgb, var(--tag-color) 16%, var(--bg-secondary));
+}
+
+.tag-label .ref-badge-icon {
+  color: var(--tag-color);
   flex-shrink: 0;
 }
 
 /* Row columns */
 .row-message {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   padding: 0 8px;
-  min-width: 200px;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.row-message-text {
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.multiline-indicator {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  opacity: 0.75;
+}
+
 .row-author {
-  width: 140px;
+  width: var(--col-author-width);
   padding: 0 8px;
   flex-shrink: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-sha {
+  width: var(--col-sha-width);
+  padding: 0 8px;
+  flex-shrink: 0;
+  font-family: monospace;
+  font-size: 12px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -165,22 +282,13 @@
 }
 
 .row-date {
-  width: 130px;
+  width: var(--col-date-width);
   padding: 0 8px;
   flex-shrink: 0;
   color: var(--text-secondary);
-  text-align: right;
   white-space: nowrap;
-}
-
-.row-sha {
-  width: 80px;
-  padding: 0 8px 0 8px;
-  flex-shrink: 0;
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--text-secondary);
-  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Empty state */

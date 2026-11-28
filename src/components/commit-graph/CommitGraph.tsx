@@ -8,16 +8,28 @@ import {
   useImperativeHandle,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { CommitInfo, BranchHead } from '../../types/git';
-import { calculateGraphLayout, getLaneColor } from './graphUtils';
+import { Archive, Cloud, CornerDownLeft, GitBranch, Tag } from 'lucide-react';
+import type { CommitInfo, BranchHead, TagInfo, StashInfo } from '../../types/git';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
+import {
+  calculateGraphLayout,
+  getLaneColor,
+  type GraphEdge,
+  type RemoteProvider,
+} from './graphUtils';
 import './CommitGraph.css';
 
 interface CommitGraphProps {
   commits: CommitInfo[];
   branchHeads: BranchHead[];
+  tags?: TagInfo[];
+  stashes?: StashInfo[];
+  remoteUrls?: Record<string, string>;
+  localChangesCount?: number;
   selectedCommitId?: string | null;
   onCommitClick?: (commit: CommitInfo) => void;
   onCommitDoubleClick?: (commit: CommitInfo) => void;
+  onSelectLocalChanges?: () => void;
   onReachBottom?: () => void;
 }
 
@@ -25,14 +37,36 @@ export interface CommitGraphHandle {
   scrollToCommit: (commitId: string) => void;
 }
 
+interface ColumnWidths {
+  author: number;
+  sha: number;
+  date: number;
+}
+
+type ColumnDivider = 'desc-author' | 'author-sha' | 'sha-date';
+
+const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
+  author: 150,
+  sha: 80,
+  date: 195,
+};
+
+const COL_LIMITS = {
+  author: { min: 80, max: 360 },
+  sha: { min: 64, max: 160 },
+  date: { min: 110, max: 320 },
+} as const;
+
 const ROW_HEIGHT = 26;
-const LANE_WIDTH = 12;
+const LANE_WIDTH = 14;
 const NODE_RADIUS = 4;
-const GRAPH_PADDING = 8;
+const MERGE_OUTER_RADIUS = 5;
+const MERGE_INNER_RADIUS = 2;
+const GRAPH_PADDING = 14;
 const MIN_GRAPH_WIDTH = 40;
 const VISIBLE_BUFFER = 15;
 const SCROLL_QUANTUM_ROWS = 5;
-const LANE_PADDING = 16; // Extra padding after the node
+const LANE_PADDING = 12;
 const LOAD_MORE_THRESHOLD_PX = 200;
 const SMOOTH_SCROLL_MAX_DISTANCE_PX = 2500;
 
@@ -41,92 +75,260 @@ interface VisibleRange {
   endRow: number;
 }
 
+function clamp(val: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, val));
+}
+
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function RemoteProviderIcon({ provider }: { provider: RemoteProvider }) {
+  if (provider === 'github') {
+    return (
+      <svg
+        className="ref-badge-icon"
+        width={10}
+        height={10}
+        viewBox="0 0 16 16"
+        fill="currentColor"
+      >
+        <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+      </svg>
+    );
+  }
+  if (provider === 'gitlab') {
+    return (
+      <svg
+        className="ref-badge-icon"
+        width={10}
+        height={10}
+        viewBox="0 0 16 16"
+        fill="currentColor"
+      >
+        <path d="m15.73 9.09-.86-2.66L13.17.85a.3.3 0 0 0-.57 0L10.9 6.43H5.1L3.4.85a.3.3 0 0 0-.57 0L1.13 6.43.27 9.09a.6.6 0 0 0 .22.67L8 15.2l7.51-5.44a.6.6 0 0 0 .22-.67Z" />
+      </svg>
+    );
+  }
+  if (provider === 'bitbucket') {
+    return (
+      <svg
+        className="ref-badge-icon"
+        width={10}
+        height={10}
+        viewBox="0 0 16 16"
+        fill="currentColor"
+      >
+        <path d="M.77 1.2a.5.5 0 0 0-.5.58l2.06 12.53a.68.68 0 0 0 .67.57h9.98a.5.5 0 0 0 .5-.42l2.05-12.68a.5.5 0 0 0-.5-.58H.77Zm8.95 8.95H6.28L5.35 5.3h5.3l-.93 4.85Z" />
+      </svg>
+    );
+  }
+  return <Cloud size={10} className="ref-badge-icon" />;
+}
+
 function computeVisibleRange(
   scrollTopPx: number,
   containerHeightPx: number,
-  totalCommits: number
+  totalRows: number
 ): VisibleRange {
-  if (totalCommits === 0) {
+  if (totalRows === 0) {
     return { startRow: 0, endRow: 0 };
   }
   const rawStart = Math.max(0, Math.floor(scrollTopPx / ROW_HEIGHT) - VISIBLE_BUFFER);
   const rawEnd = Math.min(
-    totalCommits,
+    totalRows,
     Math.ceil((scrollTopPx + containerHeightPx) / ROW_HEIGHT) + VISIBLE_BUFFER
   );
   const startRow = Math.floor(rawStart / SCROLL_QUANTUM_ROWS) * SCROLL_QUANTUM_ROWS;
-  const endRow = Math.min(
-    totalCommits,
-    Math.ceil(rawEnd / SCROLL_QUANTUM_ROWS) * SCROLL_QUANTUM_ROWS
-  );
+  const endRow = Math.min(totalRows, Math.ceil(rawEnd / SCROLL_QUANTUM_ROWS) * SCROLL_QUANTUM_ROWS);
   return { startRow, endRow };
 }
 
 export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
   (
-    { commits, branchHeads, selectedCommitId, onCommitClick, onCommitDoubleClick, onReachBottom },
+    {
+      commits,
+      branchHeads,
+      tags,
+      stashes,
+      remoteUrls,
+      localChangesCount = 0,
+      selectedCommitId,
+      onCommitClick,
+      onCommitDoubleClick,
+      onSelectLocalChanges,
+      onReachBottom,
+    },
     ref
   ) => {
     const { t, i18n } = useTranslation();
+    const containerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const scrollTopRef = useRef(0);
     const containerHeightRef = useRef(600);
+    const [columnWidths, setColumnWidths] = useLocalStorage<ColumnWidths>(
+      'forky:commit-columns',
+      DEFAULT_COLUMN_WIDTHS
+    );
+    const columnWidthsRef = useRef(columnWidths);
+    columnWidthsRef.current = columnWidths;
+
+    // Calculate graph layout (including virtual uncommitted row when localChangesCount > 0)
+    const graphData = useMemo(() => {
+      return calculateGraphLayout(commits, branchHeads, {
+        tags,
+        stashes,
+        remoteUrls,
+        localChangesCount,
+      });
+    }, [commits, branchHeads, tags, stashes, remoteUrls, localChangesCount]);
+
+    const totalRows = graphData.nodes.length;
+
     const [visibleRange, setVisibleRange] = useState<VisibleRange>(() =>
-      computeVisibleRange(0, 600, commits.length)
+      computeVisibleRange(0, 600, totalRows)
     );
 
-    // Cache Intl.DateTimeFormat instances per locale instead of allocating on every row/render
-    const { timeFormatter, dateFormatter } = useMemo(() => {
+    // Cache Intl.DateTimeFormat instances per locale (always including time like Fork)
+    const { timeFormatter, dateTimeFormatter } = useMemo(() => {
       const locale = i18n.language || undefined;
       return {
         timeFormatter: new Intl.DateTimeFormat(locale, {
           hour: '2-digit',
           minute: '2-digit',
         }),
-        dateFormatter: new Intl.DateTimeFormat(locale, {
+        dateTimeFormatter: new Intl.DateTimeFormat(locale, {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
         }),
       };
     }, [i18n.language]);
 
     const formatDate = useCallback(
-      (dateStr: string, nowMs: number): string => {
+      (dateStr: string, today: Date, yesterday: Date): string => {
         try {
           const date = new Date(dateStr);
-          const timeMs = date.getTime();
-          if (Number.isNaN(timeMs)) return dateStr;
+          if (Number.isNaN(date.getTime())) return dateStr;
 
-          const diffDays = Math.floor((nowMs - timeMs) / (1000 * 60 * 60 * 24));
-
-          if (diffDays === 0) {
-            return timeFormatter.format(date);
-          } else if (diffDays === 1) {
-            return t('commits.yesterday');
-          } else if (diffDays > 1 && diffDays < 7) {
-            return t('commits.daysAgo', { count: diffDays });
-          } else {
-            return dateFormatter.format(date);
+          if (isSameCalendarDay(date, today)) {
+            return t('commits.todayAt', { time: timeFormatter.format(date) });
           }
+          if (isSameCalendarDay(date, yesterday)) {
+            return t('commits.yesterdayAt', { time: timeFormatter.format(date) });
+          }
+          return dateTimeFormatter.format(date);
         } catch {
           return dateStr;
         }
       },
-      [t, timeFormatter, dateFormatter]
+      [t, timeFormatter, dateTimeFormatter]
     );
 
-    // Calculate graph layout
-    const graphData = useMemo(() => {
-      return calculateGraphLayout(commits, branchHeads);
-    }, [commits, branchHeads]);
+    // Column resizing with 1:1 cursor tracking via CSS custom properties (zero React re-renders during drag)
+    const startColumnResize = useCallback(
+      (divider: ColumnDivider, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const startX = e.clientX;
+        const start = { ...columnWidthsRef.current };
+        let pending: ColumnWidths | null = null;
+        let rafId: number | null = null;
+
+        const applyDomWidths = (w: ColumnWidths) => {
+          const el = containerRef.current;
+          if (!el) return;
+          el.style.setProperty('--col-author-width', `${w.author}px`);
+          el.style.setProperty('--col-sha-width', `${w.sha}px`);
+          el.style.setProperty('--col-date-width', `${w.date}px`);
+        };
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          const dx = moveEvent.clientX - startX;
+          let next: ColumnWidths;
+
+          if (divider === 'desc-author') {
+            next = {
+              ...start,
+              author: clamp(start.author - dx, COL_LIMITS.author.min, COL_LIMITS.author.max),
+            };
+          } else if (divider === 'author-sha') {
+            const minDx = Math.max(
+              COL_LIMITS.author.min - start.author,
+              start.sha - COL_LIMITS.sha.max
+            );
+            const maxDx = Math.min(
+              COL_LIMITS.author.max - start.author,
+              start.sha - COL_LIMITS.sha.min
+            );
+            const effDx = clamp(dx, minDx, maxDx);
+            next = {
+              ...start,
+              author: start.author + effDx,
+              sha: start.sha - effDx,
+            };
+          } else {
+            const minDx = Math.max(
+              COL_LIMITS.sha.min - start.sha,
+              start.date - COL_LIMITS.date.max
+            );
+            const maxDx = Math.min(
+              COL_LIMITS.sha.max - start.sha,
+              start.date - COL_LIMITS.date.min
+            );
+            const effDx = clamp(dx, minDx, maxDx);
+            next = {
+              ...start,
+              sha: start.sha + effDx,
+              date: start.date - effDx,
+            };
+          }
+
+          pending = next;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              if (pending) applyDomWidths(pending);
+            });
+          }
+        };
+
+        const handleMouseUp = () => {
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+          if (pending) {
+            applyDomWidths(pending);
+            setColumnWidths(pending);
+          }
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      },
+      [setColumnWidths]
+    );
 
     // Calculate dimensions
     const maxGraphWidth = Math.max(
       MIN_GRAPH_WIDTH,
-      (graphData.maxLane + 1) * LANE_WIDTH + GRAPH_PADDING * 2
+      (graphData.maxLane + 1) * LANE_WIDTH + GRAPH_PADDING + LANE_PADDING
     );
-    const totalHeight = commits.length * ROW_HEIGHT;
+    const totalHeight = totalRows * ROW_HEIGHT;
 
     const updateVisibleRange = useCallback(
       (scrollTopPx: number, heightPx: number, total: number) => {
@@ -149,27 +351,34 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       [onReachBottom, commits.length]
     );
 
-    // Keep visibleRange in sync when commits.length changes and auto-fill tall viewports
-    useEffect(() => {
-      updateVisibleRange(scrollTopRef.current, containerHeightRef.current, commits.length);
-      checkNearBottom(scrollRef.current);
-    }, [commits.length, updateVisibleRange, checkNearBottom]);
-
-    // Calculate the graph width for a specific row based on its lane
-    const getRowGraphWidth = useCallback((lane: number) => {
-      return Math.max(MIN_GRAPH_WIDTH, GRAPH_PADDING + (lane + 1) * LANE_WIDTH + LANE_PADDING);
+    const syncScrollbarGutter = useCallback(() => {
+      const scrollEl = scrollRef.current;
+      const containerEl = containerRef.current;
+      if (!scrollEl || !containerEl) return;
+      const scrollbarWidth = Math.max(0, scrollEl.offsetWidth - scrollEl.clientWidth);
+      containerEl.style.setProperty('--scrollbar-width', `${scrollbarWidth}px`);
     }, []);
 
-    // Handle scroll with quantized range updates and bottom infinite-scroll trigger
+    // Keep visibleRange in sync when totalRows changes and auto-fill tall viewports
+    useEffect(() => {
+      updateVisibleRange(scrollTopRef.current, containerHeightRef.current, totalRows);
+      syncScrollbarGutter();
+      checkNearBottom(scrollRef.current);
+    }, [totalRows, updateVisibleRange, syncScrollbarGutter, checkNearBottom]);
+
+    const getRowGraphWidth = useCallback((lane: number) => {
+      return Math.max(MIN_GRAPH_WIDTH, GRAPH_PADDING + lane * LANE_WIDTH + LANE_PADDING + 4);
+    }, []);
+
     const handleScroll = useCallback(
       (e: React.UIEvent<HTMLDivElement>) => {
         const el = e.currentTarget;
         const nextScrollTop = el.scrollTop;
         scrollTopRef.current = nextScrollTop;
-        updateVisibleRange(nextScrollTop, containerHeightRef.current, commits.length);
+        updateVisibleRange(nextScrollTop, containerHeightRef.current, totalRows);
         checkNearBottom(el);
       },
-      [commits.length, updateVisibleRange, checkNearBottom]
+      [totalRows, updateVisibleRange, checkNearBottom]
     );
 
     // Update container height on resize
@@ -180,33 +389,35 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       const handleHeightChange = (height: number) => {
         if (height <= 0 || height === containerHeightRef.current) return;
         containerHeightRef.current = height;
-        updateVisibleRange(scrollTopRef.current, height, commits.length);
+        updateVisibleRange(scrollTopRef.current, height, totalRows);
         checkNearBottom(scrollEl);
       };
 
       const resizeObserver = new ResizeObserver((entries) => {
+        syncScrollbarGutter();
         for (const entry of entries) {
           handleHeightChange(entry.contentRect.height);
         }
       });
 
       resizeObserver.observe(scrollEl);
+      syncScrollbarGutter();
       handleHeightChange(scrollEl.clientHeight);
 
       return () => resizeObserver.disconnect();
-    }, [commits.length, updateVisibleRange, checkNearBottom]);
+    }, [totalRows, updateVisibleRange, syncScrollbarGutter, checkNearBottom]);
 
-    // Expose scrollToCommit method via ref
+    // Expose scrollToCommit method via ref (accounts for virtual uncommitted row 0)
     useImperativeHandle(
       ref,
       () => ({
         scrollToCommit: (commitId: string) => {
-          const commitIndex = commits.findIndex((c) => c.id === commitId);
+          const nodeIndex = graphData.nodes.findIndex((n) => n.commit.id === commitId);
           const scrollEl = scrollRef.current;
-          if (commitIndex !== -1 && scrollEl) {
+          if (nodeIndex !== -1 && scrollEl) {
             const targetScrollTop = Math.max(
               0,
-              commitIndex * ROW_HEIGHT - containerHeightRef.current / 2 + ROW_HEIGHT / 2
+              nodeIndex * ROW_HEIGHT - containerHeightRef.current / 2 + ROW_HEIGHT / 2
             );
             const distance = Math.abs(targetScrollTop - scrollEl.scrollTop);
             const behavior: ScrollBehavior =
@@ -217,16 +428,16 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
             });
             if (behavior === 'auto') {
               scrollTopRef.current = targetScrollTop;
-              updateVisibleRange(targetScrollTop, containerHeightRef.current, commits.length);
+              updateVisibleRange(targetScrollTop, containerHeightRef.current, totalRows);
             }
           }
         },
       }),
-      [commits, updateVisibleRange]
+      [graphData.nodes, totalRows, updateVisibleRange]
     );
 
-    const startRow = Math.min(visibleRange.startRow, commits.length);
-    const endRow = Math.min(visibleRange.endRow, commits.length);
+    const startRow = Math.min(visibleRange.startRow, totalRows);
+    const endRow = Math.min(visibleRange.endRow, totalRows);
     const visibleNodes = graphData.nodes.slice(startRow, endRow);
 
     // Bound SVG height to visible viewport slice to avoid WebKit GPU texture limits
@@ -234,48 +445,125 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
     const svgTop = startRow * ROW_HEIGHT;
     const svgHeight = visibleRowCount * ROW_HEIGHT;
 
-    // Generate SVG path for a connection between commits
-    const generatePath = (
-      fromLane: number,
-      fromRow: number,
-      toLane: number,
-      toRow: number
-    ): string => {
-      const x1 = GRAPH_PADDING + fromLane * LANE_WIDTH;
-      const y1 = fromRow * ROW_HEIGHT + ROW_HEIGHT / 2;
-      const x2 = GRAPH_PADDING + toLane * LANE_WIDTH;
-      const y2 = toRow * ROW_HEIGHT + ROW_HEIGHT / 2;
+    // Generate Fork-style parallel rail path with 1-row smooth vertical-tangent transitions
+    const generatePath = (edge: GraphEdge): string => {
+      const xFrom = GRAPH_PADDING + edge.fromLane * LANE_WIDTH;
+      const xVia = GRAPH_PADDING + edge.viaLane * LANE_WIDTH;
+      const xTo = GRAPH_PADDING + edge.toLane * LANE_WIDTH;
+      const y1 = edge.fromRow * ROW_HEIGHT + ROW_HEIGHT / 2;
+      const y2 = edge.toRow * ROW_HEIGHT + ROW_HEIGHT / 2;
+      const dy = Math.max(1, y2 - y1);
 
-      if (fromLane === toLane) {
-        return `M ${x1} ${y1} L ${x2} ${y2}`;
+      if (xFrom === xVia && xVia === xTo) {
+        return `M ${xFrom} ${y1} L ${xTo} ${y2}`;
       }
 
-      const midY = (y1 + y2) / 2;
-      return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+      if (xFrom !== xVia && xVia === xTo) {
+        const bend = Math.min(ROW_HEIGHT, dy);
+        const cp = bend * 0.5;
+        const yBend = y1 + bend;
+        if (yBend >= y2) {
+          return `M ${xFrom} ${y1} C ${xFrom} ${y1 + cp}, ${xVia} ${y2 - cp}, ${xVia} ${y2}`;
+        }
+        return `M ${xFrom} ${y1} C ${xFrom} ${y1 + cp}, ${xVia} ${yBend - cp}, ${xVia} ${yBend} L ${xVia} ${y2}`;
+      }
+
+      if (xFrom === xVia && xVia !== xTo) {
+        const bend = Math.min(ROW_HEIGHT, dy);
+        const cp = bend * 0.5;
+        const yBend = y2 - bend;
+        if (yBend <= y1) {
+          return `M ${xFrom} ${y1} C ${xVia} ${y1 + cp}, ${xTo} ${y2 - cp}, ${xTo} ${y2}`;
+        }
+        return `M ${xFrom} ${y1} L ${xVia} ${yBend} C ${xVia} ${yBend + cp}, ${xTo} ${y2 - cp}, ${xTo} ${y2}`;
+      }
+
+      const bend = Math.min(ROW_HEIGHT, dy / 2);
+      const cp = bend * 0.5;
+      const yTop = y1 + bend;
+      const yBot = y2 - bend;
+      return `M ${xFrom} ${y1} C ${xFrom} ${y1 + cp}, ${xVia} ${yTop - cp}, ${xVia} ${yTop} L ${xVia} ${yBot} C ${xVia} ${yBot + cp}, ${xTo} ${y2 - cp}, ${xTo} ${y2}`;
     };
 
-    // Render all graph lines that intersect the visible row range (including continuing lines)
     const renderGraphLines = () => {
       const paths: React.ReactElement[] = [];
 
       for (const edge of graphData.edges) {
         if (edge.fromRow > endRow || edge.toRow < startRow) continue;
-        const pathD = generatePath(edge.fromLane, edge.fromRow, edge.toLane, edge.toRow);
+        const pathD = generatePath(edge);
         paths.push(
-          <path key={edge.key} d={pathD} stroke={edge.color} strokeWidth={2} fill="none" />
+          <path
+            key={edge.key}
+            d={pathD}
+            stroke={edge.color}
+            strokeWidth={1.85}
+            strokeDasharray={edge.isDashed ? '3 2.5' : undefined}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
         );
       }
 
       return paths;
     };
 
-    // Render commit nodes (circles)
     const renderNodes = () => {
       return visibleNodes.map((node) => {
         const x = GRAPH_PADDING + node.lane * LANE_WIDTH;
         const y = node.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-        const color = getLaneColor(node.lane);
-        const isSelected = selectedCommitId === node.commit.id;
+        const color = node.isUncommitted ? 'var(--text-secondary)' : getLaneColor(node.lane);
+        const isSelected = !node.isUncommitted && selectedCommitId === node.commit.id;
+
+        if (node.isUncommitted) {
+          return (
+            <circle
+              key="node-uncommitted"
+              cx={x}
+              cy={y}
+              r={NODE_RADIUS + 0.5}
+              fill="var(--bg-primary)"
+              stroke={color}
+              strokeWidth={1.75}
+              strokeDasharray="2.5 1.75"
+            />
+          );
+        }
+
+        if (node.isStash) {
+          return (
+            <circle
+              key={`node-${node.commit.id}`}
+              cx={x}
+              cy={y}
+              r={isSelected ? NODE_RADIUS + 1 : NODE_RADIUS}
+              fill="var(--bg-primary)"
+              stroke={isSelected ? 'var(--text-highlight)' : color}
+              strokeWidth={1.75}
+            />
+          );
+        }
+
+        if (node.isMerge) {
+          return (
+            <g key={`node-${node.commit.id}`}>
+              <circle
+                cx={x}
+                cy={y}
+                r={isSelected ? MERGE_OUTER_RADIUS + 1 : MERGE_OUTER_RADIUS}
+                fill="var(--bg-primary)"
+                stroke={isSelected ? 'var(--text-highlight)' : color}
+                strokeWidth={1.85}
+              />
+              <circle
+                cx={x}
+                cy={y}
+                r={MERGE_INNER_RADIUS}
+                fill={isSelected ? 'var(--text-highlight)' : color}
+              />
+            </g>
+          );
+        }
 
         return (
           <circle
@@ -284,8 +572,8 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
             cy={y}
             r={isSelected ? NODE_RADIUS + 1 : NODE_RADIUS}
             fill={color}
-            stroke={isSelected ? 'var(--text-primary)' : color}
-            strokeWidth={isSelected ? 2 : 0}
+            stroke={isSelected ? 'var(--text-highlight)' : 'var(--bg-primary)'}
+            strokeWidth={1.5}
           />
         );
       });
@@ -299,17 +587,43 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
       );
     }
 
-    const nowMs = Date.now();
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const containerStyle = {
+      '--col-author-width': `${columnWidths.author}px`,
+      '--col-sha-width': `${columnWidths.sha}px`,
+      '--col-date-width': `${columnWidths.date}px`,
+    } as React.CSSProperties;
 
     return (
-      <div className="commit-graph-container">
-        {/* Header */}
+      <div className="commit-graph-container" ref={containerRef} style={containerStyle}>
+        {/* Header (Fork column order: Description | Author | SHA | Date, resizable) */}
         <div className="commit-graph-header">
-          <div className="header-graph" style={{ width: MIN_GRAPH_WIDTH }}></div>
+          <div className="header-graph" style={{ width: MIN_GRAPH_WIDTH }} />
           <div className="header-description">{t('commits.description')}</div>
-          <div className="header-author">{t('commits.author')}</div>
-          <div className="header-date">{t('commits.date')}</div>
-          <div className="header-sha">{t('commits.sha')}</div>
+          <div className="header-author">
+            <div
+              className="col-resize-handle"
+              onMouseDown={(e) => startColumnResize('desc-author', e)}
+            />
+            <span>{t('commits.author')}</span>
+          </div>
+          <div className="header-sha">
+            <div
+              className="col-resize-handle"
+              onMouseDown={(e) => startColumnResize('author-sha', e)}
+            />
+            <span>{t('commits.sha')}</span>
+          </div>
+          <div className="header-date">
+            <div
+              className="col-resize-handle"
+              onMouseDown={(e) => startColumnResize('sha-date', e)}
+            />
+            <span>{t('commits.date')}</span>
+          </div>
         </div>
 
         {/* Scrollable content */}
@@ -329,8 +643,33 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
 
             {/* Commit rows */}
             {visibleNodes.map((node) => {
-              const isSelected = selectedCommitId === node.commit.id;
               const rowGraphWidth = getRowGraphWidth(node.maxActiveLane);
+
+              if (node.isUncommitted) {
+                return (
+                  <div
+                    key={node.commit.id}
+                    className="commit-row is-uncommitted"
+                    style={{
+                      top: node.row * ROW_HEIGHT,
+                      height: ROW_HEIGHT,
+                    }}
+                    onClick={() => onSelectLocalChanges?.()}
+                  >
+                    <div className="row-graph" style={{ width: rowGraphWidth }} />
+                    <div className="row-message">
+                      <span className="row-message-text uncommitted-label">
+                        {t('commits.uncommittedChanges', { count: localChangesCount })}
+                      </span>
+                    </div>
+                    <div className="row-author" />
+                    <div className="row-sha" />
+                    <div className="row-date" />
+                  </div>
+                );
+              }
+
+              const isSelected = selectedCommitId === node.commit.id;
 
               return (
                 <div
@@ -343,33 +682,73 @@ export const CommitGraph = forwardRef<CommitGraphHandle, CommitGraphProps>(
                   onClick={() => onCommitClick?.(node.commit)}
                   onDoubleClick={() => onCommitDoubleClick?.(node.commit)}
                 >
-                  {/* Graph space - width based on this commit's lane */}
                   <div className="row-graph" style={{ width: rowGraphWidth }} />
 
-                  {/* Branch labels */}
-                  <div className="row-labels">
-                    {node.branchLabels.map((label) => (
-                      <span
-                        key={label.name}
-                        className={`branch-label ${label.isHead ? 'is-head' : ''}`}
-                        style={{ backgroundColor: label.color }}
-                      >
-                        {label.name}
-                      </span>
-                    ))}
-                  </div>
+                  {/* Ref badges: branches (local, remote, or paired), stashes, tags */}
+                  {(node.branchLabels.length > 0 ||
+                    node.stashLabels.length > 0 ||
+                    node.tagLabels.length > 0) && (
+                    <div className="row-labels">
+                      {node.branchLabels.map((label) => (
+                        <span
+                          key={`branch-${label.title}`}
+                          className={`branch-label ${label.isHead ? 'is-head' : ''} ${!label.hasLocal && label.hasRemote ? 'is-remote' : ''}`}
+                          style={{ '--branch-color': label.color } as React.CSSProperties}
+                          title={label.title}
+                        >
+                          {label.hasRemote && label.remoteProvider && (
+                            <RemoteProviderIcon provider={label.remoteProvider} />
+                          )}
+                          {label.hasLocal && !label.isHead && (
+                            <GitBranch size={10} className="ref-badge-icon" />
+                          )}
+                          <span className="ref-badge-text">{label.name}</span>
+                        </span>
+                      ))}
+                      {node.stashLabels.map((stashId) => (
+                        <span
+                          key={`stash-${stashId}`}
+                          className="stash-label"
+                          style={
+                            {
+                              '--stash-color': getLaneColor(node.lane),
+                            } as React.CSSProperties
+                          }
+                          title={stashId}
+                        >
+                          <Archive size={10} className="ref-badge-icon" />
+                          <span className="ref-badge-text">{stashId}</span>
+                        </span>
+                      ))}
+                      {node.tagLabels.map((tagName) => (
+                        <span key={`tag-${tagName}`} className="tag-label" title={tagName}>
+                          <Tag size={10} className="ref-badge-icon" />
+                          <span className="ref-badge-text">{tagName}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
-                  {/* Commit message */}
-                  <div className="row-message">{node.commit.message.split('\n')[0]}</div>
+                  {/* Commit message + multi-line body indicator */}
+                  <div className="row-message">
+                    <span className="row-message-text">{node.displaySubject}</span>
+                    {node.hasBody && (
+                      <CornerDownLeft
+                        size={11}
+                        className="multiline-indicator"
+                        aria-label="Multi-line commit message"
+                      />
+                    )}
+                  </div>
 
                   {/* Author */}
                   <div className="row-author">{node.commit.author}</div>
 
-                  {/* Date */}
-                  <div className="row-date">{formatDate(node.commit.date, nowMs)}</div>
-
                   {/* SHA */}
                   <div className="row-sha">{node.commit.short_id}</div>
+
+                  {/* Date with time */}
+                  <div className="row-date">{formatDate(node.commit.date, today, yesterday)}</div>
                 </div>
               );
             })}
